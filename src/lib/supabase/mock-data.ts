@@ -1,0 +1,386 @@
+import {
+  Profile,
+  Plan,
+  Account,
+  Brand,
+  BrandMember,
+  ContentPillar,
+  Post,
+  Snippet,
+  Notification,
+  Payment,
+  AppSetting,
+} from '@/types/database.types';
+
+export const initialProfiles: Profile[] = [
+  {
+    id: 'user-001',
+    email: 'admin@udacoding.id',
+    full_name: 'Uda Admin Planner',
+    avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+    role: 'admin',
+    bio: 'Lead Social Media Strategist di PT UdaCoding Digital Indonesia.',
+    phone: '+6281234567890',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'user-002',
+    email: 'sarah@udaplanner.id',
+    full_name: 'Sarah Rahmawati',
+    avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+    role: 'user',
+    bio: 'Copywriter & Content Specialist.',
+    phone: '+628987654321',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+export const initialPlans: Plan[] = [
+  {
+    id: 'free',
+    name: 'Gratis',
+    slug: 'gratis',
+    description: 'Cocok untuk konten kreator perorangan atau pemula yang baru memulai.',
+    price: 0,
+    billing_period: 'monthly',
+    max_brands: 1,
+    max_posts_per_month: 15,
+    max_team_members: 1,
+    features: ['1 Brand Aktif', '15 Jadwal Postingan / bulan', '1 Anggota (Solo)', 'Bank Caption & Hashtag', 'Kalender Konten'],
+    is_active: true,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    slug: 'pro',
+    description: 'Untuk kreator profesional & freelancer yang mengelola multi-brand.',
+    price: 99000,
+    billing_period: 'monthly',
+    max_brands: 3,
+    max_posts_per_month: 100,
+    max_team_members: 3,
+    features: ['Hingga 3 Brand', '100 Postingan / bulan', '3 Anggota Tim', 'Penyimpanan Media 2GB', 'Alur Review & Revisi', 'Filter Kalender Lanjutan'],
+    is_active: true,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'team',
+    name: 'Tim Agensi',
+    slug: 'tim',
+    description: 'Solusi terlengkap untuk tim agensi kreatif & bisnis berskala besar.',
+    price: 299000,
+    billing_period: 'monthly',
+    max_brands: 10,
+    max_posts_per_month: 1000,
+    max_team_members: 10,
+    features: ['Hingga 10 Brand', 'Postingan Tanpa Batas', '10 Anggota Tim', 'Role Owner, Editor, Reviewer, Viewer', 'Penyimpanan 10GB', 'Prioritas Support'],
+    is_active: true,
+    created_at: new Date().toISOString(),
+  },
+];
+
+export const initialAccounts: Account[] = [
+  {
+    id: 'acc-001',
+    owner_id: 'user-001',
+    plan_id: 'pro',
+    company_name: 'UdaCoding Creative Lab',
+    brand_quota: 3,
+    post_quota: 100,
+    member_quota: 3,
+    status: 'active',
+    valid_until: new Date(Date.now() + 30 * 86400000).toISOString(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+export const initialBrands: Brand[] = [
+  {
+    id: 'brand-001',
+    account_id: 'acc-001',
+    name: 'UdaCoding Official',
+    slug: 'udacoding-official',
+    description: 'Pusat pelatihan IT, Bootcamp Flutter, Backend, dan Web Development di Indonesia.',
+    logo_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
+    color: '#6366f1',
+    industry: 'Pendidikan & Teknologi',
+    created_by: 'user-001',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'brand-002',
+    account_id: 'acc-001',
+    name: 'UdaCoffee Roastery',
+    slug: 'udacoffee-roastery',
+    description: 'Specialty coffee roaster & lifestyle cafe dengan biji kopi Nusantara pilihan.',
+    logo_url: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=150',
+    color: '#d97706',
+    industry: 'Food & Beverage',
+    created_by: 'user-001',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+export const initialBrandMembers: BrandMember[] = [
+  {
+    id: 'bm-001',
+    brand_id: 'brand-001',
+    user_id: 'user-001',
+    role: 'owner',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'bm-002',
+    brand_id: 'brand-001',
+    user_id: 'user-002',
+    role: 'editor',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+export const initialPillars: ContentPillar[] = [
+  {
+    id: 'pillar-001',
+    brand_id: 'brand-001',
+    name: 'Edukasi & Tips Coding',
+    color: '#3b82f6',
+    description: 'Tutorial praktis, best practices backend, tips PostgreSQL, & clean code.',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'pillar-002',
+    brand_id: 'brand-001',
+    name: 'Promosi Bootcamp & Magang',
+    color: '#ec4899',
+    description: 'Informasi pendaftaran magang, diskon kelas, dan info bootcamp.',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'pillar-003',
+    brand_id: 'brand-001',
+    name: 'Behind The Scene & Trivia',
+    color: '#10b981',
+    description: 'Kuis interaktif, keseharian tim, dan meme programmer.',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'pillar-004',
+    brand_id: 'brand-002',
+    name: 'Coffee Knowledge',
+    color: '#b45309',
+    description: 'Edukasi cara seduh, profil roasting, dan origin biji kopi.',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+// Today's base date for realistic calendar demo
+const today = new Date();
+const formatIsoOffset = (days: number, hours = 10) => {
+  const d = new Date(today);
+  d.setDate(d.getDate() + days);
+  d.setHours(hours, 0, 0, 0);
+  return d.toISOString();
+};
+
+export const initialPosts: Post[] = [
+  {
+    id: 'post-001',
+    brand_id: 'brand-001',
+    pillar_id: 'pillar-001',
+    title: '5 Tips Menguasai PostgreSQL & Supabase untuk Backend Developer',
+    caption: 'Ingin bikin backend cepat, aman, dan scalable? Simak 5 langkah rahasia memanfaatkan Row Level Security (RLS) dan auto trigger di Supabase! 🚀💡 Geser ke samping untuk lihat detail kodenya.',
+    hashtags: ['#UdaCoding', '#Supabase', '#PostgreSQL', '#BackendDeveloper', '#CodingTips'],
+    platforms: ['instagram', 'linkedin'],
+    content_type: 'carousel',
+    assigned_to: 'user-001',
+    scheduled_at: formatIsoOffset(0, 14), // Hari ini jam 14:00
+    published_at: null,
+    status: 'scheduled',
+    review_notes: 'Slide visual sudah disetujui.',
+    created_by: 'user-001',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'post-002',
+    brand_id: 'brand-001',
+    pillar_id: 'pillar-002',
+    title: 'Pendaftaran Magang Batch UdaCoding Telah Dibuka!',
+    caption: 'Siap naik level dari teori ke dunia industri nyata? Gabung program magang UdaCoding sekarang dan bangun portofolio impianmu bersama mentor berpengalaman! 🌟 Kuota sangat terbatas!',
+    hashtags: ['#MagangUdaCoding', '#Internship', '#WebDeveloper', '#MobileDeveloper'],
+    platforms: ['instagram', 'tiktok'],
+    content_type: 'reel',
+    assigned_to: 'user-002',
+    scheduled_at: formatIsoOffset(1, 10), // Besok jam 10:00
+    published_at: null,
+    status: 'in_review',
+    review_notes: 'Tolong sesuaikan audio backsound dengan jingle resmi.',
+    created_by: 'user-002',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'post-003',
+    brand_id: 'brand-001',
+    pillar_id: 'pillar-003',
+    title: 'Tebak Output Kode JavaScript Ini! (Trivia Jumat Santai)',
+    caption: 'Jangan ngaku sepuh JS kalau belum bisa jawab kuis satu ini tanpa buka console! Tulis tebakan jawabanmu di kolom komentar ya 👇',
+    hashtags: ['#KuisCoding', '#JavaScript', '#ProgrammerLife', '#Trivia'],
+    platforms: ['instagram'],
+    content_type: 'feed',
+    assigned_to: 'user-002',
+    scheduled_at: formatIsoOffset(-1, 15), // Kemarin (published)
+    published_at: formatIsoOffset(-1, 15),
+    status: 'published',
+    review_notes: null,
+    created_by: 'user-001',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'post-004',
+    brand_id: 'brand-001',
+    pillar_id: 'pillar-001',
+    title: 'Next.js 14 Server Actions vs API Routes: Mana yang Harus Dipakai?',
+    caption: 'Kapan saat tepat menggunakan Server Actions dan kapan tetap harus mempertahankan Route Handlers? Temukan jawabannya di ulasan mendalam ini.',
+    hashtags: ['#NextJS', '#WebDev', '#Fullstack', '#React'],
+    platforms: ['linkedin', 'instagram'],
+    content_type: 'carousel',
+    assigned_to: 'user-001',
+    scheduled_at: formatIsoOffset(3, 11),
+    published_at: null,
+    status: 'draft',
+    review_notes: null,
+    created_by: 'user-001',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'post-005',
+    brand_id: 'brand-001',
+    pillar_id: 'pillar-002',
+    title: 'Reminder: Pendaftaran Early Bird Berakhir Malam Ini',
+    caption: 'Waktu tinggal beberapa jam lagi! Jangan lewatkan potongan harga spesial untuk bootcamp UdaCoding.',
+    hashtags: ['#PromoBootcamp', '#EarlyBird', '#UdaCoding'],
+    platforms: ['instagram', 'facebook'],
+    content_type: 'story',
+    assigned_to: 'user-002',
+    scheduled_at: formatIsoOffset(-2, 19), // Terlewat / belum dipublish
+    published_at: null,
+    status: 'scheduled',
+    review_notes: null,
+    created_by: 'user-002',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+export const initialSnippets: Snippet[] = [
+  {
+    id: 'snip-001',
+    brand_id: 'brand-001',
+    type: 'caption',
+    title: 'Call to Action (CTA) Link in Bio',
+    content: 'Tertarik belajar lebih dalam? Klik link di bio kami untuk info silabus dan konsultasi pendaftaran gratis dengan tim kami sekarang juga! 🚀',
+    tags: ['cta', 'pendaftaran', 'promo'],
+    created_by: 'user-001',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'snip-002',
+    brand_id: 'brand-001',
+    type: 'caption',
+    title: 'Opening Hook Edukasi Menarik',
+    content: 'Pernah merasa bingung saat baru belajar konsep ini? Tenang, kamu gak sendirian. Yuk kita bedah langkah mudahnya di postingan ini! 👇',
+    tags: ['hook', 'edukasi', 'tips'],
+    created_by: 'user-001',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'snip-003',
+    brand_id: 'brand-001',
+    type: 'hashtag',
+    title: 'Kumpulan Hashtag Utama Tech & Coding',
+    content: '#UdaCoding #BelajarCoding #ProgrammerIndonesia #BootcampCoding #SoftwareEngineer #TechCareer #Nextjs #Supabase',
+    tags: ['tech', 'brand', 'general'],
+    created_by: 'user-001',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+export const initialNotifications: Notification[] = [
+  {
+    id: 'notif-001',
+    user_id: 'user-001',
+    brand_id: 'brand-001',
+    title: 'Postingan Menunggu Review',
+    message: 'Sarah Rahmawati mengajukan "Pendaftaran Magang Batch UdaCoding Telah Dibuka!" untuk ditinjau.',
+    link: '/planner',
+    is_read: false,
+    type: 'post_review',
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'notif-002',
+    user_id: 'user-001',
+    brand_id: 'brand-001',
+    title: 'Jadwal Hari Ini',
+    message: 'Postingan "5 Tips Menguasai PostgreSQL" dijadwalkan tayang pukul 14:00.',
+    link: '/planner',
+    is_read: false,
+    type: 'system',
+    created_at: new Date().toISOString(),
+  },
+];
+
+export const initialPayments: Payment[] = [
+  {
+    id: 'pay-001',
+    account_id: 'acc-001',
+    plan_id: 'pro',
+    amount: 99000,
+    payment_method: 'Transfer Bank BCA',
+    payment_proof_url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=300',
+    status: 'verified',
+    notes: 'Upgrade ke Paket Pro telah diverifikasi oleh admin.',
+    reviewed_by: 'user-001',
+    reviewed_at: new Date().toISOString(),
+    created_at: new Date(Date.now() - 5 * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - 5 * 86400000).toISOString(),
+  },
+];
+
+export const initialAppSettings: AppSetting[] = [
+  {
+    id: 'setting_app_name',
+    key: 'app_name',
+    value: 'UdaPlanner',
+    description: 'Nama aplikasi resmi',
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'setting_bank_info',
+    key: 'bank_transfer_accounts',
+    value: [
+      { bank: 'BCA', accountNumber: '8720192837', accountName: 'PT UdaCoding Digital Indonesia' },
+      { bank: 'Bank Mandiri', accountNumber: '1370018273645', accountName: 'PT UdaCoding Digital Indonesia' },
+    ],
+    description: 'Rekening bank tujuan pembayaran',
+    updated_at: new Date().toISOString(),
+  },
+];
