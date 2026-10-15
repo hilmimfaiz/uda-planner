@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Users,
   CreditCard,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
+  const router = useRouter();
   const [activeAdminTab, setActiveAdminTab] = useState<'ringkasan' | 'pembayaran' | 'pengguna' | 'paket' | 'pengaturan'>('ringkasan');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -116,12 +118,16 @@ export default function AdminDashboardPage() {
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Rp 149.000 / 30 hari</div>
         </div>
 
-        <div className="uda-card" style={{ padding: 18, border: '1px solid #fde68a', background: '#fffbeb' }}>
+        <div
+          className="uda-card"
+          onClick={() => router.push('/admin/pembayaran')}
+          style={{ padding: 18, border: '1px solid #fde68a', background: '#fffbeb', cursor: 'pointer', transition: 'transform 0.15s' }}
+        >
           <div style={{ color: '#b45309', fontSize: '0.78rem', fontWeight: 700 }}>MENUNGGU VERIFIKASI</div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#d97706', marginTop: 4 }}>
             {pendingPayments.length}
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600, marginTop: 4 }}>Klik untuk cek</div>
+          <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600, marginTop: 4 }}>Klik untuk cek →</div>
         </div>
 
         <div className="uda-card" style={{ padding: 18, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
@@ -133,9 +139,17 @@ export default function AdminDashboardPage() {
 
       {/* Tabel Verifikasi Pembayaran Sesuai PRD Bab 8 */}
       <div className="uda-card">
-        <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: 14 }}>
-          Verifikasi Pembayaran Masuk ({pendingPayments.length} Menunggu)
-        </h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+            Verifikasi Pembayaran Masuk ({pendingPayments.length} Menunggu)
+          </h3>
+          <button
+            className="btn-uda btn-uda-secondary btn-uda-sm"
+            onClick={() => router.push('/admin/pembayaran')}
+          >
+            Buka Halaman Pembayaran Lengkap →
+          </button>
+        </div>
 
         {pendingPayments.length === 0 ? (
           <p style={{ color: '#64748b', fontSize: '0.88rem', fontStyle: 'italic' }}>
