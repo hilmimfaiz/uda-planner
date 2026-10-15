@@ -3,6 +3,8 @@
 import React, { useState } from "react";
 import Link from "next/navigation";
 import { usePathname, useRouter } from "next/navigation";
+import React, { useState, useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Calendar as CalendarIcon,
   LayoutDashboard,
@@ -24,6 +26,11 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { DUMMY_BRANDS, DUMMY_NOTIFICATIONS } from "@/lib/dummy-data";
+  LogOut,
+  Loader2,
+} from 'lucide-react';
+import { DUMMY_BRANDS, DUMMY_NOTIFICATIONS } from '@/lib/dummy-data';
+import { useAuth } from '@/contexts/auth-context';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -37,9 +44,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   ].includes(pathname);
 
   const [selectedBrandId, setSelectedBrandId] = useState<string>("all");
+  const { user, profile, account, isLoading, isAdmin, signOut } = useAuth();
+
+  const [selectedBrandId, setSelectedBrandId] = useState<string>('all');
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [notifications, setNotifications] = useState(DUMMY_NOTIFICATIONS);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Client-side guard: jika loading selesai dan user belum terdaftar / login, arahkan ke /masuk
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push(`/masuk?redirect=${encodeURIComponent(pathname)}`);
+    }
+  }, [isLoading, user, pathname, router]);
 
   const selectedBrand =
     selectedBrandId === "all"
@@ -61,6 +80,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Bank Konten", href: "/app/bank", icon: FileText },
     { name: "Brand", href: "/app/brand", icon: Building },
   ];
+
+  // Tampilkan splash loader saat memeriksa status sesi
+  if (isLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', gap: 12 }}>
+        <div className="logo-symbol" style={{ width: 48, height: 48, fontSize: '1.4rem' }}>U</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: '0.9rem', fontWeight: 600 }}>
+          <Loader2 size={18} className="animate-spin" style={{ color: '#16a34a' }} />
+          <span>Memuat sesi UdaPlanner...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Jika tidak ada user dan loading sudah selesai (sedang diarahkan ke /masuk)
+  if (!user) {
+    return null;
+  }
+
+  const displayName = profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pengguna';
+  const initial = displayName.charAt(0).toUpperCase();
 
   return (
     <div className="app-layout">
@@ -101,14 +141,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <CreditCard size={17} />
             <span>Langganan</span>
+            <span style={{ marginLeft: 'auto', fontSize: '0.7rem', padding: '2px 6px', background: '#f0fdf4', color: '#16a34a', borderRadius: 4, fontWeight: 700 }}>
+              {account?.plan_code?.toUpperCase() || 'FREE'}
+            </span>
           </button>
+
           <button
             className={`nav-item-btn ${pathname === "/app/akun" ? "active" : ""}`}
             onClick={() => router.push("/app/akun")}
           >
             <User size={17} />
-            <span>Akun</span>
+            <span>Akun & Profil</span>
           </button>
+
+          {/* Panel Admin hanya untuk administrator */}
+          {isAdmin && (
+            <button
+              className={`nav-item-btn ${pathname.startsWith('/admin') ? 'active' : ''}`}
+              onClick={() => router.push('/admin')}
+              style={{ color: '#0f172a' }}
+            >
+              <Shield size={17} style={{ color: '#16a34a' }} />
+              <span>Panel Admin</span>
+            </button>
+          )}
+
+          {/* Tombol Logout Cepat */}
           <button
             className={`nav-item-btn ${pathname.startsWith("/admin") ? "active" : ""}`}
             onClick={() => router.push("/admin")}
@@ -116,6 +174,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <Shield size={17} style={{ color: "#16a34a" }} />
             <span>Panel Admin</span>
+            className="nav-item-btn"
+            onClick={() => setShowLogoutModal(true)}
+            style={{ color: '#ef4444' }}
+            title="Keluar dari Akun"
+          >
+            <LogOut size={17} />
+            <span>Keluar</span>
           </button>
         </div>
       </aside>
@@ -401,7 +466,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            {/* Avatar */}
+            {/* User Profile Badge & Avatar */}
             <div
               style={{
                 width: 36,
@@ -418,6 +483,49 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 alt="Avatar"
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                padding: '4px 8px',
+                borderRadius: 8,
+                transition: 'background 0.2s',
+              }}
+              onClick={() => router.push('/app/akun')}
+              title="Buka Pengaturan Akun"
+            >
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={displayName}
+                  style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: '50%',
+                    backgroundColor: '#16a34a',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                  }}
+                >
+                  {initial}
+                </div>
+              )}
+              <div style={{ display: 'none', md: 'block' } as any} className="topbar-user-info">
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.2 }}>
+                  {displayName}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                  {user.email}
+                </div>
+              </div>
             </div>
           </div>
         </header>
@@ -474,6 +582,91 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <span>Lainnya</span>
         </button>
       </nav>
+
+      {/* Modal Pop-up Konfirmasi Logout */}
+      {showLogoutModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 20,
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+        >
+          <div
+            className="uda-card"
+            style={{
+              maxWidth: 400,
+              width: '100%',
+              padding: '30px 24px',
+              textAlign: 'center',
+              borderRadius: 16,
+              background: '#ffffff',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            }}
+          >
+            <div
+              style={{
+                width: 58,
+                height: 58,
+                borderRadius: '50%',
+                background: '#fee2e2',
+                color: '#dc2626',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+              }}
+            >
+              <LogOut size={26} />
+            </div>
+
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
+              Konfirmasi Keluar Akun
+            </h3>
+            <p style={{ color: '#64748b', fontSize: '0.86rem', lineHeight: 1.5, marginBottom: 24 }}>
+              Apakah Anda yakin ingin keluar dari akun? Anda perlu memasukkan email dan kata sandi kembali untuk masuk ke UdaPlanner.
+            </p>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                className="btn-uda btn-uda-secondary"
+                style={{ flex: 1 }}
+                onClick={() => setShowLogoutModal(false)}
+                disabled={isLoggingOut}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                className="btn-uda btn-uda-danger"
+                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                onClick={async () => {
+                  setIsLoggingOut(true);
+                  await signOut();
+                }}
+                disabled={isLoggingOut}
+              >
+                {isLoggingOut ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Keluar...</span>
+                  </>
+                ) : (
+                  <span>Ya, Keluar</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
