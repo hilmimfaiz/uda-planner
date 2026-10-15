@@ -29,7 +29,7 @@ interface AuthContextType {
   account: UserAccount | null;
   isLoading: boolean;
   isAdmin: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: string | null; isAdmin?: boolean }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; requiresEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
   refreshUserData: () => Promise<void>;
@@ -40,34 +40,56 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [account, setAccount] = useState<UserAccount | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const supabase = createClient();
+  const loadedUserIdRef = React.useRef<string | null>(null);
 
-  // Helper untuk memuat data profil dan akun dari tabel Supabase
+  // Helper untuk memuat data profil dan akun dari tabel Supabase secara paralel (bukan sequential)
   const loadUserData = async (currentUser: User) => {
     if (!supabase) return;
 
-    try {
-      // 1. Ambil atau buat profil pengguna
-      const { data: profData, error: profErr } = await (supabase.from('profiles' as any) as any)
-        .select('*')
-        .eq('id', currentUser.id)
-        .maybeSingle();
+    // Set fallback instan dari metadata jika profile/account belum terisi
+    setProfile((prev) => prev || {
+      id: currentUser.id,
+      email: currentUser.email || '',
+      full_name: currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'Pengguna UdaPlanner',
+      reminder_minutes: 15,
+    });
+    setAccount((prev) => prev || {
+      id: currentUser.id,
+      user_id: currentUser.id,
+      role: (currentUser.user_metadata?.role as 'user' | 'admin') || 'user',
+      plan_code: 'free',
+    });
 
-      if (profData) {
-        setProfile({
-          id: profData.id,
-          email: profData.email || currentUser.email || '',
-          full_name: profData.full_name || currentUser.user_metadata?.full_name || 'Pengguna UdaPlanner',
-          avatar_url: profData.avatar_url,
-          reminder_minutes: profData.reminder_minutes ?? 15,
-        });
+    try {
+      // Jalankan query profil dan akun secara bersamaan (PARALLEL)
+      const [profRes, accRes] = await Promise.all([
+        (supabase.from('profiles' as any) as any)
+          .select('*')
+          .eq('id', currentUser.id)
+          .maybeSingle(),
+        (supabase.from('accounts' as any) as any)
+          .select('*')
+          .eq('user_id', currentUser.id)
+          .maybeSingle(),
+      ]);
+
+      // 1. Proses Profil
+      let finalProfile: UserProfile;
+      if (profRes.data) {
+        finalProfile = {
+          id: profRes.data.id,
+          email: profRes.data.email || currentUser.email || '',
+          full_name: profRes.data.full_name || currentUser.user_metadata?.full_name || 'Pengguna UdaPlanner',
+          avatar_url: profRes.data.avatar_url,
+          reminder_minutes: profRes.data.reminder_minutes ?? 15,
+        };
       } else {
-        // Jika profil belum ada di tabel profiles, buat secara otomatis
         const newProfile = {
           id: currentUser.id,
           email: currentUser.email || '',
@@ -75,26 +97,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           reminder_minutes: 15,
         };
         const { data: createdProf } = await (supabase.from('profiles' as any) as any).insert(newProfile).select().maybeSingle();
-        setProfile(createdProf || newProfile);
+        finalProfile = createdProf || newProfile;
       }
+      setProfile(finalProfile);
+      try {
+        localStorage.setItem('uda_auth_profile', JSON.stringify(finalProfile));
+      } catch (e) {}
 
-      // 2. Ambil atau buat akun pengguna
-      const { data: accData } = await (supabase.from('accounts' as any) as any)
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
-
-      if (accData) {
-        setAccount({
-          id: accData.id,
-          user_id: accData.user_id,
-          role: (accData.role as 'user' | 'admin') || 'user',
-          plan_code: accData.plan_code || 'free',
-          plan_until: accData.plan_until,
-          is_suspended: !!accData.is_suspended,
-        });
+      // 2. Proses Akun
+      let finalAccount: UserAccount;
+      if (accRes.data) {
+        finalAccount = {
+          id: accRes.data.id,
+          user_id: accRes.data.user_id,
+          role: (accRes.data.role as 'user' | 'admin') || 'user',
+          plan_code: accRes.data.plan_code || 'free',
+          plan_until: accRes.data.plan_until,
+          is_suspended: !!accRes.data.is_suspended,
+        };
       } else {
-        // Inisialisasi akun jika belum ada
         const newAccount = {
           user_id: currentUser.id,
           role: (currentUser.user_metadata?.role as 'user' | 'admin') || 'user',
@@ -102,49 +123,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           payment_code: Math.floor(100 + Math.random() * 899),
         };
         const { data: createdAcc } = await (supabase.from('accounts' as any) as any).insert(newAccount).select().maybeSingle();
-        if (createdAcc) {
-          setAccount({
-            id: createdAcc.id,
-            user_id: createdAcc.user_id,
-            role: createdAcc.role as 'user' | 'admin',
-            plan_code: createdAcc.plan_code,
-            plan_until: createdAcc.plan_until,
-            is_suspended: !!createdAcc.is_suspended,
-          });
-        }
+        finalAccount = createdAcc ? {
+          id: createdAcc.id,
+          user_id: createdAcc.user_id,
+          role: createdAcc.role as 'user' | 'admin',
+          plan_code: createdAcc.plan_code,
+          plan_until: createdAcc.plan_until,
+          is_suspended: !!createdAcc.is_suspended,
+        } : {
+          id: currentUser.id,
+          user_id: currentUser.id,
+          role: (currentUser.user_metadata?.role as 'user' | 'admin') || 'user',
+          plan_code: 'free',
+        };
       }
+      setAccount(finalAccount);
+      try {
+        localStorage.setItem('uda_auth_account', JSON.stringify(finalAccount));
+      } catch (e) {}
+
+      return { profile: finalProfile, account: finalAccount };
     } catch (err) {
       console.error('Gagal memuat profil/akun:', err);
-      // Fallback ke metadata Auth user
-      setProfile({
-        id: currentUser.id,
-        email: currentUser.email || '',
-        full_name: currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'Pengguna UdaPlanner',
-      });
-      setAccount({
-        id: currentUser.id,
-        user_id: currentUser.id,
-        role: (currentUser.user_metadata?.role as 'user' | 'admin') || 'user',
-        plan_code: 'free',
-      });
+      return { profile: null, account: null };
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    // 1. Pulihkan cache lokal setelah mount pertama di browser (mencegah hydration mismatch SSR)
+    try {
+      const cachedUser = localStorage.getItem('uda_auth_user');
+      if (cachedUser) setUser(JSON.parse(cachedUser));
+      const cachedProfile = localStorage.getItem('uda_auth_profile');
+      if (cachedProfile) setProfile(JSON.parse(cachedProfile));
+      const cachedAccount = localStorage.getItem('uda_auth_account');
+      if (cachedAccount) setAccount(JSON.parse(cachedAccount));
+    } catch (e) {}
+
+    // Safety timeout: JANGAN PERNAH biarkan loading terjebak lebih dari 800ms
+    const safetyTimeout = setTimeout(() => {
+      setIsLoading(false);
+    }, 800);
+
     if (!supabase) {
       setIsLoading(false);
+      clearTimeout(safetyTimeout);
       return;
     }
 
-    // Periksa sesi saat ini
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadUserData(session.user).finally(() => setIsLoading(false));
-      } else {
-        setIsLoading(false);
+    // Periksa sesi saat ini secara langsung
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      if (initialSession?.user) {
+        setSession(initialSession);
+        setUser(initialSession.user);
+        try {
+          localStorage.setItem('uda_auth_user', JSON.stringify(initialSession.user));
+        } catch (e) {}
+        if (loadedUserIdRef.current !== initialSession.user.id) {
+          loadedUserIdRef.current = initialSession.user.id;
+          loadUserData(initialSession.user);
+        }
       }
+      setIsLoading(false);
+      clearTimeout(safetyTimeout);
+    }).catch(() => {
+      setIsLoading(false);
+      clearTimeout(safetyTimeout);
     });
 
     // Dengarkan perubahan status otentikasi
@@ -152,17 +198,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       setSession(newSession);
-      setUser(newSession?.user ?? null);
+      const currentUser = newSession?.user ?? null;
+      setUser(currentUser);
+      try {
+        if (currentUser) {
+          localStorage.setItem('uda_auth_user', JSON.stringify(currentUser));
+        } else {
+          localStorage.removeItem('uda_auth_user');
+        }
+      } catch (e) {}
+
       if (newSession?.user) {
-        await loadUserData(newSession.user);
+        if (loadedUserIdRef.current !== newSession.user.id) {
+          loadedUserIdRef.current = newSession.user.id;
+          loadUserData(newSession.user);
+        }
       } else {
+        loadedUserIdRef.current = null;
         setProfile(null);
         setAccount(null);
       }
       setIsLoading(false);
+      clearTimeout(safetyTimeout);
     });
 
     return () => {
+      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
   }, []);
@@ -194,9 +255,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser(data.user);
       setSession(data.session);
-      await loadUserData(data.user);
+      try {
+        localStorage.setItem('uda_auth_user', JSON.stringify(data.user));
+      } catch (e) {}
+      const loaded = await loadUserData(data.user);
 
-      return { error: null };
+      const isUserAdmin =
+        loaded?.account?.role === 'admin' ||
+        data.user.user_metadata?.role === 'admin' ||
+        data.user.email?.toLowerCase() === 'admin@udaplanner.com';
+
+      return { error: null, isAdmin: isUserAdmin };
     } catch (err: any) {
       return { error: err.message || 'Terjadi kesalahan sistem saat mencoba masuk.' };
     }
@@ -237,6 +306,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data.user && data.session) {
         setUser(data.user);
         setSession(data.session);
+        try {
+          localStorage.setItem('uda_auth_user', JSON.stringify(data.user));
+        } catch (e) {}
         await loadUserData(data.user);
       }
 
@@ -247,6 +319,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    try {
+      localStorage.removeItem('uda_auth_user');
+      localStorage.removeItem('uda_auth_profile');
+      localStorage.removeItem('uda_auth_account');
+    } catch (e) {}
+
     if (supabase) {
       await supabase.auth.signOut();
     }

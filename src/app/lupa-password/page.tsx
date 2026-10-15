@@ -153,8 +153,8 @@ export default function LupaPasswordPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div className="uda-card" style={{ maxWidth: 460, width: '100%', padding: 36, boxShadow: '0 10px 30px rgba(0,0,0,0.06)' }}>
+    <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 12px' }}>
+      <div className="uda-card" style={{ maxWidth: 460, width: '100%', padding: 'clamp(22px, 5vw, 36px)', boxShadow: '0 10px 30px rgba(0,0,0,0.06)' }}>
         {/* Header Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
           <div className="logo-symbol" style={{ width: 38, height: 38, fontSize: '1.2rem', borderRadius: 10 }}>U</div>

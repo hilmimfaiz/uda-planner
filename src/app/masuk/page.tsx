@@ -11,13 +11,25 @@ function MasukForm() {
   const searchParams = useSearchParams();
   const redirectPath = searchParams.get('redirect') || '/app';
 
-  const { signIn } = useAuth();
+  const { user, isAdmin, signIn } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showLoadingModal, setShowLoadingModal] = useState(false);
+  const [isAdminLogin, setIsAdminLogin] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Jika user sudah terautentikasi dan membuka halaman /masuk
+  React.useEffect(() => {
+    if (user) {
+      if (isAdmin) {
+        router.push('/admin');
+      } else {
+        router.push(redirectPath && redirectPath !== '/masuk' ? redirectPath : '/app');
+      }
+    }
+  }, [user, isAdmin, redirectPath, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,15 +44,22 @@ function MasukForm() {
         return;
       }
 
-      // Berhasil masuk -> Munculkan Modal Pop-Up Loading ke Dashboard
+      const isTargetAdmin = !!result.isAdmin;
+      setIsAdminLogin(isTargetAdmin);
+
+      // Jika akun admin, arahkan langsung ke Panel Admin (/admin), bukan dashboard user (/app)
+      const targetDestination = isTargetAdmin
+        ? '/admin'
+        : (redirectPath && redirectPath !== '/masuk' ? redirectPath : '/app');
+
       setIsLoading(false);
       setShowLoadingModal(true);
 
-      // Transisi halus masuk ke dashboard setelah 1 detik
+      // Transisi halus masuk setelah 1 detik
       setTimeout(() => {
-        router.push(redirectPath);
+        router.push(targetDestination);
         router.refresh();
-      }, 1100);
+      }, 1000);
     } catch (err: any) {
       setErrorMessage(err.message || 'Terjadi kesalahan sistem saat mencoba masuk.');
       setIsLoading(false);
@@ -48,7 +67,7 @@ function MasukForm() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, position: 'relative' }}>
+    <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 12px', position: 'relative' }}>
       {/* Modal Pop-up Loading Masuk ke Dashboard */}
       {showLoadingModal && (
         <div
@@ -109,23 +128,25 @@ function MasukForm() {
             </div>
 
             <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
-              Login Berhasil!
+              {isAdminLogin ? 'Login Administrator Berhasil!' : 'Login Berhasil!'}
             </h3>
             <p style={{ color: '#64748b', fontSize: '0.86rem', lineHeight: 1.5, marginBottom: 20 }}>
-              Menyiapkan sesi kerja dan mengalihkan Anda ke dashboard...
+              {isAdminLogin
+                ? 'Menyiapkan sesi Administrator dan mengalihkan Anda ke Panel Admin...'
+                : 'Menyiapkan sesi kerja dan mengalihkan Anda ke dashboard...'}
             </p>
 
             {/* Loading Indicator */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#16a34a', fontSize: '0.82rem', fontWeight: 700 }}>
               <Loader2 size={16} className="animate-spin" />
-              <span>Memuat Dashboard UdaPlanner...</span>
+              <span>{isAdminLogin ? 'Membuka Panel Admin UdaPlanner...' : 'Memuat Dashboard UdaPlanner...'}</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Main Login Card */}
-      <div className="uda-card" style={{ maxWidth: 440, width: '100%', padding: 36, boxShadow: '0 10px 30px rgba(0,0,0,0.06)' }}>
+      {/* Main Login Card Responsif */}
+      <div className="uda-card" style={{ maxWidth: 440, width: '100%', padding: 'clamp(22px, 5vw, 36px)', boxShadow: '0 10px 30px rgba(0,0,0,0.06)' }}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
           <div className="logo-symbol" style={{ width: 38, height: 38, fontSize: '1.2rem', borderRadius: 10 }}>U</div>
