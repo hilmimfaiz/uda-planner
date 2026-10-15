@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: 'Sistem manajemen konten dan kalender perencanaan postingan sosial media terintegrasi dengan backend Supabase.',
 };
 
+import { Providers } from '@/components/providers';
+
 export default function RootLayout({
   children,
 }: {
@@ -13,7 +15,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id">
-      <body>{children}</body>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
