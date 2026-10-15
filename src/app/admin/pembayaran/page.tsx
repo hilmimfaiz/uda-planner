@@ -2,81 +2,51 @@
 
 import React, { useState } from 'react';
 import { CreditCard, Eye, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
+import { AdminService, AdminPaymentItem } from '@/services/admin.service';
+import { useModal } from '@/contexts/modal-context';
 
-interface PaymentItem {
-  id: string;
-  user: string;
-  email: string;
-  plan: 'pro' | 'team';
-  amount: number;
-  bank: string;
-  proof: string;
-  status: 'pending' | 'approved' | 'rejected';
-  date: string;
-  reason?: string;
-}
+type PaymentItem = AdminPaymentItem;
 
 export default function AdminPembayaranPage() {
-  const [payments, setPayments] = useState<PaymentItem[]>([
-    {
-      id: 'pay-1',
-      user: 'Budi Santoso',
-      email: 'budi@gmail.com',
-      plan: 'pro',
-      amount: 49137,
-      bank: 'BCA — 8839210928 A/N Budi Santoso',
-      proof: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-      status: 'pending',
-      date: '14 Okt 2026, 09.15 WIB',
-    },
-    {
-      id: 'pay-2',
-      user: 'PT Muda Kreatif Indonesia',
-      email: 'admin@muda.id',
-      plan: 'team',
-      amount: 149452,
-      bank: 'Bank Mandiri — 1280019283 A/N PT Muda Kreatif',
-      proof: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-      status: 'pending',
-      date: '14 Okt 2026, 08.40 WIB',
-    },
-    {
-      id: 'pay-3',
-      user: 'Sarah Rahmawati',
-      email: 'sarah@udaplanner.id',
-      plan: 'pro',
-      amount: 49721,
-      bank: 'BCA — 5271928311 A/N Sarah Rahmawati',
-      proof: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-      status: 'approved',
-      date: '12 Okt 2026, 14.10 WIB',
-    },
-  ]);
-
+  const { showSuccess, showError } = useModal();
+  const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [selectedProof, setSelectedProof] = useState<PaymentItem | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    AdminService.getPayments().then((data) => {
+      if (data && data.length > 0) setPayments(data);
+    });
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleApprove = (id: string) => {
+  const handleApprove = async (id: string) => {
+    const target = payments.find((p) => p.id === id);
+    await AdminService.approvePayment(id, target?.userId, target?.plan || 'pro');
     setPayments((prev) =>
       prev.map((p) => (p.id === id ? { ...p, status: 'approved' } : p))
     );
     setSelectedProof(null);
-    showToast('Pembayaran disetujui! Paket pengguna otomatis ditingkatkan.');
+    showSuccess(
+      'Pembayaran Berhasil Disetujui!',
+      `Bukti transfer dari ${target?.user} telah diverifikasi. Akun pengguna otomatis ditingkatkan ke paket ${target?.plan.toUpperCase()}.`
+    );
   };
 
-  const handleReject = (id: string) => {
+  const handleReject = async (id: string) => {
     if (!rejectReason.trim()) {
-      alert('Alasan penolakan wajib diisi!');
+      showError('Alasan Penolakan Wajib Diisi', 'Silakan tuliskan alasan penolakan sebelum melanjutkan.');
       return;
     }
+    const target = payments.find((p) => p.id === id);
+    await AdminService.rejectPayment(id, rejectReason.trim());
     setPayments((prev) =>
       prev.map((p) =>
         p.id === id ? { ...p, status: 'rejected', reason: rejectReason.trim() } : p
@@ -85,7 +55,10 @@ export default function AdminPembayaranPage() {
     setSelectedProof(null);
     setShowRejectInput(false);
     setRejectReason('');
-    showToast('Pembayaran telah ditolak dengan catatan alasan.');
+    showSuccess(
+      'Pembayaran Ditolak',
+      `Pembayaran dari ${target?.user} telah ditolak dengan catatan: "${rejectReason.trim()}".`
+    );
   };
 
   const filteredPayments = payments.filter((p) => {

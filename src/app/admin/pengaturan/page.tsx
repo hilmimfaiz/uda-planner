@@ -2,26 +2,57 @@
 
 import React, { useState } from 'react';
 import { Settings, Save, CheckCircle2, MessageSquare, CreditCard } from 'lucide-react';
+import { AdminService } from '@/services/admin.service';
+import { useModal } from '@/contexts/modal-context';
 
 export default function AdminPengaturanPage() {
+  const { showSuccess, showError } = useModal();
   const [bankName, setBankName] = useState('BCA (Bank Central Asia)');
   const [accountNumber, setAccountNumber] = useState('8839210928');
   const [accountName, setAccountName] = useState('PT UdaCoding Digital Indonesia');
   const [adminWhatsapp, setAdminWhatsapp] = useState('6281234567890');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  React.useEffect(() => {
+    AdminService.getAppSettings().then((data) => {
+      if (data) {
+        setBankName(data.bankName);
+        setAccountNumber(data.accountNumber);
+        setAccountName(data.accountName);
+        setAdminWhatsapp(data.adminWhatsapp);
+      }
+    });
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    showToast('Pengaturan rekening & kontak WhatsApp admin berhasil disimpan!');
+    setIsSaving(true);
+    try {
+      await AdminService.updateAppSettings({
+        bankName,
+        accountNumber,
+        accountName,
+        adminWhatsapp,
+      });
+      showSuccess(
+        'Pengaturan Berhasil Disimpan!',
+        'Detail rekening bank transfer dan nomor WhatsApp admin telah tersimpan dan langsung aktif untuk pengguna.'
+      );
+    } catch (err: any) {
+      showError('Gagal Menyimpan Pengaturan', err.message || 'Coba lagi beberapa saat.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 640 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 840, width: '100%', margin: '0 auto' }}>
       {toastMessage && (
         <div
           style={{
@@ -49,7 +80,7 @@ export default function AdminPengaturanPage() {
         </p>
       </div>
 
-      <div className="uda-card" style={{ padding: 28 }}>
+      <div className="uda-card">
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
             <CreditCard size={18} style={{ color: '#16a34a' }} />

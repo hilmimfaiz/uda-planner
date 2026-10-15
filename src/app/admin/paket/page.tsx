@@ -2,97 +2,40 @@
 
 import React, { useState } from 'react';
 import { Package, Edit2, Check, Save, RotateCcw } from 'lucide-react';
-
-interface EditablePlan {
-  code: 'free' | 'pro' | 'team';
-  name: string;
-  price: number;
-  durationDays: number;
-  maxBrands: number;
-  maxMembers: number;
-  maxPosts: number | null; // null = unlimited
-  storageMb: number;
-  maxFileMb: number;
-  maxSnippets: number | null;
-  allowVideo: boolean;
-  allowGrid: boolean;
-  allowExport: boolean;
-  allowApproval: boolean;
-  allowComments: boolean;
-}
+import { AdminService, EditablePlan } from '@/services/admin.service';
+import { useModal } from '@/contexts/modal-context';
 
 export default function AdminPaketPage() {
-  const [plans, setPlans] = useState<EditablePlan[]>([
-    {
-      code: 'free',
-      name: 'Gratis',
-      price: 0,
-      durationDays: 0,
-      maxBrands: 1,
-      maxMembers: 0,
-      maxPosts: 30,
-      storageMb: 200,
-      maxFileMb: 10,
-      maxSnippets: 5,
-      allowVideo: false,
-      allowGrid: false,
-      allowExport: false,
-      allowApproval: false,
-      allowComments: false,
-    },
-    {
-      code: 'pro',
-      name: 'Pro',
-      price: 49000,
-      durationDays: 30,
-      maxBrands: 5,
-      maxMembers: 0,
-      maxPosts: null,
-      storageMb: 5120,
-      maxFileMb: 50,
-      maxSnippets: null,
-      allowVideo: true,
-      allowGrid: true,
-      allowExport: true,
-      allowApproval: false,
-      allowComments: false,
-    },
-    {
-      code: 'team',
-      name: 'Tim Agensi',
-      price: 149000,
-      durationDays: 30,
-      maxBrands: 20,
-      maxMembers: 10,
-      maxPosts: null,
-      storageMb: 20480,
-      maxFileMb: 50,
-      maxSnippets: null,
-      allowVideo: true,
-      allowGrid: true,
-      allowExport: true,
-      allowApproval: true,
-      allowComments: true,
-    },
-  ]);
-
+  const { showSuccess } = useModal();
+  const [plans, setPlans] = useState<EditablePlan[]>([]);
   const [editingPlan, setEditingPlan] = useState<EditablePlan | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    AdminService.getPlans().then((data) => {
+      if (data && data.length > 0) setPlans(data);
+    });
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleSavePlan = (e: React.FormEvent) => {
+  const handleSavePlan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPlan) return;
+
+    await AdminService.updatePlan(editingPlan.code, editingPlan);
 
     setPlans((prev) =>
       prev.map((p) => (p.code === editingPlan.code ? editingPlan : p))
     );
     setEditingPlan(null);
-    showToast(`Konfigurasi paket ${editingPlan.name} berhasil diperbarui!`);
+    showSuccess(
+      'Paket Berhasil Diperbarui!',
+      `Konfigurasi paket ${editingPlan.name} telah disimpan ke database dan langsung berlaku.`
+    );
   };
 
   return (
@@ -124,7 +67,7 @@ export default function AdminPaketPage() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 290px), 1fr))', gap: 20 }}>
         {plans.map((p) => (
           <div
             key={p.code}

@@ -12,6 +12,7 @@ import {
   Shield,
   Eye,
 } from 'lucide-react';
+import { AdminService } from '@/services/admin.service';
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -19,28 +20,15 @@ export default function AdminDashboardPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Demo Admin Payments State
-  const [pendingPayments, setPendingPayments] = useState([
-    {
-      id: 'pay-1',
-      user: 'Budi Santoso (budi@gmail.com)',
-      plan: 'pro',
-      amount: 49137,
-      bank: 'BCA (A/N Budi Santoso)',
-      proof: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-      status: 'pending',
-      date: '13 Okt 2026 09.15',
-    },
-    {
-      id: 'pay-2',
-      user: 'Agensi Kreatif Muda (admin@muda.id)',
-      plan: 'team',
-      amount: 149452,
-      bank: 'Mandiri (A/N PT Muda Kreatif)',
-      proof: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-      status: 'pending',
-      date: '13 Okt 2026 08.40',
-    },
-  ]);
+  const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    AdminService.getPayments().then((data) => {
+      if (data && data.length > 0) {
+        setPendingPayments(data.filter((p) => p.status === 'pending'));
+      }
+    });
+  }, []);
 
   // Proof Modal
   const [selectedProof, setSelectedProof] = useState<any | null>(null);
@@ -52,17 +40,20 @@ export default function AdminDashboardPage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleApprovePayment = (id: string) => {
+  const handleApprovePayment = async (id: string) => {
+    const item = pendingPayments.find((p) => p.id === id);
+    await AdminService.approvePayment(id, item?.userId, item?.plan || 'pro');
     setPendingPayments(pendingPayments.filter((p) => p.id !== id));
     setSelectedProof(null);
-    showToast('✅ Pembayaran disetujui! Paket pengguna otomatis ditingkatkan.');
+    showToast('✅ Pembayaran disetujui! Paket pengguna otomatis ditingkatkan di database.');
   };
 
-  const handleRejectPayment = (id: string) => {
+  const handleRejectPayment = async (id: string) => {
     if (!rejectReason) {
       alert('Wajib mengisi alasan penolakan!');
       return;
     }
+    await AdminService.rejectPayment(id, rejectReason);
     setPendingPayments(pendingPayments.filter((p) => p.id !== id));
     setSelectedProof(null);
     setShowRejectInput(false);

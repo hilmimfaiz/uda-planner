@@ -2,92 +2,34 @@
 
 import React, { useState } from 'react';
 import { Users, Search, Edit, ShieldAlert, ShieldCheck, RefreshCw, CheckCircle2 } from 'lucide-react';
-
-interface AdminUserItem {
-  id: string;
-  name: string;
-  email: string;
-  plan: 'free' | 'pro' | 'team';
-  planUntil: string | null;
-  brandsCount: number;
-  storageMb: number;
-  isSuspended: boolean;
-  createdAt: string;
-}
+import { AdminService, AdminUserItem } from '@/services/admin.service';
+import { useModal } from '@/contexts/modal-context';
 
 export default function AdminPenggunaPage() {
-  const [users, setUsers] = useState<AdminUserItem[]>([
-    {
-      id: 'usr-1',
-      name: 'Administrator UdaPlanner',
-      email: 'admin@udaplanner.id',
-      plan: 'team',
-      planUntil: null,
-      brandsCount: 5,
-      storageMb: 120,
-      isSuspended: false,
-      createdAt: '10 Okt 2026',
-    },
-    {
-      id: 'usr-2',
-      name: 'Rizki Pratama',
-      email: 'rizki@udacoding.id',
-      plan: 'pro',
-      planUntil: '12 Nov 2026',
-      brandsCount: 3,
-      storageMb: 450,
-      isSuspended: false,
-      createdAt: '11 Okt 2026',
-    },
-    {
-      id: 'usr-3',
-      name: 'Sarah Rahmawati',
-      email: 'sarah@udaplanner.id',
-      plan: 'free',
-      planUntil: null,
-      brandsCount: 1,
-      storageMb: 45,
-      isSuspended: false,
-      createdAt: '12 Okt 2026',
-    },
-    {
-      id: 'usr-4',
-      name: 'Budi Santoso',
-      email: 'budi@gmail.com',
-      plan: 'free',
-      planUntil: null,
-      brandsCount: 1,
-      storageMb: 15,
-      isSuspended: false,
-      createdAt: '13 Okt 2026',
-    },
-    {
-      id: 'usr-5',
-      name: 'Spam User Example',
-      email: 'spam@botmail.com',
-      plan: 'free',
-      planUntil: null,
-      brandsCount: 0,
-      storageMb: 0,
-      isSuspended: true,
-      createdAt: '08 Okt 2026',
-    },
-  ]);
-
+  const { showSuccess, confirmAction } = useModal();
+  const [users, setUsers] = useState<AdminUserItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<AdminUserItem | null>(null);
   const [newPlan, setNewPlan] = useState<'free' | 'pro' | 'team'>('pro');
   const [durationDays, setDurationDays] = useState(30);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    AdminService.getAdminUsers().then((data) => {
+      if (data && data.length > 0) setUsers(data);
+    });
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleUpdatePlan = (e: React.FormEvent) => {
+  const handleUpdatePlan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) return;
+
+    await AdminService.updateUserPlan(selectedUser.userId || selectedUser.id, newPlan, durationDays);
 
     setUsers((prev) =>
       prev.map((u) => {
@@ -110,15 +52,36 @@ export default function AdminPenggunaPage() {
       })
     );
 
+    const userName = selectedUser.name;
     setSelectedUser(null);
-    showToast(`Paket pengguna berhasil diubah menjadi ${newPlan.toUpperCase()}`);
+    showSuccess(
+      'Paket Pengguna Berhasil Diubah!',
+      `Paket langganan untuk "${userName}" telah diperbarui menjadi ${newPlan.toUpperCase()} selama ${durationDays} hari.`
+    );
   };
 
   const handleToggleSuspend = (id: string, currentStatus: boolean) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.id === id ? { ...u, isSuspended: !currentStatus } : u))
-    );
-    showToast(currentStatus ? 'Akun telah diaktifkan kembali.' : 'Akun berhasil dinonaktifkan (suspended).');
+    const target = users.find((u) => u.id === id);
+    confirmAction({
+      title: currentStatus ? 'Aktifkan Akun Pengguna?' : 'Tangguhkan (Suspend) Akun?',
+      message: currentStatus
+        ? `Apakah Anda ingin mengaktifkan kembali akun "${target?.name}"?`
+        : `Apakah Anda yakin ingin menangguhkan akun "${target?.name}"? Pengguna tidak akan dapat mengakses aplikasi.`,
+      danger: !currentStatus,
+      confirmText: currentStatus ? 'Ya, Aktifkan' : 'Ya, Tangguhkan',
+      onConfirm: async () => {
+        await AdminService.toggleUserSuspend(target?.userId || id, !currentStatus);
+        setUsers((prev) =>
+          prev.map((u) => (u.id === id ? { ...u, isSuspended: !currentStatus } : u))
+        );
+        showSuccess(
+          'Status Akun Berhasil Diperbarui',
+          currentStatus
+            ? `Akun "${target?.name}" telah aktif kembali.`
+            : `Akun "${target?.name}" telah berhasil dinonaktifkan.`
+        );
+      },
+    });
   };
 
   const filteredUsers = users.filter((u) =>
