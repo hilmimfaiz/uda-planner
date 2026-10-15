@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,24 +12,35 @@ import {
   CheckCircle2,
   Calendar as CalendarIcon,
   Filter,
-} from 'lucide-react';
-import { DUMMY_POSTS, DUMMY_BRANDS, DUMMY_PILLARS, DummyPost } from '@/lib/dummy-data';
-import { POST_STATUSES } from '@/lib/platforms';
+} from "lucide-react";
+import {
+  DUMMY_POSTS,
+  DUMMY_BRANDS,
+  DUMMY_PILLARS,
+  DummyPost,
+} from "@/lib/dummy-data";
+import { POST_STATUSES } from "@/lib/platforms";
 
 export default function KalenderPage() {
   const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'bulan' | 'minggu' | 'agenda'>('bulan');
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [viewMode, setViewMode] = useState<"bulan" | "minggu" | "agenda">(
+    "bulan",
+  );
   const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
-  const [filterBrand, setFilterBrand] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterBrand, setFilterBrand] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [undoPostState, setUndoPostState] = useState<{ id: string; oldDate: string | null } | null>(null);
+  const [undoPostState, setUndoPostState] = useState<{
+    id: string;
+    oldDate: string | null;
+  } | null>(null);
 
   // Filtered posts
   const filteredPosts = posts.filter((p) => {
-    if (filterBrand !== 'all' && p.brand_id !== filterBrand) return false;
-    if (filterStatus !== 'all' && p.status !== filterStatus) return false;
+    if (filterBrand !== "all" && p.brand_id !== filterBrand) return false;
+    if (filterStatus !== "all" && p.status !== filterStatus) return false;
     return true;
   });
 
@@ -78,15 +89,19 @@ export default function KalenderPage() {
     newScheduled.setHours(14, 0, 0, 0); // Default jam 14.00
 
     setPosts(
-      posts.map((p) => (p.id === postId ? { ...p, scheduled_at: newScheduled.toISOString() } : p))
+      posts.map((p) =>
+        p.id === postId
+          ? { ...p, scheduled_at: newScheduled.toISOString() }
+          : p,
+      ),
     );
 
     setUndoPostState({ id: postId, oldDate });
-    const formatted = newScheduled.toLocaleDateString('id-ID', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
+    const formatted = newScheduled.toLocaleDateString("id-ID", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
     });
     setToastMessage(`Jadwal dipindah ke ${formatted} 14.00`);
 
@@ -100,32 +115,34 @@ export default function KalenderPage() {
     if (!undoPostState) return;
     setPosts(
       posts.map((p) =>
-        p.id === undoPostState.id ? { ...p, scheduled_at: undoPostState.oldDate } : p
-      )
+        p.id === undoPostState.id
+          ? { ...p, scheduled_at: undoPostState.oldDate }
+          : p,
+      ),
     );
-    setToastMessage('Perubahan jadwal berhasil diurungkan.');
+    setToastMessage("Perubahan jadwal berhasil diurungkan.");
     setUndoPostState(null);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Toast Notifikasi dengan tombol Urungkan */}
       {toastMessage && (
         <div
           style={{
-            position: 'fixed',
+            position: "fixed",
             bottom: 24,
             right: 24,
-            background: '#0f172a',
-            color: '#f8fafc',
-            padding: '12px 18px',
+            background: "#0f172a",
+            color: "#f8fafc",
+            padding: "12px 18px",
             borderRadius: 10,
-            boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
-            display: 'flex',
-            alignItems: 'center',
+            boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+            display: "flex",
+            alignItems: "center",
             gap: 14,
             zIndex: 9999,
-            fontSize: '0.88rem',
+            fontSize: "0.88rem",
             fontWeight: 600,
           }}
         >
@@ -134,15 +151,15 @@ export default function KalenderPage() {
             <button
               onClick={handleUndo}
               style={{
-                background: '#16a34a',
-                color: 'white',
-                border: 'none',
-                padding: '4px 10px',
+                background: "#16a34a",
+                color: "white",
+                border: "none",
+                padding: "4px 10px",
                 borderRadius: 6,
                 fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
                 gap: 4,
               }}
             >
@@ -154,30 +171,51 @@ export default function KalenderPage() {
       )}
 
       {/* Header & Controls */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 14,
+        }}
+      >
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Kalender Konten</h1>
-          <p style={{ color: '#64748b', fontSize: '0.88rem' }}>
-            Geser postingan untuk memindahkan tanggal dan jam tayang secara instan.
+          <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#0f172a" }}>
+            Kalender Konten
+          </h1>
+          <p style={{ color: "#64748b", fontSize: "0.88rem" }}>
+            Geser postingan untuk memindahkan tanggal dan jam tayang secara
+            instan.
           </p>
         </div>
 
         {/* View Switcher: Bulan, Minggu, Agenda */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#ffffff', padding: 4, borderRadius: 8, border: '1px solid #e2e8f0' }}>
-          {(['bulan', 'minggu', 'agenda'] as const).map((mode) => (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            background: "#ffffff",
+            padding: 4,
+            borderRadius: 8,
+            border: "1px solid #e2e8f0",
+          }}
+        >
+          {(["bulan", "minggu", "agenda"] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
               style={{
-                padding: '6px 14px',
+                padding: "6px 14px",
                 borderRadius: 6,
-                border: 'none',
-                fontSize: '0.82rem',
+                border: "none",
+                fontSize: "0.82rem",
                 fontWeight: 600,
-                textTransform: 'capitalize',
-                cursor: 'pointer',
-                background: viewMode === mode ? '#16a34a' : 'transparent',
-                color: viewMode === mode ? '#ffffff' : '#64748b',
+                textTransform: "capitalize",
+                cursor: "pointer",
+                background: viewMode === mode ? "#16a34a" : "transparent",
+                color: viewMode === mode ? "#ffffff" : "#64748b",
               }}
             >
               {mode}
@@ -187,8 +225,27 @@ export default function KalenderPage() {
       </div>
 
       {/* Month Navigator & Filters */}
-      <div className="uda-card" style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+
+      <div
+        className="uda-card"
+        style={{
+          padding: "16px 18px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 16,
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          boxSizing: "border-box",
+          borderRadius: 14,
+          background: "#ffffff",
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 2px 8px rgba(15, 23, 42, 0.03)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
             className="btn-uda btn-uda-secondary btn-uda-sm"
             onClick={() => {
@@ -199,8 +256,13 @@ export default function KalenderPage() {
           >
             <ChevronLeft size={16} />
           </button>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
-            {currentDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+          <h2
+            style={{ fontSize: "1.15rem", fontWeight: 800, color: "#0f172a" }}
+          >
+            {currentDate.toLocaleDateString("id-ID", {
+              month: "long",
+              year: "numeric",
+            })}
           </h2>
           <button
             className="btn-uda btn-uda-secondary btn-uda-sm"
@@ -220,7 +282,7 @@ export default function KalenderPage() {
           </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <select
             className="brand-dropdown-select"
             value={filterBrand}
@@ -228,7 +290,9 @@ export default function KalenderPage() {
           >
             <option value="all">Semua Brand</option>
             {DUMMY_BRANDS.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
             ))}
           </select>
 
@@ -248,12 +312,34 @@ export default function KalenderPage() {
       </div>
 
       {/* Layout Kalender + Kolom "Belum Dijadwalkan" */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20 }}>
+
+      <div
+        className="calendar-layout"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(220px, 260px)",
+          gap: 16,
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          alignItems: "start",
+        }}
+      >
         {/* Main Grid Kalender */}
-        <div className="uda-card" style={{ padding: 16 }}>
-          {viewMode === 'agenda' ? (
+        <div
+          className="uda-card"
+          style={{
+            padding: 12,
+            minWidth: 0,
+            width: "100%",
+            maxWidth: "100%",
+            boxSizing: "border-box",
+            overflow: "hidden",
+          }}
+        >
+          {viewMode === "agenda" ? (
             /* Mode Agenda (Daftar per hari) */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {scheduledPosts.map((post) => {
                 const brand = DUMMY_BRANDS.find((b) => b.id === post.brand_id);
                 const statusMeta = POST_STATUSES[post.status];
@@ -263,25 +349,63 @@ export default function KalenderPage() {
                     style={{
                       padding: 14,
                       borderRadius: 10,
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
-                        {post.scheduled_at ? new Date(post.scheduled_at).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                      <div
+                        style={{
+                          fontSize: "0.78rem",
+                          color: "#64748b",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {post.scheduled_at
+                          ? new Date(post.scheduled_at).toLocaleDateString(
+                              "id-ID",
+                              {
+                                weekday: "long",
+                                day: "numeric",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )
+                          : ""}
                       </div>
-                      <div style={{ fontWeight: 700, fontSize: '0.92rem', marginTop: 3 }}>{post.title}</div>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          fontSize: "0.92rem",
+                          marginTop: 3,
+                        }}
+                      >
+                        {post.title}
+                      </div>
                       {brand && (
-                        <div style={{ fontSize: '0.75rem', color: brand.color, fontWeight: 700, marginTop: 2 }}>
+                        <div
+                          style={{
+                            fontSize: "0.75rem",
+                            color: brand.color,
+                            fontWeight: 700,
+                            marginTop: 2,
+                          }}
+                        >
                           {brand.name}
                         </div>
                       )}
                     </div>
-                    <span className="status-pill" style={{ background: statusMeta.bg, color: statusMeta.text }}>
+                    <span
+                      className="status-pill"
+                      style={{
+                        background: statusMeta.bg,
+                        color: statusMeta.text,
+                      }}
+                    >
                       {statusMeta.label}
                     </span>
                   </div>
@@ -291,20 +415,44 @@ export default function KalenderPage() {
           ) : (
             /* Mode Bulan Grid 7 Kolom */
             <div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, marginBottom: 8, textAlign: 'center' }}>
-                {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map((d) => (
-                  <div key={d} style={{ fontWeight: 700, fontSize: '0.78rem', color: '#64748b', padding: '6px 0' }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(7,  minmax(0, 1fr))",
+                  gap: 6,
+                  marginBottom: 8,
+                  textAlign: "center",
+                }}
+              >
+                {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map((d) => (
+                  <div
+                    key={d}
+                    style={{
+                      fontWeight: 700,
+                      fontSize: "0.78rem",
+                      color: "#64748b",
+                      padding: "6px 0",
+                    }}
+                  >
                     {d}
                   </div>
                 ))}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(7,  minmax(0, 1fr))",
+                  gap: 6,
+                }}
+              >
                 {calendarDays.map((cell, idx) => {
                   const cellDateStr = cell.date.toDateString();
                   const isToday = cellDateStr === new Date().toDateString();
                   const cellPosts = scheduledPosts.filter(
-                    (p) => p.scheduled_at && new Date(p.scheduled_at).toDateString() === cellDateStr
+                    (p) =>
+                      p.scheduled_at &&
+                      new Date(p.scheduled_at).toDateString() === cellDateStr,
                   );
 
                   return (
@@ -313,31 +461,49 @@ export default function KalenderPage() {
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault();
-                        const postId = e.dataTransfer.getData('text/plain');
+                        const postId = e.dataTransfer.getData("text/plain");
                         if (postId) handleDropToDate(cell.date, postId);
                       }}
-                      onClick={() => {
-                        router.push(`/app/postingan/baru?date=${cell.date.toISOString()}`);
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedDate(new Date(cell.date));
                       }}
                       style={{
-                        minHeight: 110,
-                        background: isToday ? '#f0fdf4' : cell.isCurrentMonth ? '#ffffff' : '#f8fafc',
-                        border: isToday ? '1px solid #16a34a' : '1px solid #e2e8f0',
+                        minWidth: 0,
+                        minHeight: "clamp(72px, 10vw, 110px)",
+                        background: isToday
+                          ? "#f0fdf4"
+                          : cell.isCurrentMonth
+                            ? "#ffffff"
+                            : "#f8fafc",
+                        border: isToday
+                          ? "1px solid #16a34a"
+                          : "1px solid #e2e8f0",
                         borderRadius: 8,
-                        padding: 6,
-                        display: 'flex',
-                        flexDirection: 'column',
+                        padding: "4px 3px",
+                        display: "flex",
+                        flexDirection: "column",
                         gap: 4,
-                        cursor: 'pointer',
+                        cursor: "pointer",
                         opacity: cell.isCurrentMonth ? 1 : 0.45,
+                        overflow: "hidden",
                       }}
                     >
-                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: isToday ? '#16a34a' : '#64748b', alignSelf: 'flex-end' }}>
+                      <div
+                        style={{
+                          fontSize: "0.78rem",
+                          fontWeight: 700,
+                          color: isToday ? "#16a34a" : "#64748b",
+                          alignSelf: "flex-end",
+                        }}
+                      >
                         {cell.date.getDate()}
                       </div>
 
                       {cellPosts.map((post) => {
-                        const brand = DUMMY_BRANDS.find((b) => b.id === post.brand_id);
+                        const brand = DUMMY_BRANDS.find(
+                          (b) => b.id === post.brand_id,
+                        );
                         const statusMeta = POST_STATUSES[post.status];
                         return (
                           <div
@@ -345,30 +511,69 @@ export default function KalenderPage() {
                             draggable
                             onDragStart={(e) => {
                               e.stopPropagation();
-                              e.dataTransfer.setData('text/plain', post.id);
+                              e.dataTransfer.setData("text/plain", post.id);
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
                               router.push(`/app/postingan/${post.id}`);
                             }}
                             style={{
-                              background: '#ffffff',
-                              border: `1px solid ${brand ? brand.color + '44' : '#e2e8f0'}`,
-                              borderLeft: `3px solid ${brand ? brand.color : '#16a34a'}`,
-                              borderRadius: 4,
-                              padding: '3px 6px',
-                              fontSize: '0.7rem',
-                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                              cursor: 'grab',
+                              width: "100%",
+                              minWidth: 0,
+                              boxSizing: "border-box",
+                              background: "#ffffff",
+                              border: `1px solid ${brand ? brand.color + "44" : "#e2e8f0"}`,
+                              borderLeft: `3px solid ${brand ? brand.color : "#16a34a"}`,
+                              borderRadius: 5,
+                              padding: "4px 2px",
+                              fontSize: "0.65rem",
+                              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                              cursor: "grab",
+                              overflow: "hidden",
                             }}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: statusMeta.color }} />
-                              <span style={{ fontWeight: 700, fontSize: '0.68rem', color: '#0f172a' }}>
-                                {post.scheduled_at ? new Date(post.scheduled_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 4,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: 5,
+                                  height: 5,
+                                  borderRadius: "50%",
+                                  backgroundColor: statusMeta.color,
+                                }}
+                              />
+                              <span
+                                style={{
+                                  fontWeight: 700,
+                                  fontSize: "0.68rem",
+                                  color: "#0f172a",
+                                }}
+                              >
+                                {post.scheduled_at
+                                  ? new Date(
+                                      post.scheduled_at,
+                                    ).toLocaleTimeString("id-ID", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : ""}
                               </span>
                             </div>
-                            <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#334155', marginTop: 1 }}>
+                            <div
+                              style={{
+                                fontWeight: 600,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                color: "#334155",
+                                marginTop: 1,
+                              }}
+                            >
                               {post.title}
                             </div>
                           </div>
@@ -382,22 +587,162 @@ export default function KalenderPage() {
           )}
         </div>
 
+        {selectedDate && (
+          <div
+            className="uda-card"
+            style={{
+              marginTop: 16,
+              padding: 16,
+              minWidth: 0,
+              width: "100%",
+              boxSizing: "border-box",
+            }}
+          >
+            <h3 style={{ margin: "0 0 8px", fontSize: "1rem" }}>
+              Agenda Tanggal Terpilih
+            </h3>
+
+            <p style={{ color: "#64748b", fontSize: "0.85rem" }}>
+              {selectedDate.toLocaleDateString("id-ID", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </p>
+
+            <button
+              onClick={() =>
+                router.push(
+                  `/app/postingan/baru?date=${selectedDate.toISOString()}`,
+                )
+              }
+              style={{
+                padding: "9px 12px",
+                border: "none",
+                borderRadius: 8,
+                background: "#16a34a",
+                color: "#fff",
+                cursor: "pointer",
+                marginRight: 8,
+              }}
+            >
+              + Buat Postingan
+            </button>
+
+            <button
+              onClick={() => setSelectedDate(null)}
+              style={{
+                padding: "9px 12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: 8,
+                background: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              Tutup
+            </button>
+
+            <div style={{ marginTop: 14 }}>
+              {scheduledPosts.filter(
+                (post) =>
+                  post.scheduled_at &&
+                  new Date(post.scheduled_at).toDateString() ===
+                    selectedDate.toDateString(),
+              ).length === 0 ? (
+                <p style={{ color: "#64748b" }}>
+                  Belum ada postingan terjadwal pada tanggal ini.
+                </p>
+              ) : (
+                scheduledPosts
+                  .filter(
+                    (post) =>
+                      post.scheduled_at &&
+                      new Date(post.scheduled_at).toDateString() ===
+                        selectedDate.toDateString(),
+                  )
+                  .map((post) => (
+                    <div
+                      key={post.id}
+                      onClick={() => router.push(`/app/postingan/${post.id}`)}
+                      style={{
+                        padding: 12,
+                        marginBottom: 8,
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      <strong>{post.title}</strong>
+                      <p style={{ margin: "5px 0 0", color: "#64748b" }}>
+                        {post.scheduled_at
+                          ? new Date(post.scheduled_at).toLocaleTimeString(
+                              "id-ID",
+                              {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )
+                          : ""}
+                      </p>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Kotak "Belum Dijadwalkan" di Samping (Desktop) */}
-        <div className="uda-card" style={{ padding: 16, height: 'fit-content' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <h3 style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>Belum Dijadwalkan</h3>
-            <span className="status-pill" style={{ background: '#f1f5f9', color: '#475569' }}>
+        <div
+          className="uda-card"
+          style={{ padding: 16, height: "fit-content" }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 12,
+            }}
+          >
+            <h3
+              style={{ fontSize: "0.92rem", fontWeight: 700, color: "#0f172a" }}
+            >
+              Belum Dijadwalkan
+            </h3>
+            <span
+              className="status-pill"
+              style={{ background: "#f1f5f9", color: "#475569" }}
+            >
               {unscheduledPosts.length}
             </span>
           </div>
 
-          <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: 12 }}>
-            Tarik (drag) kartu ini langsung ke tanggal kalender untuk menjadwalkan:
+          <p
+            style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: 12 }}
+          >
+            Tarik (drag) kartu ini langsung ke tanggal kalender untuk
+            menjadwalkan:
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 450, overflowY: 'auto' }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              maxHeight: 450,
+              overflowY: "auto",
+            }}
+          >
             {unscheduledPosts.length === 0 ? (
-              <p style={{ fontSize: '0.78rem', color: '#94a3b8', fontStyle: 'italic' }}>
+              <p
+                style={{
+                  fontSize: "0.78rem",
+                  color: "#94a3b8",
+                  fontStyle: "italic",
+                }}
+              >
                 Semua postingan sudah memiliki tanggal jadwal.
               </p>
             ) : (
@@ -408,25 +753,46 @@ export default function KalenderPage() {
                     key={post.id}
                     draggable
                     onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', post.id);
+                      e.dataTransfer.setData("text/plain", post.id);
                     }}
                     onClick={() => router.push(`/app/postingan/${post.id}`)}
                     style={{
                       padding: 10,
                       borderRadius: 8,
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
-                      cursor: 'grab',
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      cursor: "grab",
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        marginBottom: 3,
+                      }}
+                    >
                       {brand && (
-                        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: brand.color }}>
+                        <span
+                          style={{
+                            fontSize: "0.68rem",
+                            fontWeight: 700,
+                            color: brand.color,
+                          }}
+                        >
                           {brand.name}
                         </span>
                       )}
                     </div>
-                    <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#0f172a' }}>{post.title}</div>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        fontSize: "0.82rem",
+                        color: "#0f172a",
+                      }}
+                    >
+                      {post.title}
+                    </div>
                   </div>
                 );
               })

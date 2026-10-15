@@ -439,3 +439,496 @@ body {
     padding-bottom: 75px !important;
   }
 }
+
+
+/* Landing Page - Professional UI */
+
+.landing-page {
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.landing-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  min-height: 72px;
+  padding: 12px 6%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid #e2e8f0;
+  backdrop-filter: blur(16px);
+}
+
+.landing-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #0f172a;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+}
+
+.landing-logo-mark {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 12px;
+  background: #16a34a;
+  color: #ffffff;
+  box-shadow: 0 5px 12px rgba(22, 163, 74, 0.2);
+}
+
+.landing-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+
+.landing-hero {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 60px 24px 48px;
+  text-align: center;
+}
+
+
+.landing-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin-bottom: 24px;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.landing-hero-title {
+  max-width: 900px;
+  margin: 0 auto 22px;
+  color: #0f172a;
+  font-size: clamp(2.25rem, 5.2vw, 4.25rem);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.055em;
+  text-wrap: balance;
+}
+
+.landing-hero-highlight {
+  color: #16a34a;
+}
+
+.landing-hero-description {
+  max-width: 690px;
+  margin: 0 auto 32px;
+  color: #64748b;
+  font-size: clamp(1rem, 2vw, 1.12rem);
+  line-height: 1.8;
+}
+
+.landing-hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.landing-hero-actions .btn-uda {
+  min-height: 48px;
+  padding: 12px 22px;
+  font-size: 0.95rem;
+}
+
+.landing-hero-actions .btn-uda-primary {
+  box-shadow: 0 6px 16px rgba(22, 163, 74, 0.2);
+}
+
+.landing-hero-actions .btn-uda-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(22, 163, 74, 0.24);
+}
+
+@media (max-width: 640px) {
+  .landing-navbar {
+    min-height: 64px;
+    padding: 10px 16px;
+    gap: 10px;
+  }
+
+  .landing-logo {
+    gap: 8px;
+    font-size: 1.05rem;
+  }
+
+  .landing-logo-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .landing-nav-actions {
+    gap: 8px;
+  }
+
+  .landing-nav-actions .btn-uda {
+    padding: 7px 10px;
+    font-size: 0.78rem;
+  }
+
+.landing-hero {
+  padding: 44px 18px 36px;
+}
+
+  .landing-eyebrow {
+    max-width: 100%;
+    font-size: 0.72rem;
+    line-height: 1.5;
+  }
+
+  .landing-hero-title {
+    font-size: clamp(2rem, 9vw, 3rem);
+    letter-spacing: -0.045em;
+  }
+
+  .landing-hero-description {
+    font-size: 0.95rem;
+    line-height: 1.7;
+  }
+
+  .landing-hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .landing-hero-actions .btn-uda {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-hero-actions .btn-uda-primary {
+    transition: none;
+  }
+
+  .landing-hero-actions .btn-uda-primary:hover {
+    transform: none;
+  }
+}
+
+
+/* UdaPlanner - Kalender Demo Landing Page */
+
+.landing-calendar {
+  width: 100%;
+  max-width: 680px;
+  margin: 40px auto 0;
+  padding: 20px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.08),
+    0 4px 12px rgba(15, 23, 42, 0.04);
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+
+
+.landing-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.landing-calendar-title {
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.landing-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  text-align: center;
+}
+
+.landing-calendar-day {
+  padding: 10px 2px;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.landing-calendar-date {
+  min-height: 76px;
+  padding: 10px 4px;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.9rem;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.landing-calendar-date:hover {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+@media (max-width: 640px) {
+  .landing-calendar {
+    margin-top: 32px;
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .landing-calendar-header {
+    align-items: flex-start;
+  }
+
+  .landing-calendar-title {
+    font-size: 0.85rem;
+  }
+
+  .landing-calendar-grid {
+    gap: 3px;
+  }
+
+  .landing-calendar-day {
+    padding: 8px 0;
+    font-size: 0.68rem;
+  }
+
+  .landing-calendar-date {
+    min-height: 48px;
+    padding: 6px 1px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+  }
+}
+
+
+/* ===== UdaPlanner: Polesan Preview Kalender ===== */
+
+.landing-calendar {
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.08),
+    0 4px 12px rgba(15, 23, 42, 0.04);
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.landing-calendar:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 26px 60px rgba(15, 23, 42, 0.12),
+    0 6px 16px rgba(15, 23, 42, 0.05);
+}
+
+.landing-calendar-header {
+  padding: 20px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.landing-calendar-title {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.landing-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  padding: 16px;
+}
+
+.landing-calendar-day {
+  min-width: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.landing-calendar-date {
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: #334155;
+  font-size: 13px;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.landing-calendar-date:hover {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+@media (max-width: 480px) {
+  .landing-calendar {
+    border-radius: 16px;
+  }
+
+  .landing-calendar-header {
+    padding: 16px;
+  }
+
+  .landing-calendar-grid {
+    gap: 3px;
+    padding: 12px;
+  }
+
+  .landing-calendar-date {
+    min-height: 34px;
+    border-radius: 8px;
+    font-size: 12px;
+  }
+}
+
+
+/* Efek hover kartu fitur UdaPlanner */
+.uda-card {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+@media (hover: hover) {
+  .uda-card:hover {
+    transform: translateY(-5px);
+    border-color: #bbf7d0 !important;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uda-card {
+    transition: none;
+  }
+
+  .uda-card:hover {
+    transform: none;
+  }
+}
+
+
+/* Efek fokus input halaman login UdaPlanner */
+.login-input:focus {
+  border-color: #16a34a !important;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
+}
+
+.login-input::placeholder {
+  color: #94a3b8;
+}
+
+
+/* Efek hover tombol Masuk */
+.login-submit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(22, 163, 74, 0.25) !important;
+}
+
+.login-submit:active {
+  transform: translateY(0);
+}
+
+.login-submit:focus-visible {
+  outline: 3px solid rgba(22, 163, 74, 0.35);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-submit {
+    transition: none !important;
+  }
+
+  .login-submit:hover,
+  .login-submit:active {
+    transform: none;
+  }
+}
+
+
+/* Kalender UdaPlanner responsif */
+.calendar-layout {
+  grid-template-columns: minmax(0, 1fr) 260px;
+}
+
+@media (max-width: 900px) {
+  .calendar-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .calendar-layout > .uda-card {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+
+/* Perbaikan tampilan kalender pada layar HP */
+@media (max-width: 600px) {
+  .calendar-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) !important;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    gap: 12px;
+  }
+
+  .calendar-layout > * {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .calendar-layout .uda-card {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .app-content-body {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+}
