@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -13,12 +13,21 @@ import {
   Trash2,
   Plus,
   Check,
+  Camera,
+  Upload,
+  Loader2,
+  X,
 } from 'lucide-react';
 import { DUMMY_BRANDS, DUMMY_PILLARS, DUMMY_MEMBERS } from '@/lib/dummy-data';
+import { useAuth } from '@/contexts/auth-context';
+import { createClient } from '@/lib/supabase/client';
+import { uploadBrandLogo } from '@/lib/image-upload';
 
 export default function PengaturanBrandDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
+  const supabase = createClient();
   const brandId = (params?.id as string) || 'brand-1';
 
   const brand = DUMMY_BRANDS.find((b) => b.id === brandId) || DUMMY_BRANDS[0];
@@ -28,6 +37,14 @@ export default function PengaturanBrandDetailPage() {
   const [members, setMembers] = useState(DUMMY_MEMBERS);
   const [requireApproval, setRequireApproval] = useState(brand.require_approval);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Brand Profile Edit States
+  const [brandName, setBrandName] = useState(brand.name);
+  const [brandHandle, setBrandHandle] = useState(brand.handle);
+  const [brandColor, setBrandColor] = useState(brand.color);
+  const [brandAvatarUrl, setBrandAvatarUrl] = useState(brand.avatar_url);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Invite Modal
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -41,6 +58,33 @@ export default function PengaturanBrandDetailPage() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      const uploadedUrl = await uploadBrandLogo(supabase, file, brand.id);
+      setBrandAvatarUrl(uploadedUrl);
+
+      if (supabase && user) {
+        await (supabase.from('brands' as any) as any)
+          .update({
+            logo_url: uploadedUrl,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', brand.id);
+      }
+
+      showToast('✅ Foto logo brand berhasil diunggah!');
+    } catch (err: any) {
+      showToast('❌ Gagal mengunggah foto: ' + (err.message || 'Coba lagi'));
+    } finally {
+      setIsUploadingAvatar(false);
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleGenerateInvite = (e: React.FormEvent) => {
@@ -116,39 +160,153 @@ export default function PengaturanBrandDetailPage() {
 
       {/* TAB 1: PROFIL BRAND */}
       {activeTab === 'profil' && (
-        <div className="uda-card" style={{ maxWidth: 540 }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: 16 }}>Detail Profil Brand</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="uda-card" style={{ maxWidth: 580 }}>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: 18, color: '#0f172a' }}>
+            Detail Profil Brand
+          </h3>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {/* Foto / Logo Brand Upload */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
+                Logo / Foto Profil Brand
+              </label>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 16,
+                  padding: 16,
+                  background: '#f8fafc',
+                  border: '1px dashed #cbd5e1',
+                  borderRadius: 12,
+                }}
+              >
+                <div style={{ position: 'relative' }}>
+                  <img
+                    src={brandAvatarUrl}
+                    alt={brandName}
+                    style={{
+                      width: 72,
+                      height: 72,
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: `3px solid ${brandColor}`,
+                      background: '#ffffff',
+                    }}
+                  />
+                  {isUploadingAvatar && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '50%',
+                        background: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                      }}
+                    >
+                      <Loader2 size={22} className="animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/png, image/jpeg, image/jpg, image/webp, image/svg+xml"
+                    style={{ display: 'none' }}
+                    onChange={handleLogoUpload}
+                  />
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn-uda btn-uda-primary btn-uda-sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploadingAvatar}
+                      style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 6 }}
+                    >
+                      <Camera size={14} />
+                      <span>{isUploadingAvatar ? 'Mengunggah...' : 'Unggah Foto Baru'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn-uda btn-uda-secondary btn-uda-sm"
+                      onClick={() => {
+                        setBrandAvatarUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150');
+                        showToast('Logo direset ke gambar default');
+                      }}
+                      style={{ fontSize: '0.8rem' }}
+                    >
+                      Reset Logo
+                    </button>
+                  </div>
+
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>
+                    Format didukung: PNG, JPG, WebP, atau SVG. Rasio disarankan 1:1, ukuran maks. 5 MB.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div>
-              <label style={{ fontSize: '0.85rem', fontWeight: 700 }}>Nama Brand</label>
+              <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Nama Brand</label>
               <input
                 type="text"
-                defaultValue={brand.name}
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, marginTop: 4 }}
+                value={brandName}
+                onChange={(e) => setBrandName(e.target.value)}
+                style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, marginTop: 4, outline: 'none', fontSize: '0.9rem' }}
               />
             </div>
+
             <div>
-              <label style={{ fontSize: '0.85rem', fontWeight: 700 }}>Username Handle (@)</label>
+              <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Username Handle (@)</label>
               <input
                 type="text"
-                defaultValue={brand.handle}
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, marginTop: 4 }}
+                value={brandHandle}
+                onChange={(e) => setBrandHandle(e.target.value.replace('@', ''))}
+                style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, marginTop: 4, outline: 'none', fontSize: '0.9rem' }}
               />
             </div>
+
             <div>
-              <label style={{ fontSize: '0.85rem', fontWeight: 700 }}>Warna Identitas Brand</label>
-              <input
-                type="color"
-                defaultValue={brand.color}
-                style={{ width: '100%', height: 42, border: '1px solid #e2e8f0', borderRadius: 8, marginTop: 4, padding: 2 }}
-              />
+              <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Warna Identitas Brand</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+                <input
+                  type="color"
+                  value={brandColor}
+                  onChange={(e) => setBrandColor(e.target.value)}
+                  style={{ width: 50, height: 42, border: '1px solid #e2e8f0', borderRadius: 8, padding: 2, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#475569' }}>{brandColor}</span>
+              </div>
             </div>
+
             <button
-              className="btn-uda btn-uda-primary btn-uda-sm"
-              style={{ width: 'fit-content', marginTop: 10 }}
-              onClick={() => showToast('✅ Profil brand berhasil diperbarui!')}
+              className="btn-uda btn-uda-primary"
+              style={{ width: 'fit-content', marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}
+              onClick={async () => {
+                if (supabase && user) {
+                  await (supabase.from('brands' as any) as any)
+                    .update({
+                      name: brandName,
+                      slug: brandHandle,
+                      color: brandColor,
+                      logo_url: brandAvatarUrl,
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', brand.id);
+                }
+                showToast('✅ Profil brand berhasil diperbarui!');
+              }}
             >
-              Simpan Profil
+              Simpan Profil Brand
             </button>
           </div>
         </div>
