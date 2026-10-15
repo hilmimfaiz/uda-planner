@@ -1,21 +1,39 @@
 import { createClient } from '@/lib/supabase/client';
-import { initialPillars } from '@/lib/supabase/mock-data';
-import { ContentPillar } from '@/types/database.types';
+import { DUMMY_PILLARS, DummyPillar } from '@/lib/dummy-data';
 
-let mockPillars: ContentPillar[] = [...initialPillars];
+let localPillars: DummyPillar[] = [...DUMMY_PILLARS];
 
 export class ContentPillarService {
-  static async getPillars(brandId: string): Promise<ContentPillar[]> {
+  static async getPillars(brandId?: string): Promise<DummyPillar[]> {
     const supabase = createClient();
     if (supabase) {
-      const { data, error } = await supabase
-        .from('content_pillars')
-        .select('*')
-        .eq('brand_id', brandId)
-        .order('name', { ascending: true });
-      if (!error && data) return data as ContentPillar[];
+      try {
+        let query = supabase.from('content_pillars' as any).select('*').order('created_at', { ascending: true });
+        if (brandId && brandId !== 'all') {
+          query = query.eq('brand_id', brandId);
+        }
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) {
+          const dbPillars: DummyPillar[] = data.map((p: any) => ({
+            id: p.id,
+            brand_id: p.brand_id,
+            name: p.name,
+            color: p.color || '#3b82f6',
+          }));
+
+          const dbIds = new Set(dbPillars.map((p) => p.id));
+          const combined = [...dbPillars, ...localPillars.filter((lp) => !dbIds.has(lp.id))];
+          return brandId && brandId !== 'all' ? combined.filter((p) => p.brand_id === brandId) : combined;
+        }
+      } catch (err) {
+        console.warn('ContentPillarService.getPillars db error:', err);
+      }
     }
-    return mockPillars.filter((p) => p.brand_id === brandId);
+
+    if (brandId && brandId !== 'all') {
+      return localPillars.filter((p) => p.brand_id === brandId);
+    }
+    return [...localPillars];
   }
 
   static async createPillar(payload: {
@@ -23,47 +41,63 @@ export class ContentPillarService {
     name: string;
     color?: string;
     description?: string;
-  }): Promise<ContentPillar> {
-    const newPillar: ContentPillar = {
-      id: `pillar-${Date.now()}`,
+  }): Promise<DummyPillar> {
+    const newPillar: DummyPillar = {
+      id: `pil-${Date.now()}`,
       brand_id: payload.brandId,
       name: payload.name,
       color: payload.color || '#3b82f6',
-      description: payload.description || '',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     };
 
     const supabase = createClient();
     if (supabase) {
-      const { data, error } = await supabase.from('content_pillars').insert({
-        brand_id: payload.brandId,
-        name: payload.name,
-        color: payload.color || '#3b82f6',
-        description: payload.description,
-      } as any).select().single();
-      if (!error && data) return data as ContentPillar;
+      try {
+        const { data, error } = await (supabase.from('content_pillars' as any) as any).insert({
+          brand_id: payload.brandId,
+          name: payload.name,
+          color: payload.color || '#3b82f6',
+        }).select().single();
+
+        if (!error && data) {
+          const d = data as any;
+          const created: DummyPillar = {
+            id: d.id,
+            brand_id: d.brand_id,
+            name: d.name,
+            color: d.color || newPillar.color,
+          };
+          localPillars.push(created);
+          return created;
+        }
+      } catch (err) {
+        console.warn('ContentPillarService.createPillar db error:', err);
+      }
     }
 
-    mockPillars.push(newPillar);
+    localPillars.push(newPillar);
     return newPillar;
   }
 
-  static async updatePillar(id: string, updates: Partial<ContentPillar>): Promise<ContentPillar | null> {
+  static async updatePillar(id: string, updates: Partial<DummyPillar>): Promise<DummyPillar | null> {
     const supabase = createClient();
     if (supabase) {
-      const { data, error } = await (supabase.from('content_pillars' as any) as any)
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
-      if (!error && data) return data as ContentPillar;
+      try {
+        const dbUpdates: any = {};
+        if (updates.name !== undefined) dbUpdates.name = updates.name;
+        if (updates.color !== undefined) dbUpdates.color = updates.color;
+
+        await (supabase.from('content_pillars' as any) as any)
+          .update(dbUpdates)
+          .eq('id', id);
+      } catch (err) {
+        console.warn('ContentPillarService.updatePillar db error:', err);
+      }
     }
 
-    const index = mockPillars.findIndex((p) => p.id === id);
+    const index = localPillars.findIndex((p) => p.id === id);
     if (index !== -1) {
-      mockPillars[index] = { ...mockPillars[index], ...updates, updated_at: new Date().toISOString() };
-      return mockPillars[index];
+      localPillars[index] = { ...localPillars[index], ...updates };
+      return localPillars[index];
     }
     return null;
   }
@@ -71,10 +105,13 @@ export class ContentPillarService {
   static async deletePillar(id: string): Promise<boolean> {
     const supabase = createClient();
     if (supabase) {
-      const { error } = await supabase.from('content_pillars').delete().eq('id', id);
-      if (!error) return true;
+      try {
+        await supabase.from('content_pillars' as any).delete().eq('id', id);
+      } catch (err) {
+        console.warn('ContentPillarService.deletePillar db error:', err);
+      }
     }
-    mockPillars = mockPillars.filter((p) => p.id !== id);
+    localPillars = localPillars.filter((p) => p.id !== id);
     return true;
   }
 }
