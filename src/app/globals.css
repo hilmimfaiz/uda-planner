@@ -4,7 +4,7 @@
    Latar: Putih & Abu Sangat Terang #F8FAFC | Teks: #0F172A & #64748B
    ============================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Font didefinisikan dengan preconnect di layout untuk loading instan tanpa render-blocking */
 
 :root {
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -44,6 +44,27 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
+
+  /* Responsive Spacing Tokens */
+  --page-padding-x: 28px;
+  --page-padding-y: 28px;
+  --card-padding: 24px;
+}
+
+@media (max-width: 1024px) {
+  :root {
+    --page-padding-x: 20px;
+    --page-padding-y: 20px;
+    --card-padding: 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --page-padding-x: 14px;
+    --page-padding-y: 16px;
+    --card-padding: 16px;
+  }
 }
 
 * {
@@ -94,6 +115,12 @@ body {
   top: 0;
   height: 100vh;
   z-index: 40;
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-x: hidden;
+}
+
+.app-sidebar.collapsed {
+  width: 72px;
 }
 
 .sidebar-admin {
@@ -103,11 +130,73 @@ body {
 }
 
 .sidebar-brand-header {
-  padding: 20px 18px;
+  padding: 18px 16px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
+  min-height: 72px;
+  box-sizing: border-box;
+}
+
+.sidebar-brand-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.sidebar-brand-text {
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.app-sidebar.collapsed .sidebar-brand-header {
+  padding: 16px 8px;
+  justify-content: center;
+  align-items: center;
+  min-height: 72px;
+}
+
+.app-sidebar.collapsed .sidebar-brand-text {
+  display: none !important;
+}
+
+.sidebar-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: #f8fafc;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-toggle-btn:hover {
+  background: #f1f5f9;
+  color: var(--text-main);
+  border-color: #cbd5e1;
+}
+
+.sidebar-admin .sidebar-toggle-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+.sidebar-admin .sidebar-toggle-btn:hover {
+  background: #334155;
+  color: #f8fafc;
+  border-color: #475569;
 }
 
 .logo-symbol {
@@ -222,6 +311,92 @@ body {
   border-top-color: #1e293b;
 }
 
+.sidebar-collapse-row-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: transparent;
+  border: 1px dashed var(--border-color);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.sidebar-collapse-row-btn:hover {
+  background: #f1f5f9;
+  color: var(--text-main);
+  border-color: #cbd5e1;
+}
+
+.sidebar-admin .sidebar-collapse-row-btn {
+  color: #94a3b8;
+  border-color: #334155;
+}
+
+.sidebar-admin .sidebar-collapse-row-btn:hover {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #475569;
+}
+
+/* Collapsed Navigation Item overrides */
+.app-sidebar.collapsed .sidebar-nav {
+  padding: 16px 8px;
+  align-items: center;
+}
+
+.app-sidebar.collapsed .nav-item-btn {
+  justify-content: center;
+  padding: 10px 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  margin: 0 auto;
+}
+
+.app-sidebar.collapsed .nav-item-btn span {
+  display: none !important;
+}
+
+.app-sidebar.collapsed .nav-item-btn .nav-badge-count {
+  display: none !important;
+}
+
+.app-sidebar.collapsed .sidebar-admin-bottom {
+  padding: 14px 8px;
+  align-items: center;
+}
+
+.app-sidebar.collapsed .sidebar-admin-bottom .nav-item-btn {
+  justify-content: center;
+  padding: 10px 0;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+}
+
+.app-sidebar.collapsed .sidebar-admin-bottom .nav-item-btn span {
+  display: none !important;
+}
+
+.app-sidebar.collapsed .sidebar-collapse-row-btn {
+  justify-content: center;
+  padding: 8px 0;
+  width: 44px;
+  height: 44px;
+  margin: 4px auto 0;
+}
+
+.app-sidebar.collapsed .sidebar-collapse-row-btn span {
+  display: none !important;
+}
+
 /* Topbar */
 .app-topbar {
   height: 64px;
@@ -319,8 +494,17 @@ body {
   background: #ffffff;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 22px;
+  padding: var(--card-padding);
   box-shadow: var(--shadow-sm);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .uda-card {
+    border-radius: var(--radius-md);
+  }
 }
 
 /* Status Chips & Badges */
@@ -389,6 +573,7 @@ body {
   z-index: 50;
   justify-content: space-around;
   align-items: center;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.04);
 }
 
 .mobile-nav-item {
@@ -424,6 +609,124 @@ body {
   cursor: pointer;
 }
 
+/* Content Body Responsif */
+.app-content-body,
+.admin-content-body {
+  flex: 1;
+  width: 100%;
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: var(--page-padding-y) var(--page-padding-x);
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* Table Responsive Wrapper */
+.table-responsive-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+}
+
+/* Kanban Board Responsif */
+.kanban-board-wrapper {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 24px;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.kanban-board-column {
+  min-width: 270px;
+  max-width: 320px;
+  flex: 1 0 auto;
+}
+
+@media (min-width: 1280px) {
+  .kanban-board-wrapper {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    overflow-x: visible;
+  }
+  .kanban-board-column {
+    min-width: 0;
+    max-width: none;
+  }
+}
+
+/* Calendar Responsif */
+.calendar-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 16px;
+  width: 100%;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .calendar-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.calendar-scroll-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.calendar-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .calendar-month-grid {
+    min-width: 520px;
+  }
+}
+
+/* Admin Mobile Navigation */
+.admin-mobile-nav {
+  display: none;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  padding: 8px 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+  gap: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-mobile-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.admin-mobile-nav-btn.active {
+  background: #16a34a25;
+  color: #4ade80;
+}
+
 /* Responsive Rules */
 @media (max-width: 768px) {
   .app-sidebar {
@@ -432,11 +735,21 @@ body {
   .mobile-bottom-nav {
     display: flex;
   }
+  .admin-mobile-nav {
+    display: flex;
+  }
   .app-topbar {
-    padding: 0 16px;
+    padding: 0 14px;
+    height: 58px;
+  }
+  .topbar-user-info {
+    display: none !important;
   }
   .app-content-body {
-    padding-bottom: 75px !important;
+    padding-bottom: 85px !important;
+  }
+  .admin-content-body {
+    padding-bottom: 60px !important;
   }
 }
 
@@ -886,49 +1199,11 @@ body {
 }
 
 
-/* Kalender UdaPlanner responsif */
-.calendar-layout {
-  grid-template-columns: minmax(0, 1fr) 260px;
-}
-
-@media (max-width: 900px) {
-  .calendar-layout {
-    grid-template-columns: minmax(0, 1fr) !important;
+@media (max-width: 640px) {
+  .landing-navbar {
+    padding: 10px 14px !important;
   }
-
-  .calendar-layout > .uda-card {
-    min-width: 0;
-    width: 100%;
-  }
-}
-
-
-/* Perbaikan tampilan kalender pada layar HP */
-@media (max-width: 600px) {
-  .calendar-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) !important;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    gap: 12px;
-  }
-
-  .calendar-layout > * {
-    min-width: 0;
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-
-  .calendar-layout .uda-card {
-    min-width: 0;
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-
-  .app-content-body {
-    min-width: 0;
-    max-width: 100%;
-    overflow-x: hidden;
+  .landing-hero {
+    padding: 36px 14px 28px !important;
   }
 }
