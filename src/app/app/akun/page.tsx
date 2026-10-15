@@ -226,7 +226,7 @@ export default function AkunPenggunaPage() {
   const initial = (fullName || user?.email || 'U').charAt(0).toUpperCase();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 640 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 840, width: '100%', margin: '0 auto' }}>
       {toastMessage && (
         <div
           style={{
@@ -396,25 +396,27 @@ export default function AkunPenggunaPage() {
           </div>
         </div>
 
-        {/* Input Nama & Email */}
-        <div>
-          <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>Nama Lengkap</label>
-          <input
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, marginTop: 4, outline: 'none' }}
-          />
-        </div>
+        {/* Input Nama & Email Responsive Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 16 }}>
+          <div>
+            <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>Nama Lengkap</label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: 8, marginTop: 5, outline: 'none', fontSize: '0.9rem' }}
+            />
+          </div>
 
-        <div>
-          <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>Email Akun Supabase (Permanen)</label>
-          <input
-            type="email"
-            disabled
-            value={user?.email || ''}
-            style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, marginTop: 4, background: '#f8fafc', color: '#64748b' }}
-          />
+          <div>
+            <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>Email Akun</label>
+            <input
+              type="email"
+              disabled
+              value={user?.email || ''}
+              style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, marginTop: 5, background: '#f8fafc', color: '#64748b', fontSize: '0.9rem' }}
+            />
+          </div>
         </div>
 
         <button
@@ -435,7 +437,7 @@ export default function AkunPenggunaPage() {
           Pilih berapa menit sebelum jam tayang aplikasi akan memunculkan alarm pengingat:
         </p>
 
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 110px), 1fr))', gap: 10 }}>
           {[5, 15, 30, 60].map((mins) => (
             <button
               key={mins}
@@ -444,8 +446,7 @@ export default function AkunPenggunaPage() {
                 showToast(`Waktu pengingat diset ke ${mins} menit sebelum posting`);
               }}
               style={{
-                flex: 1,
-                padding: '8px',
+                padding: '10px 8px',
                 borderRadius: 8,
                 border: `1px solid ${reminderMinutes === mins ? '#16a34a' : '#e2e8f0'}`,
                 background: reminderMinutes === mins ? '#f0fdf4' : '#ffffff',
@@ -453,6 +454,7 @@ export default function AkunPenggunaPage() {
                 fontWeight: 700,
                 fontSize: '0.85rem',
                 cursor: 'pointer',
+                textAlign: 'center',
               }}
             >
               {mins} Menit
@@ -461,10 +463,10 @@ export default function AkunPenggunaPage() {
         </div>
 
         <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>Notifikasi Peramban (Browser)</div>
-              <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+              <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
                 Status: {browserNotifEnabled ? 'Aktif (Diizinkan)' : 'Belum diizinkan'}
               </div>
             </div>
@@ -479,7 +481,7 @@ export default function AkunPenggunaPage() {
       {/* Panel Admin Shortcut (jika admin) */}
       {isAdmin && (
         <div className="uda-card" style={{ borderLeft: '4px solid #16a34a' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div>
               <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>Peran Administrator Aktif</div>
               <div style={{ fontSize: '0.82rem', color: '#64748b' }}>Anda memiliki hak istimewa untuk mengelola seluruh sistem.</div>
@@ -493,7 +495,11 @@ export default function AkunPenggunaPage() {
       )}
 
       {/* Logout Real */}
-      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+      <div className="uda-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14, borderLeft: '4px solid #ef4444' }}>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>Keluar dari Akun</div>
+          <div style={{ fontSize: '0.82rem', color: '#64748b' }}>Akhiri sesi login Anda saat ini dengan aman dari peramban ini.</div>
+        </div>
         <button
           className="btn-uda btn-uda-danger"
           style={{ display: 'flex', alignItems: 'center', gap: 8 }}

@@ -18,19 +18,26 @@ import {
   Loader2,
   X,
 } from 'lucide-react';
-import { DUMMY_BRANDS, DUMMY_PILLARS, DUMMY_MEMBERS } from '@/lib/dummy-data';
+import { DUMMY_BRANDS, DUMMY_PILLARS, DUMMY_MEMBERS, DummyBrand } from '@/lib/dummy-data';
 import { useAuth } from '@/contexts/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { uploadBrandLogo } from '@/lib/image-upload';
+import { BrandService } from '@/services/brand.service';
+import { ContentPillarService } from '@/services/content-pillar.service';
+import { useModal } from '@/contexts/modal-context';
 
 export default function PengaturanBrandDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { confirmDelete, showSuccess } = useModal();
   const supabase = createClient();
   const brandId = (params?.id as string) || 'brand-1';
 
-  const brand = DUMMY_BRANDS.find((b) => b.id === brandId) || DUMMY_BRANDS[0];
+  const [currentBrand, setCurrentBrand] = useState<DummyBrand>(
+    DUMMY_BRANDS.find((b) => b.id === brandId) || DUMMY_BRANDS[0]
+  );
+  const brand = currentBrand;
 
   const [activeTab, setActiveTab] = useState<'profil' | 'pilar' | 'anggota' | 'pengaturan'>('profil');
   const [pillars, setPillars] = useState(DUMMY_PILLARS.filter((p) => p.brand_id === brand.id));
@@ -45,6 +52,23 @@ export default function PengaturanBrandDetailPage() {
   const [brandAvatarUrl, setBrandAvatarUrl] = useState(brand.avatar_url);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    BrandService.getBrandById(brandId).then((b) => {
+      if (b) {
+        setCurrentBrand(b);
+        setBrandName(b.name);
+        setBrandHandle(b.handle);
+        setBrandColor(b.color);
+        setBrandAvatarUrl(b.avatar_url);
+        setRequireApproval(b.require_approval);
+      }
+    });
+
+    ContentPillarService.getPillars(brandId).then((pils) => {
+      if (pils) setPillars(pils);
+    });
+  }, [brandId]);
 
   // Invite Modal
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -68,16 +92,7 @@ export default function PengaturanBrandDetailPage() {
     try {
       const uploadedUrl = await uploadBrandLogo(supabase, file, brand.id);
       setBrandAvatarUrl(uploadedUrl);
-
-      if (supabase && user) {
-        await (supabase.from('brands' as any) as any)
-          .update({
-            logo_url: uploadedUrl,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', brand.id);
-      }
-
+      await BrandService.updateBrand(brand.id, { avatar_url: uploadedUrl });
       showToast('✅ Foto logo brand berhasil diunggah!');
     } catch (err: any) {
       showToast('❌ Gagal mengunggah foto: ' + (err.message || 'Coba lagi'));
@@ -292,17 +307,13 @@ export default function PengaturanBrandDetailPage() {
               className="btn-uda btn-uda-primary"
               style={{ width: 'fit-content', marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}
               onClick={async () => {
-                if (supabase && user) {
-                  await (supabase.from('brands' as any) as any)
-                    .update({
-                      name: brandName,
-                      slug: brandHandle,
-                      color: brandColor,
-                      logo_url: brandAvatarUrl,
-                      updated_at: new Date().toISOString(),
-                    })
-                    .eq('id', brand.id);
-                }
+                await BrandService.updateBrand(brand.id, {
+                  name: brandName,
+                  handle: brandHandle,
+                  color: brandColor,
+                  avatar_url: brandAvatarUrl,
+                  require_approval: requireApproval,
+                });
                 showToast('✅ Profil brand berhasil diperbarui!');
               }}
             >
@@ -322,14 +333,13 @@ export default function PengaturanBrandDetailPage() {
             </div>
             <button
               className="btn-uda btn-uda-primary btn-uda-sm"
-              onClick={() => {
-                const newP = {
-                  id: `pil-${Date.now()}`,
-                  brand_id: brand.id,
-                  name: 'Pilar Baru',
+              onClick={async () => {
+                const created = await ContentPillarService.createPillar({
+                  brandId: brand.id,
+                  name: `Pilar Baru ${pillars.length + 1}`,
                   color: '#6366F1',
-                };
-                setPillars([...pillars, newP]);
+                });
+                setPillars((prev) => [...prev, created]);
                 showToast('Pilar baru ditambahkan');
               }}
             >
@@ -357,7 +367,18 @@ export default function PengaturanBrandDetailPage() {
                 </div>
                 <button
                   className="btn-uda btn-uda-secondary btn-uda-sm"
-                  onClick={() => setPillars(pillars.filter((p) => p.id !== pil.id))}
+                  title="Hapus Pilar"
+                  onClick={() => {
+                    confirmDelete({
+                      title: 'Hapus Pilar Konten?',
+                      message: `Apakah Anda yakin ingin menghapus pilar "${pil.name}"?`,
+                      onConfirm: async () => {
+                        await ContentPillarService.deletePillar(pil.id);
+                        setPillars((prev) => prev.filter((p) => p.id !== pil.id));
+                        showSuccess('Pilar Dihapus', `Pilar "${pil.name}" telah dihapus.`);
+                      },
+                    });
+                  }}
                 >
                   <Trash2 size={13} />
                 </button>
@@ -463,8 +484,17 @@ export default function PengaturanBrandDetailPage() {
                 className="btn-uda btn-uda-danger btn-uda-sm"
                 disabled={deleteInputName !== brand.name}
                 onClick={() => {
-                  showToast('Brand berhasil dihapus.');
-                  router.push('/app/brand');
+                  confirmDelete({
+                    title: `Hapus Brand ${brand.name}?`,
+                    message: `Brand "${brand.name}" beserta seluruh postingan dan template yang terkait akan dihapus secara permanen.`,
+                    confirmText: 'Ya, Hapus Brand',
+                    onConfirm: async () => {
+                      await BrandService.deleteBrand(brand.id);
+                      showSuccess('Brand Berhasil Dihapus', `Brand "${brand.name}" telah dihapus dari sistem.`, () => {
+                        router.push('/app/brand');
+                      });
+                    },
+                  });
                 }}
               >
                 Hapus Brand

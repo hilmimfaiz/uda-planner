@@ -17,11 +17,18 @@ import {
   DummyPost,
 } from "@/lib/dummy-data";
 import { POST_STATUSES } from "@/lib/platforms";
+import { PostService } from "@/services/post.service";
 
 export default function PapanKanbanPage() {
   const router = useRouter();
   const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    PostService.getPosts().then((data) => {
+      if (data && data.length > 0) setPosts(data);
+    });
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -41,7 +48,7 @@ export default function PapanKanbanPage() {
   ];
 
   // Handle Drag & Drop Between Columns
-  const handleDropToColumn = (
+  const handleDropToColumn = async (
     targetStatus: "ide" | "draft" | "review" | "siap" | "terposting",
     postId: string,
   ) => {
@@ -62,21 +69,27 @@ export default function PapanKanbanPage() {
       return;
     }
 
+    const postedAt =
+      targetStatus === "terposting"
+        ? new Date().toISOString()
+        : post.posted_at;
+
     const updated = posts.map((p) => {
       if (p.id === postId) {
         return {
           ...p,
           status: targetStatus,
-          posted_at:
-            targetStatus === "terposting"
-              ? new Date().toISOString()
-              : p.posted_at,
+          posted_at: postedAt,
         };
       }
       return p;
     });
 
     setPosts(updated);
+    await PostService.updatePost(postId, {
+      status: targetStatus,
+      posted_at: postedAt,
+    });
     showToast(`Status dipindahkan ke: ${POST_STATUSES[targetStatus].label}`);
   };
 
@@ -120,24 +133,14 @@ export default function PapanKanbanPage() {
         </div>
       </div>
 
-      {/* 5 Kolom Kanban */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-          gap: 12,
-          width: "100%",
-          minWidth: 0,
-          boxSizing: "border-box",
-          overflowX: "auto",
-          paddingBottom: 20,
-        }}
-      >
+      {/* 5 Kolom Kanban Responsif */}
+      <div className="kanban-board-wrapper">
         {columns.map((col) => {
           const colPosts = posts.filter((p) => p.status === col.id);
           return (
             <div
               key={col.id}
+              className="kanban-board-column"
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Calendar as CalendarIcon,
@@ -21,23 +21,69 @@ import {
   DummyPost,
 } from "@/lib/dummy-data";
 import { POST_STATUSES, PLATFORMS } from "@/lib/platforms";
+import { useAuth } from "@/contexts/auth-context";
+import { PostService } from "@/services/post.service";
 
 export default function BerandaPage() {
   const router = useRouter();
+  const { user, profile } = useAuth();
   const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
 
-  // Tanggal Hari Ini format Indonesia
-  const today = new Date();
-  const options: Intl.DateTimeFormatOptions = {
+  // Ambil nama pengguna yang sedang login secara dinamis
+  const rawName =
+    profile?.full_name ||
+    user?.user_metadata?.full_name ||
+    (user?.email ? user.email.split('@')[0] : 'Pengguna');
+  const displayName = rawName.trim().split(' ')[0] || rawName;
+
+  // Real-time clock & Greeting sinkron jam berjalan
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  useEffect(() => {
+    PostService.getPosts().then((data) => {
+      if (data && data.length > 0) setPosts(data);
+    });
+    setCurrentTime(new Date());
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Ucapan salam sinkron jam (Pagi: 04:00-10:59, Siang: 11:00-14:59, Sore: 15:00-17:59, Malam: 18:00-03:59)
+  const currentHour = currentTime.getHours();
+  let greetingText = "Selamat Pagi";
+  if (currentHour >= 4 && currentHour < 11) {
+    greetingText = "Selamat Pagi";
+  } else if (currentHour >= 11 && currentHour < 15) {
+    greetingText = "Selamat Siang";
+  } else if (currentHour >= 15 && currentHour < 18) {
+    greetingText = "Selamat Sore";
+  } else {
+    greetingText = "Selamat Malam";
+  }
+
+  // Hari, Tanggal, Bulan, Tahun format Indonesia
+  const dateOptions: Intl.DateTimeFormatOptions = {
     weekday: "long",
-    year: "numeric",
-    month: "long",
     day: "numeric",
+    month: "long",
+    year: "numeric",
   };
-  const todayString = today.toLocaleDateString("id-ID", options);
+  const todayDateString = currentTime.toLocaleDateString("id-ID", dateOptions);
+
+  // Jam, Menit, Detik berjalan (format 24 jam)
+  const timeString = currentTime
+    .toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+    .replace(/\./g, ":");
 
   // Jadwal Hari Ini
-  const todayDateStr = today.toDateString();
+  const todayDateStr = currentTime.toDateString();
   const todayPosts = posts.filter(
     (p) =>
       p.scheduled_at &&
@@ -48,7 +94,7 @@ export default function BerandaPage() {
   const missedPosts = posts.filter(
     (p) =>
       p.scheduled_at &&
-      new Date(p.scheduled_at) < today &&
+      new Date(p.scheduled_at) < currentTime &&
       p.status !== "terposting",
   );
 
@@ -85,6 +131,7 @@ export default function BerandaPage() {
       >
         <div>
           <h1
+            suppressHydrationWarning
             style={{
               fontSize: "1.65rem",
               fontWeight: 800,
@@ -92,12 +139,42 @@ export default function BerandaPage() {
               letterSpacing: "-0.02em",
             }}
           >
-            Selamat Pagi, Rizki 👋
+            {greetingText}, {displayName}
           </h1>
-          <p style={{ color: "#64748b", fontSize: "0.9rem", marginTop: 3 }}>
-            Hari ini {todayString} (WIB) — Kelola rencana konten Anda dengan
-            tenang.
-          </p>
+          <div
+            suppressHydrationWarning
+            style={{
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 8,
+              marginTop: 6,
+              color: "#64748b",
+              fontSize: "0.9rem",
+            }}
+          >
+            <span>Hari ini {todayDateString}</span>
+            <span style={{ color: "#cbd5e1" }}>•</span>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                fontWeight: 600,
+                color: "#0284c7",
+                backgroundColor: "#e0f2fe",
+                padding: "2px 8px",
+                borderRadius: 6,
+                fontVariantNumeric: "tabular-nums",
+                fontSize: "0.85rem",
+              }}
+            >
+              <Clock size={13} />
+              {timeString} WIB
+            </span>
+            <span style={{ color: "#cbd5e1" }}>•</span>
+            <span>Kelola rencana konten Anda dengan tenang.</span>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <button
@@ -110,11 +187,11 @@ export default function BerandaPage() {
         </div>
       </div>
 
-      {/* Grid: Terlewat & Jadwal Hari Ini */}
+      {/* Grid: Terlewat & Jadwal Hari Ini Responsif */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
           gap: 20,
         }}
       >

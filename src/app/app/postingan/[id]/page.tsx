@@ -15,26 +15,82 @@ import {
   Trash2,
   FileCheck,
 } from 'lucide-react';
-import { DUMMY_POSTS, DUMMY_BRANDS, DUMMY_PILLARS, DUMMY_MEMBERS, DUMMY_SNIPPETS, DummyPost } from '@/lib/dummy-data';
+import { DUMMY_POSTS, DUMMY_BRANDS, DUMMY_PILLARS, DUMMY_MEMBERS, DUMMY_SNIPPETS, DummyPost, DummyBrand, DummySnippet } from '@/lib/dummy-data';
 import { PLATFORMS, CONTENT_TYPES, POST_STATUSES } from '@/lib/platforms';
+import { PostService } from '@/services/post.service';
+import { BrandService } from '@/services/brand.service';
+import { SnippetService } from '@/services/snippet.service';
+import { useAuth } from '@/contexts/auth-context';
+import { useModal } from '@/contexts/modal-context';
 
 export default function PostEditorDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const postId = params?.id as string;
+  const { user } = useAuth();
+  const { confirmDelete, showSuccess, showError } = useModal();
+  const rawId = params?.id as string;
+  const isNew = !rawId || rawId === 'baru';
 
-  const existing = DUMMY_POSTS.find((p) => p.id === postId) || DUMMY_POSTS[0];
+  const defaultNewPost: DummyPost = {
+    id: `post-${Date.now()}`,
+    brand_id: DUMMY_BRANDS[0]?.id || 'brand-1',
+    title: '',
+    caption: '',
+    hashtags: '',
+    platforms: ['instagram'],
+    content_type: 'feed',
+    status: 'draft',
+    scheduled_at: null,
+    pillar_id: null,
+    assignee_id: null,
+    notes: null,
+    posted_at: null,
+    posted_url: null,
+    media_url: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600',
+    aspect_ratio: '1:1',
+    comments_count: 0,
+  };
 
-  const [post, setPost] = useState<DummyPost>(existing);
+  const [post, setPost] = useState<DummyPost>(defaultNewPost);
+  const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
+  const [snippets, setSnippets] = useState<DummySnippet[]>(DUMMY_SNIPPETS);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [revisionNote, setRevisionNote] = useState('');
   const [showBankSnippetModal, setShowBankSnippetModal] = useState(false);
   const [showPostedUrlModal, setShowPostedUrlModal] = useState(false);
   const [postedUrlInput, setPostedUrlInput] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const brand = DUMMY_BRANDS.find((b) => b.id === post.brand_id) || DUMMY_BRANDS[0];
-  const statusMeta = POST_STATUSES[post.status];
+  React.useEffect(() => {
+    BrandService.getBrands(user?.id).then((bList) => {
+      if (bList && bList.length > 0) {
+        setBrands(bList);
+        if (isNew) {
+          setPost((prev) => ({ ...prev, brand_id: bList[0].id }));
+        }
+      }
+    });
+
+    SnippetService.getSnippets().then((sList) => {
+      if (sList && sList.length > 0) setSnippets(sList);
+    });
+
+    if (!isNew && rawId) {
+      PostService.getPostById(rawId).then((existingPost) => {
+        if (existingPost) setPost(existingPost);
+      });
+    }
+  }, [rawId, isNew, user?.id]);
+
+  const brand = brands.find((b) => b.id === post.brand_id) || brands[0] || DUMMY_BRANDS[0];
+  const statusMeta =
+    (post?.status && POST_STATUSES[post.status]) ||
+    POST_STATUSES.ide || {
+      label: 'Draft',
+      bg: '#f1f5f9',
+      text: '#475569',
+    };
 
   // Character limit validation
   const primaryPlatform = post.platforms[0] || 'instagram';
@@ -44,6 +100,53 @@ export default function PostEditorDetailPage() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleSavePost = async () => {
+    if (!post.title.trim()) {
+      showError('Judul Wajib Diisi', 'Silakan masukkan judul postingan sebelum menyimpannya ke database.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      if (isNew) {
+        const created = await PostService.createPost({
+          ...post,
+          user_id: user?.id,
+        });
+        showSuccess(
+          'Postingan Berhasil Dibuat!',
+          `Postingan "${created.title}" telah berhasil disimpan ke database.`,
+          () => {
+            router.push(`/app/postingan/${created.id}`);
+          }
+        );
+      } else {
+        await PostService.updatePost(post.id, post);
+        showSuccess(
+          'Perubahan Berhasil Disimpan!',
+          `Semua perubahan pada postingan "${post.title}" telah diperbarui di database.`
+        );
+      }
+    } catch (err: any) {
+      showError('Gagal Menyimpan Postingan', err.message || 'Terjadi kesalahan sistem, silakan coba lagi.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeletePost = () => {
+    confirmDelete({
+      title: 'Hapus Postingan Ini?',
+      message: `Apakah Anda yakin ingin menghapus "${post.title || 'postingan ini'}"? Postingan akan dihapus secara permanen dari sistem.`,
+      onConfirm: async () => {
+        await PostService.deletePost(post.id);
+        showSuccess('Postingan Berhasil Dihapus', 'Postingan telah dihapus dari sistem.', () => {
+          router.push('/app/daftar');
+        });
+      },
+    });
   };
 
   // 1-Click Copy Caption + Hashtag
@@ -132,14 +235,21 @@ END:VCALENDAR`;
           <span>Kembali</span>
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {!isNew && (
+            <button className="btn-uda btn-uda-danger btn-uda-sm" onClick={handleDeletePost} title="Hapus Postingan">
+              <Trash2 size={15} />
+              <span>Hapus</span>
+            </button>
+          )}
           <span className="status-pill" style={{ background: statusMeta.bg, color: statusMeta.text }}>
             Status: {statusMeta.label}
           </span>
           <button
             className="btn-uda btn-uda-primary btn-uda-sm"
-            onClick={() => showToast('✅ Perubahan postingan berhasil disimpan!')}
+            onClick={handleSavePost}
+            disabled={isSaving}
           >
-            Simpan Perubahan
+            {isSaving ? 'Menyimpan...' : isNew ? 'Buat Postingan' : 'Simpan Perubahan'}
           </button>
         </div>
       </div>
@@ -176,7 +286,7 @@ END:VCALENDAR`;
                 value={post.brand_id}
                 onChange={(e) => setPost({ ...post, brand_id: e.target.value })}
               >
-                {DUMMY_BRANDS.map((b) => (
+                {brands.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
@@ -520,7 +630,7 @@ END:VCALENDAR`;
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {DUMMY_SNIPPETS.map((snip) => (
+              {snippets.map((snip) => (
                 <div
                   key={snip.id}
                   style={{

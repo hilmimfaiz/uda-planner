@@ -3,11 +3,27 @@
 import React, { useState } from 'react';
 import { CheckCircle2, Copy, UploadCloud, CreditCard, ShieldCheck, Clock } from 'lucide-react';
 import { DUMMY_PLANS } from '@/lib/dummy-data';
+import { useAuth } from '@/contexts/auth-context';
+import { PaymentService } from '@/services/payment.service';
+import { AdminService, AppSettingsData } from '@/services/admin.service';
 
 export default function LanggananPage() {
+  const { user } = useAuth();
   const [selectedPlanCode, setSelectedPlanCode] = useState<'pro' | 'team'>('pro');
   const [isPendingPayment, setIsPendingPayment] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [settings, setSettings] = useState<AppSettingsData>({
+    bankName: 'BCA (Bank Central Asia)',
+    accountNumber: '8839210928',
+    accountName: 'PT UdaCoding Digital Indonesia',
+    adminWhatsapp: '6281234567890',
+  });
+
+  React.useEffect(() => {
+    AdminService.getAppSettings().then((s) => {
+      if (s) setSettings(s);
+    });
+  }, []);
 
   // Form State
   const [senderName, setSenderName] = useState('');
@@ -27,8 +43,15 @@ export default function LanggananPage() {
     showToast(`📋 ${label} berhasil disalin!`);
   };
 
-  const handleSubmitProof = (e: React.FormEvent) => {
+  const handleSubmitProof = async (e: React.FormEvent) => {
     e.preventDefault();
+    await PaymentService.submitPayment({
+      userId: user?.id,
+      planCode: selectedPlanCode,
+      amount: exactAmount,
+      senderName,
+      senderBank,
+    });
     setIsPendingPayment(true);
     showToast('✅ Bukti pembayaran berhasil diunggah! Sedang menunggu verifikasi admin.');
   };
@@ -81,8 +104,8 @@ export default function LanggananPage() {
         </div>
       </div>
 
-      {/* 3 Kartu Paket Sesuai PRD */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+      {/* 3 Kartu Paket Sesuai PRD Responsif */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 20 }}>
         {DUMMY_PLANS.map((plan) => {
           const isSelected = selectedPlanCode === plan.code;
           return (
@@ -196,17 +219,17 @@ export default function LanggananPage() {
               </div>
 
               <div style={{ fontSize: '0.82rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div>Bank Tujuan: <strong>Bank Central Asia (BCA)</strong></div>
+                <div>Bank Tujuan: <strong>{settings.bankName}</strong></div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>No. Rekening: <strong>8720192837</strong></span>
+                  <span>No. Rekening: <strong>{settings.accountNumber}</strong></span>
                   <button
                     className="btn-uda btn-uda-secondary btn-uda-sm"
-                    onClick={() => handleCopy('8720192837', 'Nomor Rekening BCA')}
+                    onClick={() => handleCopy(settings.accountNumber, `Nomor Rekening ${settings.bankName}`)}
                   >
                     Salin
                   </button>
                 </div>
-                <div>Atas Nama: <strong>PT UdaCoding Digital Indonesia</strong></div>
+                <div>Atas Nama: <strong>{settings.accountName}</strong></div>
               </div>
             </div>
 

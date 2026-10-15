@@ -21,14 +21,23 @@ import { DUMMY_BRANDS, DummyBrand } from '@/lib/dummy-data';
 import { useAuth } from '@/contexts/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { uploadBrandLogo } from '@/lib/image-upload';
+import { BrandService } from '@/services/brand.service';
+import { useModal } from '@/contexts/modal-context';
 
 export default function DaftarBrandPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { showSuccess, showError } = useModal();
   const supabase = createClient();
   const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
   const [showAddBrandModal, setShowAddBrandModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    BrandService.getBrands(user?.id).then((data) => {
+      if (data && data.length > 0) setBrands(data);
+    });
+  }, [user?.id]);
 
   // New Brand Form State
   const [newName, setNewName] = useState('');
@@ -64,20 +73,12 @@ export default function DaftarBrandPage() {
     try {
       const uploadedUrl = await uploadBrandLogo(supabase, file, targetBrandId);
 
-      // Update state brands
+      // Update state brands dan database
       setBrands((prev) =>
         prev.map((b) => (b.id === targetBrandId ? { ...b, avatar_url: uploadedUrl } : b))
       );
 
-      // Jika terhubung ke Supabase, update database
-      if (supabase && user) {
-        await (supabase.from('brands' as any) as any)
-          .update({
-            logo_url: uploadedUrl,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', targetBrandId);
-      }
+      await BrandService.updateBrand(targetBrandId, { avatar_url: uploadedUrl });
 
       showToast('✅ Foto logo brand berhasil diperbarui!');
     } catch (err: any) {
@@ -170,8 +171,8 @@ export default function DaftarBrandPage() {
         </button>
       </div>
 
-      {/* Grid Kartu Brand */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+      {/* Grid Kartu Brand Responsif */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 290px), 1fr))', gap: 20 }}>
         {brands.map((b) => {
           const isUpdatingThis = updatingBrandId === b.id;
 
@@ -327,26 +328,28 @@ export default function DaftarBrandPage() {
             </div>
 
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                const newBrandItem: DummyBrand = {
-                  id: `brand-${Date.now()}`,
-                  owner_id: user?.id || 'user-1',
-                  name: newName,
-                  handle: newHandle.replace('@', ''),
-                  platforms: ['instagram'],
-                  color: newColor,
-                  avatar_url: newAvatarUrl,
-                  require_approval: false,
-                  is_archived: false,
-                  post_count_this_month: 0,
-                };
-                setBrands([...brands, newBrandItem]);
-                setShowAddBrandModal(false);
-                setNewName('');
-                setNewHandle('');
-                setNewAvatarUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150');
-                showToast('✅ Brand baru berhasil ditambahkan!');
+                try {
+                  const created = await BrandService.createBrand({
+                    ownerId: user?.id,
+                    name: newName,
+                    handle: newHandle.replace('@', ''),
+                    color: newColor,
+                    avatarUrl: newAvatarUrl,
+                  });
+                  setBrands((prev) => [created, ...prev.filter((b) => b.id !== created.id)]);
+                  setShowAddBrandModal(false);
+                  setNewName('');
+                  setNewHandle('');
+                  setNewAvatarUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150');
+                  showSuccess(
+                    'Brand Berhasil Dibuat!',
+                    `Brand "${created.name}" (@${created.handle}) telah berhasil disimpan ke database dan siap digunakan.`
+                  );
+                } catch (err: any) {
+                  showError('Gagal Membuat Brand', err.message || 'Silakan periksa kembali data input.');
+                }
               }}
               style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
             >

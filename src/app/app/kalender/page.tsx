@@ -18,8 +18,11 @@ import {
   DUMMY_BRANDS,
   DUMMY_PILLARS,
   DummyPost,
+  DummyBrand,
 } from "@/lib/dummy-data";
 import { POST_STATUSES } from "@/lib/platforms";
+import { PostService } from "@/services/post.service";
+import { BrandService } from "@/services/brand.service";
 
 export default function KalenderPage() {
   const router = useRouter();
@@ -29,6 +32,7 @@ export default function KalenderPage() {
     "bulan",
   );
   const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
+  const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
   const [filterBrand, setFilterBrand] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -36,6 +40,15 @@ export default function KalenderPage() {
     id: string;
     oldDate: string | null;
   } | null>(null);
+
+  React.useEffect(() => {
+    PostService.getPosts().then((data) => {
+      if (data && data.length > 0) setPosts(data);
+    });
+    BrandService.getBrands().then((data) => {
+      if (data && data.length > 0) setBrands(data);
+    });
+  }, []);
 
   // Filtered posts
   const filteredPosts = posts.filter((p) => {
@@ -80,7 +93,7 @@ export default function KalenderPage() {
   }
 
   // Handle Drag & Drop / Move Schedule
-  const handleDropToDate = (targetDate: Date, postId: string) => {
+  const handleDropToDate = async (targetDate: Date, postId: string) => {
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
 
@@ -95,6 +108,8 @@ export default function KalenderPage() {
           : p,
       ),
     );
+
+    await PostService.updatePost(postId, { scheduled_at: newScheduled.toISOString() });
 
     setUndoPostState({ id: postId, oldDate });
     const formatted = newScheduled.toLocaleDateString("id-ID", {
@@ -111,7 +126,7 @@ export default function KalenderPage() {
   };
 
   // Undo Action
-  const handleUndo = () => {
+  const handleUndo = async () => {
     if (!undoPostState) return;
     setPosts(
       posts.map((p) =>
@@ -120,6 +135,7 @@ export default function KalenderPage() {
           : p,
       ),
     );
+    await PostService.updatePost(undoPostState.id, { scheduled_at: undoPostState.oldDate });
     setToastMessage("Perubahan jadwal berhasil diurungkan.");
     setUndoPostState(null);
   };
@@ -289,7 +305,7 @@ export default function KalenderPage() {
             onChange={(e) => setFilterBrand(e.target.value)}
           >
             <option value="all">Semua Brand</option>
-            {DUMMY_BRANDS.map((b) => (
+            {brands.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
               </option>
@@ -311,20 +327,8 @@ export default function KalenderPage() {
         </div>
       </div>
 
-      {/* Layout Kalender + Kolom "Belum Dijadwalkan" */}
-
-      <div
-        className="calendar-layout"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(220px, 260px)",
-          gap: 16,
-          width: "100%",
-          maxWidth: "100%",
-          minWidth: 0,
-          alignItems: "start",
-        }}
-      >
+      {/* Layout Kalender + Kolom "Belum Dijadwalkan" Responsif */}
+      <div className="calendar-layout">
         {/* Main Grid Kalender */}
         <div
           className="uda-card"
@@ -414,12 +418,10 @@ export default function KalenderPage() {
             </div>
           ) : (
             /* Mode Bulan Grid 7 Kolom */
-            <div>
+            <div className="calendar-scroll-container">
               <div
+                className="calendar-month-grid"
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(7,  minmax(0, 1fr))",
-                  gap: 6,
                   marginBottom: 8,
                   textAlign: "center",
                 }}
@@ -439,13 +441,7 @@ export default function KalenderPage() {
                 ))}
               </div>
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(7,  minmax(0, 1fr))",
-                  gap: 6,
-                }}
-              >
+              <div className="calendar-month-grid">
                 {calendarDays.map((cell, idx) => {
                   const cellDateStr = cell.date.toDateString();
                   const isToday = cellDateStr === new Date().toDateString();

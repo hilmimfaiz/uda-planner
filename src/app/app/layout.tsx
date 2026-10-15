@@ -16,6 +16,8 @@ import {
   Bell,
   Plus,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Check,
   LogOut,
   Loader2,
@@ -34,13 +36,39 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState(DUMMY_NOTIFICATIONS);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Client-side guard: jika loading selesai dan user belum terdaftar / login, arahkan ke /masuk
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push(`/masuk?redirect=${encodeURIComponent(pathname)}`);
+    try {
+      const saved = localStorage.getItem('uda_sidebar_collapsed');
+      if (saved === 'true') {
+        setIsCollapsed(true);
+      }
+    } catch (e) {
+      // ignore
     }
-  }, [isLoading, user, pathname, router]);
+  }, []);
+
+  const toggleSidebar = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('uda_sidebar_collapsed', String(next));
+      } catch (e) {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!isLoading && !user && !profile) {
+      const hasCookie = typeof document !== 'undefined' && document.cookie.includes('auth-token');
+      if (!hasCookie) {
+        router.push(`/masuk?redirect=${encodeURIComponent(pathname)}`);
+      }
+    }
+  }, [isLoading, user, profile, pathname, router]);
 
   const selectedBrand =
     selectedBrandId === 'all'
@@ -63,36 +91,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { name: 'Brand', href: '/app/brand', icon: Building },
   ];
 
-  // Tampilkan splash loader saat memeriksa status sesi
-  if (isLoading) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', gap: 12 }}>
-        <div className="logo-symbol" style={{ width: 48, height: 48, fontSize: '1.4rem' }}>U</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: '0.9rem', fontWeight: 600 }}>
-          <Loader2 size={18} className="animate-spin" style={{ color: '#16a34a' }} />
-          <span>Memuat sesi UdaPlanner...</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Jika tidak ada user dan loading sudah selesai (sedang diarahkan ke /masuk)
-  if (!user) {
-    return null;
-  }
-
-  const displayName = profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pengguna';
+  const displayName = profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Pengguna UdaPlanner';
   const initial = displayName.charAt(0).toUpperCase();
 
   return (
     <div className="app-layout">
       {/* Sidebar Desktop */}
-      <aside className="app-sidebar">
+      <aside className={`app-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-brand-header">
-          <div className="logo-symbol">U</div>
-          <div>
-            <div className="logo-text-title">UdaPlanner</div>
-            <div className="logo-text-sub">Perencana Konten Sosmed</div>
+          <div className="sidebar-brand-info">
+            <div className="logo-symbol" title="UdaPlanner">U</div>
+            <div className="sidebar-brand-text">
+              <div className="logo-text-title">UdaPlanner</div>
+              <div className="logo-text-sub">Perencana Konten Sosmed</div>
+            </div>
           </div>
         </div>
 
@@ -108,6 +120,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 className={`nav-item-btn ${isActive ? 'active' : ''}`}
                 onClick={() => router.push(item.href)}
+                title={item.name}
               >
                 <Icon size={18} />
                 <span>{item.name}</span>
@@ -120,6 +133,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <button
             className={`nav-item-btn ${pathname === '/app/langganan' ? 'active' : ''}`}
             onClick={() => router.push('/app/langganan')}
+            title={`Langganan (${account?.plan_code?.toUpperCase() || 'FREE'})`}
           >
             <CreditCard size={17} />
             <span>Langganan</span>
@@ -131,6 +145,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <button
             className={`nav-item-btn ${pathname === '/app/akun' ? 'active' : ''}`}
             onClick={() => router.push('/app/akun')}
+            title="Akun & Profil"
           >
             <User size={17} />
             <span>Akun & Profil</span>
@@ -142,6 +157,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               className={`nav-item-btn ${pathname.startsWith('/admin') ? 'active' : ''}`}
               onClick={() => router.push('/admin')}
               style={{ color: '#0f172a' }}
+              title="Panel Admin"
             >
               <Shield size={17} style={{ color: '#16a34a' }} />
               <span>Panel Admin</span>
@@ -157,6 +173,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <LogOut size={17} />
             <span>Keluar</span>
+          </button>
+
+          {/* Tombol Expand/Collapse Baris Bawah */}
+          <button
+            className="sidebar-collapse-row-btn"
+            onClick={toggleSidebar}
+            title={isCollapsed ? "Perluas Sidebar" : "Perkecil Sidebar"}
+          >
+            {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            <span>{isCollapsed ? "" : "Perkecil Menu"}</span>
           </button>
         </div>
       </aside>
@@ -371,15 +397,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   {displayName}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                  {user.email}
+                  {user?.email || profile?.email || ''}
                 </div>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Content Body */}
-        <main className="app-content-body" style={{ flex: 1, padding: 28, maxWidth: 1300, width: '100%', margin: '0 auto' }}>
+        {/* Content Body Responsif */}
+        <main className="app-content-body">
           {children}
         </main>
       </div>

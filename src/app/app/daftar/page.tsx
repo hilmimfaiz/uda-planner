@@ -9,18 +9,33 @@ import {
   Filter,
   ArrowUpDown,
   Plus,
+  Trash2,
 } from 'lucide-react';
-import { DUMMY_POSTS, DUMMY_BRANDS, DUMMY_PILLARS, DUMMY_MEMBERS, DummyPost } from '@/lib/dummy-data';
+import { DUMMY_POSTS, DUMMY_BRANDS, DUMMY_PILLARS, DUMMY_MEMBERS, DummyPost, DummyBrand } from '@/lib/dummy-data';
 import { POST_STATUSES } from '@/lib/platforms';
+import { PostService } from '@/services/post.service';
+import { BrandService } from '@/services/brand.service';
+import { useModal } from '@/contexts/modal-context';
 
 export default function DaftarPostinganPage() {
   const router = useRouter();
+  const { confirmDelete, showSuccess } = useModal();
   const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
+  const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPlatform, setFilterPlatform] = useState('all');
   const [sortOrder, setSortOrder] = useState<'terbaru' | 'terlama'>('terbaru');
+
+  React.useEffect(() => {
+    PostService.getPosts().then((data) => {
+      if (data && data.length > 0) setPosts(data);
+    });
+    BrandService.getBrands().then((data) => {
+      if (data && data.length > 0) setBrands(data);
+    });
+  }, []);
 
   // Filter & Search Logic
   const filtered = posts.filter((p) => {
@@ -114,7 +129,7 @@ export default function DaftarPostinganPage() {
           onChange={(e) => setFilterBrand(e.target.value)}
         >
           <option value="all">Semua Brand</option>
-          {DUMMY_BRANDS.map((b) => (
+          {brands.map((b) => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>
@@ -213,15 +228,35 @@ export default function DaftarPostinganPage() {
                       </span>
                     </td>
                     <td style={{ padding: '14px 18px', textAlign: 'right' }}>
-                      <button
-                        className="btn-uda btn-uda-secondary btn-uda-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/app/postingan/${post.id}`);
-                        }}
-                      >
-                        Detail
-                      </button>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                        <button
+                          className="btn-uda btn-uda-secondary btn-uda-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/app/postingan/${post.id}`);
+                          }}
+                        >
+                          Detail
+                        </button>
+                        <button
+                          className="btn-uda btn-uda-secondary btn-uda-sm"
+                          title="Hapus Postingan"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            confirmDelete({
+                              title: 'Hapus Postingan Ini?',
+                              message: `Apakah Anda yakin ingin menghapus "${post.title}"?`,
+                              onConfirm: async () => {
+                                await PostService.deletePost(post.id);
+                                setPosts((prev) => prev.filter((p) => p.id !== post.id));
+                                showSuccess('Postingan Berhasil Dihapus', `Postingan "${post.title}" telah dihapus.`);
+                              },
+                            });
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

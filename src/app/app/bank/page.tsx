@@ -2,10 +2,17 @@
 
 import React, { useState } from 'react';
 import { Copy, Plus, Trash2, Edit3, Sparkles } from 'lucide-react';
-import { DUMMY_SNIPPETS, DUMMY_BRANDS, DummySnippet } from '@/lib/dummy-data';
+import { DUMMY_SNIPPETS, DUMMY_BRANDS, DummySnippet, DummyBrand } from '@/lib/dummy-data';
+import { SnippetService } from '@/services/snippet.service';
+import { BrandService } from '@/services/brand.service';
+import { useAuth } from '@/contexts/auth-context';
+import { useModal } from '@/contexts/modal-context';
 
 export default function BankKontenPage() {
+  const { user } = useAuth();
+  const { confirmDelete, showSuccess } = useModal();
   const [snippets, setSnippets] = useState<DummySnippet[]>(DUMMY_SNIPPETS);
+  const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
   const [activeTab, setActiveTab] = useState<'caption' | 'hashtag'>('caption');
   const [filterBrand, setFilterBrand] = useState('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -15,6 +22,19 @@ export default function BankKontenPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newBody, setNewBody] = useState('');
   const [newBrand, setNewBrand] = useState('brand-1');
+
+  React.useEffect(() => {
+    SnippetService.getSnippets().then((data) => {
+      if (data && data.length > 0) setSnippets(data);
+    });
+
+    BrandService.getBrands(user?.id).then((bList) => {
+      if (bList && bList.length > 0) {
+        setBrands(bList);
+        setNewBrand(bList[0].id);
+      }
+    });
+  }, [user?.id]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -32,20 +52,23 @@ export default function BankKontenPage() {
     showToast(`📋 ${title} berhasil disalin ke clipboard!`);
   };
 
-  const handleAddSnippet = (e: React.FormEvent) => {
+  const handleAddSnippet = async (e: React.FormEvent) => {
     e.preventDefault();
-    const item: DummySnippet = {
-      id: `snip-${Date.now()}`,
-      brand_id: newBrand,
+    const created = await SnippetService.createSnippet({
+      brandId: newBrand,
       type: activeTab,
       title: newTitle,
       body: newBody,
-    };
-    setSnippets([item, ...snippets]);
+      userId: user?.id,
+    });
+    setSnippets((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
     setShowAddModal(false);
     setNewTitle('');
     setNewBody('');
-    showToast(`✅ ${activeTab === 'caption' ? 'Caption' : 'Hashtag'} baru berhasil disimpan!`);
+    showSuccess(
+      `Berhasil Menambahkan ${activeTab === 'caption' ? 'Caption' : 'Hashtag'}!`,
+      `Template "${created.title}" telah tersimpan ke database Bank Konten dan siap digunakan.`
+    );
   };
 
   return (
@@ -132,7 +155,7 @@ export default function BankKontenPage() {
             onChange={(e) => setFilterBrand(e.target.value)}
           >
             <option value="all">Semua Brand</option>
-            {DUMMY_BRANDS.map((b) => (
+            {brands.map((b) => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
           </select>
@@ -142,7 +165,7 @@ export default function BankKontenPage() {
       {/* Grid Kartu Template */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18 }}>
         {filtered.map((item) => {
-          const brand = DUMMY_BRANDS.find((b) => b.id === item.brand_id);
+          const brand = brands.find((b) => b.id === item.brand_id) || DUMMY_BRANDS.find((b) => b.id === item.brand_id);
           return (
             <div
               key={item.id}
@@ -195,9 +218,17 @@ export default function BankKontenPage() {
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button
                     className="btn-uda btn-uda-secondary btn-uda-sm"
+                    title="Hapus Template"
                     onClick={() => {
-                      setSnippets(snippets.filter((s) => s.id !== item.id));
-                      showToast('Item berhasil dihapus');
+                      confirmDelete({
+                        title: 'Hapus Template Konten?',
+                        message: `Apakah Anda yakin ingin menghapus template "${item.title}"? Template ini akan dihapus permanen.`,
+                        onConfirm: async () => {
+                          await SnippetService.deleteSnippet(item.id);
+                          setSnippets((prev) => prev.filter((s) => s.id !== item.id));
+                          showSuccess('Template Berhasil Dihapus', `Template "${item.title}" telah dihapus.`);
+                        },
+                      });
                     }}
                   >
                     <Trash2 size={13} />
@@ -236,7 +267,7 @@ export default function BankKontenPage() {
                   value={newBrand}
                   onChange={(e) => setNewBrand(e.target.value)}
                 >
-                  {DUMMY_BRANDS.map((b) => (
+                  {brands.map((b) => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
