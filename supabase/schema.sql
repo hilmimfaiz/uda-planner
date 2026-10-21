@@ -244,8 +244,55 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
+-- ------------------------------------------------------------------------------
+-- 15. plan_durations — variasi durasi paket berlangganan
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.plan_durations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_code TEXT NOT NULL REFERENCES public.plans(code) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  duration_days INTEGER NOT NULL,
+  price INTEGER NOT NULL,
+  discount_percent INTEGER DEFAULT 0 NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE NOT NULL,
+  sort_order INTEGER DEFAULT 0 NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+-- ------------------------------------------------------------------------------
+-- 16. bank_accounts — rekening bank transfer dinamis
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.bank_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  bank_name TEXT NOT NULL,
+  bank_code TEXT NOT NULL,
+  account_number TEXT NOT NULL,
+  account_name TEXT NOT NULL,
+  logo_url TEXT,
+  is_active BOOLEAN DEFAULT TRUE NOT NULL,
+  sort_order INTEGER DEFAULT 0 NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+-- ------------------------------------------------------------------------------
+-- 17. verification_logs — audit riwayat verifikasi akun/email oleh admin
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.verification_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  admin_id UUID,
+  verification_type TEXT NOT NULL,
+  previous_status TEXT,
+  new_status TEXT NOT NULL,
+  note TEXT,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
 -- ==============================================================================
--- 2. SEED AWAL (PLANS & APP_SETTINGS)
+-- 2. SEED AWAL (PLANS, DURATIONS, BANK_ACCOUNTS, APP_SETTINGS)
 -- ==============================================================================
 INSERT INTO public.plans (code, name, price, duration_days, max_brands, max_members, max_scheduled_per_month, storage_mb, max_file_mb, max_snippets, allow_video, allow_grid, allow_export, allow_approval, allow_comments, sort_order)
 VALUES
@@ -266,6 +313,27 @@ ON CONFLICT (code) DO UPDATE SET
   allow_export = EXCLUDED.allow_export,
   allow_approval = EXCLUDED.allow_approval,
   allow_comments = EXCLUDED.allow_comments;
+
+INSERT INTO public.plan_durations (plan_code, name, duration_days, price, discount_percent, is_active, sort_order)
+VALUES
+  ('free', 'Selamanya', 0, 0, 0, true, 1),
+  ('pro', '1 Bulan', 30, 49000, 0, true, 1),
+  ('pro', '3 Bulan', 90, 139000, 5, true, 2),
+  ('pro', '6 Bulan', 180, 259000, 12, true, 3),
+  ('pro', '12 Bulan', 365, 479000, 18, true, 4),
+  ('team', '1 Bulan', 30, 149000, 0, true, 1),
+  ('team', '3 Bulan', 90, 419000, 6, true, 2),
+  ('team', '6 Bulan', 180, 789000, 12, true, 3),
+  ('team', '12 Bulan', 365, 1429000, 20, true, 4)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.bank_accounts (bank_name, bank_code, account_number, account_name, logo_url, is_active, sort_order)
+VALUES
+  ('BCA (Bank Central Asia)', 'bca', '8839210928', 'PT UdaCoding Digital Indonesia', 'https://upload.wikimedia.org/wikipedia/commons/5/5c/Bank_Central_Asia.svg', true, 1),
+  ('Bank Mandiri', 'mandiri', '1280019283192', 'PT UdaCoding Digital Indonesia', 'https://upload.wikimedia.org/wikipedia/commons/a/ad/Bank_Mandiri_logo_2016.svg', true, 2),
+  ('Bank BNI', 'bni', '0928192837', 'PT UdaCoding Digital Indonesia', 'https://upload.wikimedia.org/wikipedia/id/5/55/BNI_logo.svg', true, 3),
+  ('Bank Syariah Indonesia (BSI)', 'bsi', '7182938491', 'PT UdaCoding Digital Indonesia', 'https://upload.wikimedia.org/wikipedia/commons/a/a0/Bank_Syariah_Indonesia.svg', true, 4)
+ON CONFLICT DO NOTHING;
 
 INSERT INTO public.app_settings (id, bank_name, bank_account_number, bank_account_name, admin_whatsapp)
 VALUES (1, 'BCA', '8720192837', 'PT UdaCoding Digital Indonesia', '6281234567890')

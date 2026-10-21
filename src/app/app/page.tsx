@@ -1,48 +1,67 @@
-"use client";
+'use client';
 
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Calendar as CalendarIcon,
   Clock,
   AlertCircle,
   CheckCircle2,
   ChevronRight,
-  ExternalLink,
+  ChevronLeft,
   Plus,
   Copy,
   Instagram,
-  ShieldAlert,
-} from "lucide-react";
-import {
-  DUMMY_POSTS,
-  DUMMY_BRANDS,
-  DUMMY_PILLARS,
-  DummyPost,
-} from "@/lib/dummy-data";
-import { POST_STATUSES, PLATFORMS } from "@/lib/platforms";
-import { useAuth } from "@/contexts/auth-context";
-import { PostService } from "@/services/post.service";
+  Sparkles,
+  Layers,
+  ArrowRight,
+  Loader2,
+  Check,
+  CalendarDays,
+  Filter,
+} from 'lucide-react';
+import { PostService } from '@/services/post.service';
+import { BrandService } from '@/services/brand.service';
+import { DummyPost, DummyBrand } from '@/lib/dummy-data';
+import { useAuth } from '@/contexts/auth-context';
+import { GuidedTour, TourStep } from '@/components/guided-tour';
 
 export default function BerandaPage() {
   const router = useRouter();
   const { user, profile } = useAuth();
-  const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
 
-  // Ambil nama pengguna yang sedang login secara dinamis
+  // State Jadwal & Tanggal
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [posts, setPosts] = useState<DummyPost[]>([]);
+  const [brands, setBrands] = useState<DummyBrand[]>([]);
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState<string>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  // Greeting & Nama User
   const rawName =
     profile?.full_name ||
     user?.user_metadata?.full_name ||
-    (user?.email ? user.email.split('@')[0] : 'Pengguna');
+    (user?.email ? user.email.split('@')[0] : 'Kreator');
   const displayName = rawName.trim().split(' ')[0] || rawName;
 
-  // Real-time clock & Greeting sinkron jam berjalan
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  const [localAvatar, setLocalAvatar] = useState<string | null>(null);
 
   useEffect(() => {
-    PostService.getPosts().then((data) => {
-      if (data && data.length > 0) setPosts(data);
-    });
+    if (user) {
+      try {
+        const stored = localStorage.getItem('uda_custom_avatar_' + user.id);
+        if (stored) setLocalAvatar(stored);
+      } catch (e) {}
+    }
+  }, [user]);
+
+  const currentAvatarUrl = profile?.avatar_url || localAvatar;
+
+  // Real-time clock sinkron
+  useEffect(() => {
     setCurrentTime(new Date());
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -50,379 +69,627 @@ export default function BerandaPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Ucapan salam sinkron jam (Pagi: 04:00-10:59, Siang: 11:00-14:59, Sore: 15:00-17:59, Malam: 18:00-03:59)
+  // Memuat data brand & jadwal hari ini
+  const loadPostsForDate = async (targetDate: Date, brandId: string = 'all') => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const filters = brandId !== 'all' ? { brandId } : {};
+      const data = await PostService.getPostsForDate(targetDate, filters);
+      setPosts(data || []);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Gagal memuat jadwal dari server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    BrandService.getBrands(user?.id).then((bList) => {
+      if (bList && bList.length > 0) setBrands(bList);
+    });
+    loadPostsForDate(selectedDate, selectedBrandFilter);
+  }, [user?.id, selectedBrandFilter]);
+
+  const handleDateChange = (newDate: Date) => {
+    setSelectedDate(newDate);
+    loadPostsForDate(newDate, selectedBrandFilter);
+  };
+
+  // Helper salam waktu
   const currentHour = currentTime.getHours();
-  let greetingText = "Selamat Pagi";
+  let greetingText = 'Selamat Pagi';
   if (currentHour >= 4 && currentHour < 11) {
-    greetingText = "Selamat Pagi";
+    greetingText = 'Selamat Pagi';
   } else if (currentHour >= 11 && currentHour < 15) {
-    greetingText = "Selamat Siang";
+    greetingText = 'Selamat Siang';
   } else if (currentHour >= 15 && currentHour < 18) {
-    greetingText = "Selamat Sore";
+    greetingText = 'Selamat Sore';
   } else {
-    greetingText = "Selamat Malam";
+    greetingText = 'Selamat Malam';
   }
 
-  // Hari, Tanggal, Bulan, Tahun format Indonesia
-  const dateOptions: Intl.DateTimeFormatOptions = {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  };
-  const todayDateString = currentTime.toLocaleDateString("id-ID", dateOptions);
+  // Format tanggal Indonesia
+  const isToday = selectedDate.toDateString() === new Date().toDateString();
+  const isYesterday =
+    selectedDate.toDateString() === new Date(Date.now() - 86400000).toDateString();
+  const isTomorrow =
+    selectedDate.toDateString() === new Date(Date.now() + 86400000).toDateString();
 
-  // Jam, Menit, Detik berjalan (format 24 jam)
+  const formattedDateTitle = selectedDate.toLocaleDateString('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
   const timeString = currentTime
-    .toLocaleTimeString("id-ID", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
+    .toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
       hour12: false,
     })
-    .replace(/\./g, ":");
+    .replace(/\./g, ':');
 
-  // Jadwal Hari Ini
-  const todayDateStr = currentTime.toDateString();
-  const todayPosts = posts.filter(
-    (p) =>
-      p.scheduled_at &&
-      new Date(p.scheduled_at).toDateString() === todayDateStr,
-  );
-
-  // Postingan Terlewat (Jadwal sudah lewat tapi status bukan 'terposting')
-  const missedPosts = posts.filter(
-    (p) =>
-      p.scheduled_at &&
-      new Date(p.scheduled_at) < currentTime &&
-      p.status !== "terposting",
-  );
-
-  // Menunggu Review
-  const reviewPosts = posts.filter((p) => p.status === "review");
-
-  // Ringkasan Postingan per Status
-  const statusCounts = {
-    ide: posts.filter((p) => p.status === "ide").length,
-    draft: posts.filter((p) => p.status === "draft").length,
-    review: posts.filter((p) => p.status === "review").length,
-    siap: posts.filter((p) => p.status === "siap").length,
-    terposting: posts.filter((p) => p.status === "terposting").length,
+  const handleCopyCaption = (post: DummyPost) => {
+    const textToCopy = `${post.caption}\n\n${post.hashtags}`;
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedId(post.id);
+    setTimeout(() => setCopiedId(null), 2500);
   };
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {/* Sapaan & Tanggal Hari Ini */}
+  // Langkah-Langkah Panduan Interaktif Dashboard (Guided Tour)
+  const dashboardTourSteps: TourStep[] = [
+    {
+      targetId: 'tour-welcome',
+      title: 'Selamat Datang di UdaPlanner!',
+      description:
+        'Platform perencana konten media sosial terintegrasi. Mari kenali fitur-fitur utama dashboard Anda dalam beberapa langkah singkat.',
+      placement: 'bottom',
+    },
+    {
+      targetId: 'tour-nav',
+      title: 'Pilihan Brand & Navigasi',
+      description:
+        'Filter jadwal berdasarkan akun brand tertentu atau kelola semua brand bisnis Anda dalam satu ruang kerja terpadu.',
+      placement: 'bottom',
+      actionHint: 'Gunakan dropdown brand untuk memfokuskan jadwal.',
+    },
+    {
+      targetId: 'tour-summary',
+      title: 'Ringkasan Jadwal Hari Ini',
+      description:
+        'Pantau jumlah postingan yang siap tayang hari ini, yang masih dalam tahap draft atau review, dan yang telah terposting.',
+      placement: 'bottom',
+    },
+    {
+      targetId: 'tour-today-schedule',
+      title: 'Fokus Jadwal Hari Ini',
+      description:
+        'Dashboard UdaPlanner secara default hanya menampilkan jadwal hari ini secara rapi. Anda juga dapat berpindah ke hari kemarin, besok, atau memilih tanggal tertentu.',
+      placement: 'top',
+    },
+    {
+      targetId: 'tour-actions',
+      title: 'Tombol Aksi Cepat',
+      description:
+        'Buat rencana konten baru, lihat kalender visual bulanan, atau salin caption dan hashtag dengan 1-klik siap posting.',
+      placement: 'bottom',
+    },
+    {
+      title: 'Panduan Selesai!',
+      description:
+        'Anda siap menggunakan UdaPlanner! Tombol "Lihat Panduan Lagi" tersedia di pojok kiri bawah jika Anda ingin mengulang panduan ini kapan saja.',
+      placement: 'center',
+    },
+  ];
 
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 1080, width: '100%', margin: '0 auto' }}>
+      {/* GUIDED TOUR KOMPONEN */}
+      <GuidedTour steps={dashboardTourSteps} tourKey="uda_guided_tour_dashboard" />
+
+      {/* Sapaan Header & Waktu Live (ID: tour-welcome) */}
       <div
+        id="tour-welcome"
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
           gap: 16,
-          padding: "24px",
-          marginBottom: 24,
-          borderRadius: 18,
-          border: "1px solid #e2e8f0",
-          background: "linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)",
-          boxShadow: "0 4px 18px rgba(15, 23, 42, 0.04)",
+          padding: '24px 28px',
+          borderRadius: 20,
+          border: '1px solid #e2e8f0',
+          background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)',
+          boxShadow: '0 4px 20px rgba(15, 23, 42, 0.04)',
         }}
       >
         <div>
-          <h1
-            suppressHydrationWarning
+          <div
             style={{
-              fontSize: "1.65rem",
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '3px 10px',
+              backgroundColor: '#dcfce7',
+              color: '#15803d',
+              borderRadius: 999,
+              fontSize: '0.76rem',
               fontWeight: 800,
-              color: "#0f172a",
-              letterSpacing: "-0.02em",
+              marginBottom: 8,
             }}
           >
-            {greetingText}, {displayName}
-          </h1>
+            <Sparkles size={13} />
+            <span>Fokus Harian Anda</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            {currentAvatarUrl ? (
+              <img
+                src={currentAvatarUrl}
+                alt={displayName}
+                onError={() => setLocalAvatar(null)}
+                style={{
+                  width: 54,
+                  height: 54,
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: '2.5px solid #0f172a',
+                  boxShadow: '3px 3px 0px #0f172a',
+                  flexShrink: 0,
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 54,
+                  height: 54,
+                  borderRadius: '50%',
+                  backgroundColor: '#16a34a',
+                  color: '#ffffff',
+                  border: '2.5px solid #0f172a',
+                  boxShadow: '3px 3px 0px #0f172a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 900,
+                  fontSize: '1.4rem',
+                  flexShrink: 0,
+                }}
+              >
+                {(displayName || 'U').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div>
+              <h1
+                style={{
+                  fontSize: 'clamp(1.4rem, 3.5vw, 1.8rem)',
+                  fontWeight: 900,
+                  color: '#0f172a',
+                  letterSpacing: '-0.025em',
+                  margin: 0,
+                }}
+              >
+                {greetingText}, {displayName}
+              </h1>
+
           <div
-            suppressHydrationWarning
             style={{
-              display: "flex",
-              alignItems: "center",
-              flexWrap: "wrap",
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
               gap: 8,
               marginTop: 6,
-              color: "#64748b",
-              fontSize: "0.9rem",
+              color: '#64748b',
+              fontSize: '0.88rem',
             }}
           >
-            <span>Hari ini {todayDateString}</span>
-            <span style={{ color: "#cbd5e1" }}>•</span>
+            <span>Hari ini {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+            <span style={{ color: '#cbd5e1' }}>•</span>
             <span
               style={{
-                display: "inline-flex",
-                alignItems: "center",
+                display: 'inline-flex',
+                alignItems: 'center',
                 gap: 5,
-                fontWeight: 600,
-                color: "#0284c7",
-                backgroundColor: "#e0f2fe",
-                padding: "2px 8px",
+                fontWeight: 700,
+                color: '#15803d',
+                backgroundColor: '#ffffff',
+                padding: '2px 8px',
                 borderRadius: 6,
-                fontVariantNumeric: "tabular-nums",
-                fontSize: "0.85rem",
+                border: '1px solid #bbf7d0',
+                fontVariantNumeric: 'tabular-nums',
+                fontSize: '0.84rem',
               }}
             >
               <Clock size={13} />
               {timeString} WIB
             </span>
-            <span style={{ color: "#cbd5e1" }}>•</span>
-            <span>Kelola rencana konten Anda dengan tenang.</span>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+      </div>
+    </div>
+
+        {/* Tombol Aksi Utama (ID: tour-actions) */}
+        <div id="tour-actions" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
             className="btn-uda btn-uda-secondary btn-uda-sm"
-            onClick={() => router.push("/app/kalender")}
+            onClick={() => router.push('/app/kalender')}
+            style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            <CalendarIcon size={15} />
-            <span>Lihat Kalender</span>
+            <CalendarIcon size={16} />
+            <span>Buka Kalender</span>
+          </button>
+          <button
+            className="btn-uda btn-uda-primary btn-uda-sm"
+            onClick={() => router.push('/app/kalender')}
+            style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)' }}
+          >
+            <Plus size={16} />
+            <span>Rencanakan Konten</span>
           </button>
         </div>
       </div>
 
-      {/* Grid: Terlewat & Jadwal Hari Ini Responsif */}
+      {/* Baris Navigasi Brand & Tanggal (ID: tour-nav & tour-summary) */}
       <div
+        id="tour-nav"
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
-          gap: 20,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 14,
+          padding: '16px 20px',
+          backgroundColor: '#ffffff',
+          borderRadius: 12,
+          border: '2.5px solid #0f172a',
+          boxShadow: '4px 4px 0px #0f172a',
         }}
       >
-        {/* Kartu Terlewat (Hanya muncul jika ada) */}
-        {missedPosts.length > 0 && (
-          <div
-            className="uda-card"
+        {/* Brand Filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Filter size={15} />
+            <span>Filter Brand:</span>
+          </span>
+          <select
+            value={selectedBrandFilter}
+            onChange={(e) => setSelectedBrandFilter(e.target.value)}
             style={{
-              border: "1px solid #fecaca",
-              background: "linear-gradient(145deg, #fff5f5 0%, #ffffff 100%)",
+              padding: '7px 12px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1',
+              fontSize: '0.86rem',
+              fontWeight: 600,
+              color: '#0f172a',
+              outline: 'none',
+              backgroundColor: '#f8fafc',
+            }}
+          >
+            <option value="all">Semua Brand Terdaftar</option>
+            {brands.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Date Selector Tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            onClick={() => handleDateChange(new Date(Date.now() - 86400000))}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: '1px solid',
+              borderColor: isYesterday ? '#16a34a' : '#e2e8f0',
+              backgroundColor: isYesterday ? '#f0fdf4' : '#ffffff',
+              color: isYesterday ? '#15803d' : '#64748b',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Kemarin
+          </button>
+          <button
+            onClick={() => handleDateChange(new Date())}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 8,
+              border: '1px solid',
+              borderColor: isToday ? '#16a34a' : '#e2e8f0',
+              backgroundColor: isToday ? '#16a34a' : '#ffffff',
+              color: isToday ? '#ffffff' : '#64748b',
+              fontSize: '0.82rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            Hari Ini
+          </button>
+          <button
+            onClick={() => handleDateChange(new Date(Date.now() + 86400000))}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: '1px solid',
+              borderColor: isTomorrow ? '#16a34a' : '#e2e8f0',
+              backgroundColor: isTomorrow ? '#f0fdf4' : '#ffffff',
+              color: isTomorrow ? '#15803d' : '#64748b',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Besok
+          </button>
+
+          {/* Native Date Picker */}
+          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+            <input
+              type="date"
+              value={selectedDate.toISOString().split('T')[0]}
+              onChange={(e) => {
+                if (e.target.value) handleDateChange(new Date(e.target.value));
+              }}
+              style={{
+                padding: '6px 10px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                fontSize: '0.82rem',
+                color: '#334155',
+                outline: 'none',
+                cursor: 'pointer',
+                backgroundColor: '#ffffff',
+              }}
+              title="Pilih tanggal jadwal lainnya"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Metrics (ID: tour-summary) */}
+      <div
+        id="tour-summary"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
+          gap: 16,
+        }}
+      >
+        <div className="uda-card" style={{ padding: '16px 20px', borderLeft: '4px solid #16a34a' }}>
+          <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Total Jadwal Hari Ini</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a', margin: '4px 0 2px' }}>
+            {posts.length} Postingan
+          </div>
+          <div style={{ fontSize: '0.74rem', color: '#16a34a' }}>
+            {isToday ? 'Tanggal Hari Ini' : formattedDateTitle}
+          </div>
+        </div>
+
+        <div className="uda-card" style={{ padding: '16px 20px', borderLeft: '4px solid #0284c7' }}>
+          <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Siap Tayang</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0284c7', margin: '4px 0 2px' }}>
+            {posts.filter((p) => p.status === 'siap').length}
+          </div>
+          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Caption & desain sudah final</div>
+        </div>
+
+        <div className="uda-card" style={{ padding: '16px 20px', borderLeft: '4px solid #f59e0b' }}>
+          <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Menunggu Review / Draft</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#f59e0b', margin: '4px 0 2px' }}>
+            {posts.filter((p) => p.status === 'draft' || p.status === 'review').length}
+          </div>
+          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Perlu pengecekan sebelum tayang</div>
+        </div>
+
+        <div className="uda-card" style={{ padding: '16px 20px', borderLeft: '4px solid #475569' }}>
+          <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Sudah Terposting</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#475569', margin: '4px 0 2px' }}>
+            {posts.filter((p) => p.status === 'terposting').length}
+          </div>
+          <div style={{ fontSize: '0.74rem', color: '#16a34a' }}>Berhasil dipublikasikan</div>
+        </div>
+      </div>
+
+      {/* DAFTAR JADWAL HARI INI (ID: tour-today-schedule) */}
+      <div
+        id="tour-today-schedule"
+        className="uda-card"
+        style={{
+          padding: 24,
+          borderRadius: 20,
+          border: '1px solid #dbeafe',
+          boxShadow: '0 4px 20px rgba(37, 99, 235, 0.04)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CalendarDays size={20} style={{ color: '#0284c7' }} />
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>
+                {isToday ? 'Jadwal Konten Hari Ini' : `Jadwal Konten: ${formattedDateTitle}`}
+              </h2>
+            </div>
+            <p style={{ color: '#64748b', fontSize: '0.84rem', marginTop: 4 }}>
+              {isToday
+                ? `Menampilkan seluruh jadwal tayang untuk hari ini (${formattedDateTitle}).`
+                : `Menampilkan arsip jadwal untuk ${formattedDateTitle}.`}
+            </p>
+          </div>
+
+          <span
+            className="status-pill"
+            style={{
+              backgroundColor: isToday ? '#dcfce7' : '#f1f5f9',
+              color: isToday ? '#15803d' : '#475569',
+              fontWeight: 800,
+            }}
+          >
+            {isToday ? 'Hari Ini (WIB)' : 'Jadwal Tanggal Lain'}
+          </span>
+        </div>
+
+        {/* Loading State */}
+        {isLoading && (
+          <div style={{ padding: '48px 24px', textAlign: 'center', color: '#64748b' }}>
+            <Loader2 size={32} className="animate-spin" style={{ color: '#16a34a', margin: '0 auto 12px' }} />
+            <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>Memuat data jadwal hari ini...</div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {errorMessage && !isLoading && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '16px 20px',
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: 12,
+              color: '#991b1b',
+              fontSize: '0.88rem',
+            }}
+          >
+            <AlertCircle size={20} style={{ color: '#dc2626' }} />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {/* EMPTY STATE INFORMATIF */}
+        {!isLoading && !errorMessage && posts.length === 0 && (
+          <div
+            style={{
+              padding: '48px 24px',
+              textAlign: 'center',
+              backgroundColor: '#f8fafc',
               borderRadius: 16,
-              padding: 20,
-              boxShadow: "0 4px 14px rgba(220, 38, 38, 0.04)",
-              transition: "box-shadow 0.2s ease",
+              border: '1px dashed #cbd5e1',
             }}
           >
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 14,
+                width: 60,
+                height: 60,
+                borderRadius: '50%',
+                backgroundColor: '#e2e8f0',
+                color: '#64748b',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  color: "#dc2626",
-                  fontWeight: 700,
-                  fontSize: "1rem",
-                }}
-              >
-                <AlertCircle size={20} />
-                <span>Terlewat ({missedPosts.length} postingan)</span>
-              </div>
-              <span
-                className="status-pill"
-                style={{ background: "#fee2e2", color: "#b91c1c" }}
-              >
-                Perlu Tindakan
-              </span>
+              <CalendarIcon size={28} />
             </div>
 
-            <p
-              style={{
-                fontSize: "0.82rem",
-                color: "#7f1d1d",
-                marginBottom: 14,
-              }}
-            >
-              Postingan di bawah ini telah melewati jadwal tayang tetapi belum
-              ditandai sudah posting:
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
+              {isToday
+                ? 'Belum Ada Jadwal Konten untuk Hari Ini'
+                : `Tidak Ada Jadwal Konten pada ${formattedDateTitle}`}
+            </h3>
+
+            <p style={{ color: '#64748b', fontSize: '0.88rem', maxWidth: 480, margin: '0 auto 24px', lineHeight: 1.6 }}>
+              {isToday
+                ? 'Gunakan waktu luang Anda untuk menyusun ide konten baru, mengatur kalender, atau menyiapkan bank caption favorit.'
+                : 'Tidak ada postingan yang dijadwalkan pada tanggal ini.'}
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {missedPosts.map((post) => {
-                const brand = DUMMY_BRANDS.find((b) => b.id === post.brand_id);
-                return (
-                  <div
-                    key={post.id}
-                    style={{
-                      background: "#ffffff",
-                      padding: "12px 14px",
-                      borderRadius: 10,
-                      border: "1px solid #fecaca",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          marginBottom: 4,
-                        }}
-                      >
-                        {brand && (
-                          <span
-                            style={{
-                              fontSize: "0.7rem",
-                              fontWeight: 700,
-                              padding: "2px 6px",
-                              borderRadius: 4,
-                              background: `${brand.color}18`,
-                              color: brand.color,
-                            }}
-                          >
-                            {brand.name}
-                          </span>
-                        )}
-                        <span
-                          style={{
-                            fontSize: "0.75rem",
-                            color: "#dc2626",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {post.scheduled_at
-                            ? new Date(post.scheduled_at).toLocaleTimeString(
-                                "id-ID",
-                                { hour: "2-digit", minute: "2-digit" },
-                              )
-                            : ""}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          fontSize: "0.88rem",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {post.title}
-                      </div>
-                    </div>
-                    <button
-                      className="btn-uda btn-uda-secondary btn-uda-sm"
-                      onClick={() => router.push(`/app/postingan/${post.id}`)}
-                    >
-                      Buka
-                    </button>
-                  </div>
-                );
-              })}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <button
+                className="btn-uda btn-uda-primary btn-uda-sm"
+                onClick={() => router.push('/app/kalender')}
+                style={{ fontWeight: 700, padding: '10px 20px' }}
+              >
+                <Plus size={16} />
+                <span>Rencanakan Konten Sekarang</span>
+              </button>
+              <button
+                className="btn-uda btn-uda-secondary btn-uda-sm"
+                onClick={() => handleDateChange(new Date())}
+                style={{ fontWeight: 700 }}
+              >
+                Kembali ke Hari Ini
+              </button>
             </div>
           </div>
         )}
 
-        {/* Kartu Jadwal Hari Ini */}
-        <div
-          className="uda-card"
-          style={{
-            border: "1px solid #dbeafe",
-            borderRadius: 16,
-            padding: 20,
-            background: "linear-gradient(145deg, #ffffff 0%, #f8fbff 100%)",
-            boxShadow: "0 4px 16px rgba(37, 99, 235, 0.05)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 16,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                fontWeight: 700,
-                fontSize: "1rem",
-                color: "#0f172a",
-              }}
-            >
-              <Clock size={19} style={{ color: "#16a34a" }} />
-              <span>Jadwal Hari Ini</span>
-            </div>
-            <span
-              className="status-pill"
-              style={{ background: "#f0fdf4", color: "#15803d" }}
-            >
-              {todayPosts.length} Konten
-            </span>
-          </div>
+        {/* DAFTAR POSTINGAN HARI INI */}
+        {!isLoading && !errorMessage && posts.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {posts.map((post) => {
+              const brand = brands.find((b) => b.id === post.brand_id);
+              const postTime = post.scheduled_at
+                ? new Date(post.scheduled_at).toLocaleTimeString('id-ID', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }) + ' WIB'
+                : 'Jam Belum Diatur';
 
-          {todayPosts.length === 0 ? (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "24px 12px",
-                color: "#64748b",
-              }}
-            >
-              <p style={{ fontSize: "0.88rem" }}>
-                Belum ada postingan untuk hari ini.
-              </p>
-              <button
-                className="btn-uda btn-uda-primary btn-uda-sm"
-                style={{ marginTop: 12 }}
-                onClick={() => router.push("/app/postingan/baru")}
-              >
-                + Buat Jadwal Sekarang
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {todayPosts.map((post) => {
-                const brand = DUMMY_BRANDS.find((b) => b.id === post.brand_id);
-                const statusMeta = POST_STATUSES[post.status];
-                return (
-                  <div
-                    key={post.id}
-                    style={{
-                      background: "#f8fafc",
-                      padding: 12,
-                      borderRadius: 10,
-                      border: "1px solid #e2e8f0",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          marginBottom: 4,
-                        }}
-                      >
+              const statusColor =
+                post.status === 'siap'
+                  ? { bg: '#dcfce7', text: '#15803d', label: 'Siap Posting' }
+                  : post.status === 'draft'
+                  ? { bg: '#e0f2fe', text: '#0284c7', label: 'Draft' }
+                  : post.status === 'review'
+                  ? { bg: '#fef3c7', text: '#b45309', label: 'Review' }
+                  : post.status === 'terposting'
+                  ? { bg: '#f1f5f9', text: '#475569', label: 'Sudah Posting' }
+                  : { bg: '#f1f5f9', text: '#64748b', label: 'Ide' };
+
+              return (
+                <div
+                  key={post.id}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 14,
+                    padding: '16px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 16,
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                  }}
+                >
+                  {/* Kolom Kiri: Waktu, Brand, Judul */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 260, flex: 1 }}>
+                    {/* Waktu Badge */}
+                    <div
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        backgroundColor: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        textAlign: 'center',
+                        minWidth: 80,
+                      }}
+                    >
+                      <Clock size={14} style={{ color: '#0284c7', margin: '0 auto 2px' }} />
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a' }}>
+                        {postTime}
+                      </div>
+                    </div>
+
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                         {brand && (
                           <span
                             style={{
-                              fontSize: "0.7rem",
-                              fontWeight: 700,
-                              padding: "2px 6px",
-                              borderRadius: 4,
-                              background: `${brand.color}18`,
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              backgroundColor: `${brand.color}15`,
                               color: brand.color,
                             }}
                           >
@@ -431,457 +698,96 @@ export default function BerandaPage() {
                         )}
                         <span
                           style={{
-                            fontSize: "0.78rem",
-                            fontWeight: 600,
-                            color: "#0f172a",
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            backgroundColor: statusColor.bg,
+                            color: statusColor.text,
                           }}
                         >
-                          Pukul{" "}
-                          {post.scheduled_at
-                            ? new Date(post.scheduled_at).toLocaleTimeString(
-                                "id-ID",
-                                { hour: "2-digit", minute: "2-digit" },
-                              )
-                            : "-"}
+                          {statusColor.label}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                          Format: {post.content_type.toUpperCase()}
                         </span>
                       </div>
-                      <div
+
+                      <h4
                         style={{
-                          fontWeight: 600,
-                          fontSize: "0.88rem",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
+                          fontSize: '0.98rem',
+                          fontWeight: 800,
+                          color: '#0f172a',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          maxWidth: 480,
                         }}
                       >
                         {post.title}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <span
-                        className="status-pill"
-                        style={{
-                          backgroundColor: statusMeta.bg,
-                          color: statusMeta.text,
-                        }}
-                      >
-                        {statusMeta.label}
-                      </span>
-                      <button
-                        className="btn-uda btn-uda-secondary btn-uda-sm"
-                        onClick={() => router.push(`/app/postingan/${post.id}`)}
-                      >
-                        Buka
-                      </button>
+                      </h4>
+                      {post.caption && (
+                        <p
+                          style={{
+                            fontSize: '0.82rem',
+                            color: '#64748b',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: 520,
+                            marginTop: 2,
+                          }}
+                        >
+                          {post.caption}
+                        </p>
+                      )}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
 
-        {/* Kartu Menunggu Review Kamu */}
-        <div
-          className="uda-card"
-          style={{
-            border: "1px solid #fde68a",
-            borderRadius: 16,
-            padding: 20,
-            background: "linear-gradient(145deg, #fffbeb 0%, #ffffff 100%)",
-            boxShadow: "0 4px 16px rgba(245, 158, 11, 0.06)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 16,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                fontWeight: 700,
-                fontSize: "1rem",
-                color: "#0f172a",
-              }}
-            >
-              <ShieldAlert size={19} style={{ color: "#f59e0b" }} />
-              <span>Menunggu Review Kamu</span>
-            </div>
-            <span
-              className="status-pill"
-              style={{ background: "#fffbeb", color: "#b45309" }}
-            >
-              {reviewPosts.length} Menunggu
-            </span>
-          </div>
-
-          {reviewPosts.length === 0 ? (
-            <p style={{ color: "#64748b", fontSize: "0.85rem" }}>
-              Tidak ada postingan yang menunggu persetujuan saat ini.
-            </p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {reviewPosts.map((post) => (
-                <div
-                  key={post.id}
-                  style={{
-                    background: "#fffbeb",
-                    border: "1px solid #fde68a",
-                    padding: 12,
-                    borderRadius: 10,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: "0.88rem" }}>
-                      {post.title}
-                    </div>
-                    <div
+                  {/* Kolom Kanan: Tombol Salin 1-Klik & Buka */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      onClick={() => handleCopyCaption(post)}
+                      className="btn-uda btn-uda-secondary btn-uda-sm"
                       style={{
-                        fontSize: "0.75rem",
-                        color: "#b45309",
-                        marginTop: 3,
+                        height: 38,
+                        padding: '0 12px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        backgroundColor: copiedId === post.id ? '#16a34a' : '#f8fafc',
+                        color: copiedId === post.id ? '#ffffff' : '#334155',
+                      }}
+                      title="Salin caption dan kumpulan hashtag ke clipboard"
+                    >
+                      {copiedId === post.id ? <Check size={14} /> : <Copy size={14} />}
+                      <span>{copiedId === post.id ? 'Tersalin!' : 'Salin Caption'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => router.push(`/app/postingan/${post.id}`)}
+                      className="btn-uda btn-uda-primary btn-uda-sm"
+                      style={{
+                        height: 38,
+                        padding: '0 14px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
                       }}
                     >
-                      Diajukan oleh Editor • {post.notes || "Siap ditinjau"}
-                    </div>
+                      <span>Buka</span>
+                      <ChevronRight size={14} />
+                    </button>
                   </div>
-                  <button
-                    className="btn-uda btn-uda-secondary btn-uda-sm"
-                    onClick={() => router.push(`/app/postingan/${post.id}`)}
-                  >
-                    Tinjau
-                  </button>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Ringkasan Bulan Ini & Kuota Paket */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
-          gap: 20,
-        }}
-      ></div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
-          gap: 20,
-        }}
-      >
-        {/* Ringkasan Bulan Ini */}
-
-        <div
-          className="uda-card"
-          style={{
-            border: "1px solid #e2e8f0",
-            borderRadius: 16,
-            padding: 20,
-            background: "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)",
-            boxShadow: "0 4px 16px rgba(15, 23, 42, 0.04)",
-          }}
-        >
-          <h3
-            style={{ fontSize: "1.05rem", fontWeight: 700, marginBottom: 14 }}
-          >
-            Ringkasan Postingan Bulan Ini
-          </h3>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(5, 1fr)",
-              gap: 10,
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                background: "#f8fafc",
-                padding: "12px 6px",
-                borderRadius: 8,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "1.4rem",
-                  fontWeight: 800,
-                  color: "#94a3b8",
-                }}
-              >
-                {statusCounts.ide}
-              </div>
-              <div
-                style={{
-                  fontSize: "0.72rem",
-                  color: "#64748b",
-                  fontWeight: 600,
-                }}
-              >
-                Ide
-              </div>
-            </div>
-            <div
-              style={{
-                background: "#eff6ff",
-                padding: "12px 6px",
-                borderRadius: 8,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "1.4rem",
-                  fontWeight: 800,
-                  color: "#3b82f6",
-                }}
-              >
-                {statusCounts.draft}
-              </div>
-              <div
-                style={{
-                  fontSize: "0.72rem",
-                  color: "#1d4ed8",
-                  fontWeight: 600,
-                }}
-              >
-                Draft
-              </div>
-            </div>
-            <div
-              style={{
-                background: "#fffbeb",
-                padding: "12px 6px",
-                borderRadius: 8,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "1.4rem",
-                  fontWeight: 800,
-                  color: "#f59e0b",
-                }}
-              >
-                {statusCounts.review}
-              </div>
-              <div
-                style={{
-                  fontSize: "0.72rem",
-                  color: "#b45309",
-                  fontWeight: 600,
-                }}
-              >
-                Review
-              </div>
-            </div>
-            <div
-              style={{
-                background: "#f0fdf4",
-                padding: "12px 6px",
-                borderRadius: 8,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "1.4rem",
-                  fontWeight: 800,
-                  color: "#16a34a",
-                }}
-              >
-                {statusCounts.siap}
-              </div>
-              <div
-                style={{
-                  fontSize: "0.72rem",
-                  color: "#15803d",
-                  fontWeight: 600,
-                }}
-              >
-                Siap
-              </div>
-            </div>
-            <div
-              style={{
-                background: "#f8fafc",
-                padding: "12px 6px",
-                borderRadius: 8,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "1.4rem",
-                  fontWeight: 800,
-                  color: "#475569",
-                }}
-              >
-                {statusCounts.terposting}
-              </div>
-              <div
-                style={{
-                  fontSize: "0.72rem",
-                  color: "#334155",
-                  fontWeight: 600,
-                }}
-              >
-                Tayang
-              </div>
-            </div>
+              );
+            })}
           </div>
-        </div>
-
-        {/* Kuota Paket Progress Bar */}
-        <div
-          className="uda-card"
-          style={{
-            border: "1px solid #d1fae5",
-            borderRadius: 16,
-            padding: 20,
-            background: "linear-gradient(145deg, #ffffff 0%, #f0fdf4 100%)",
-            boxShadow: "0 4px 16px rgba(22, 163, 74, 0.05)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 16,
-            }}
-          >
-            <div>
-              <h3 style={{ fontSize: "1.05rem", fontWeight: 700 }}>
-                Pemakaian Kuota Akun
-              </h3>
-              <div
-                style={{
-                  fontSize: "0.78rem",
-                  color: "#16a34a",
-                  fontWeight: 600,
-                }}
-              >
-                Paket Pro Aktif (s/d 12 Nov 2026)
-              </div>
-            </div>
-            <button
-              className="btn-uda btn-uda-secondary btn-uda-sm"
-              onClick={() => router.push("/app/langganan")}
-            >
-              Upgrade
-            </button>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {/* Brand Quota */}
-            <div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: "0.8rem",
-                  fontWeight: 600,
-                  marginBottom: 4,
-                }}
-              >
-                <span>Jumlah Brand Aktif</span>
-                <span>3 dari 5 brand</span>
-              </div>
-              <div
-                style={{
-                  height: 7,
-                  borderRadius: 4,
-                  background: "#e2e8f0",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    width: "60%",
-                    height: "100%",
-                    background: "#16a34a",
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Post Quota */}
-            <div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: "0.8rem",
-                  fontWeight: 600,
-                  marginBottom: 4,
-                }}
-              >
-                <span>Jadwal Postingan Bulan Ini</span>
-                <span>25 post (Tanpa Batas di Pro)</span>
-              </div>
-              <div
-                style={{
-                  height: 7,
-                  borderRadius: 4,
-                  background: "#e2e8f0",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    width: "25%",
-                    height: "100%",
-                    background: "#3b82f6",
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Storage Quota */}
-            <div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: "0.8rem",
-                  fontWeight: 600,
-                  marginBottom: 4,
-                }}
-              >
-                <span>Penyimpanan Desain</span>
-                <span>650 MB dari 5 GB</span>
-              </div>
-              <div
-                style={{
-                  height: 7,
-                  borderRadius: 4,
-                  background: "#e2e8f0",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    width: "13%",
-                    height: "100%",
-                    background: "#8b5cf6",
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

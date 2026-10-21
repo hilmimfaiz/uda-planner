@@ -9,7 +9,7 @@ export default function AdminPengaturanPage() {
   const { showSuccess, showError } = useModal();
   const [bankName, setBankName] = useState('BCA (Bank Central Asia)');
   const [accountNumber, setAccountNumber] = useState('8839210928');
-  const [accountName, setAccountName] = useState('PT UdaCoding Digital Indonesia');
+  const [accountName, setAccountName] = useState('PT. Koding Teknologi Asia');
   const [adminWhatsapp, setAdminWhatsapp] = useState('6281234567890');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -124,7 +124,7 @@ export default function AdminPengaturanPage() {
               required
               value={accountName}
               onChange={(e) => setAccountName(e.target.value)}
-              placeholder="Contoh: PT UdaCoding Digital Indonesia"
+              placeholder="Contoh: PT. Koding Teknologi Asia"
               style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: 8, outline: 'none' }}
             />
           </div>

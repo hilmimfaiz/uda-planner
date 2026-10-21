@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Users, Search, Edit, ShieldAlert, ShieldCheck, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Users, Search, Edit, ShieldAlert, ShieldCheck, RefreshCw, CheckCircle2, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import { AdminService, AdminUserItem } from '@/services/admin.service';
 import { useModal } from '@/contexts/modal-context';
 
@@ -10,6 +10,8 @@ export default function AdminPenggunaPage() {
   const [users, setUsers] = useState<AdminUserItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<AdminUserItem | null>(null);
+  const [userToDelete, setUserToDelete] = useState<AdminUserItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [newPlan, setNewPlan] = useState<'free' | 'pro' | 'team'>('pro');
   const [durationDays, setDurationDays] = useState(30);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -82,6 +84,31 @@ export default function AdminPenggunaPage() {
         );
       },
     });
+  };
+
+  const handleConfirmDeletePermanent = async () => {
+    if (!userToDelete) return;
+    setIsDeleting(true);
+
+    try {
+      const targetId = userToDelete.userId || userToDelete.id;
+      const targetName = userToDelete.name;
+      const targetEmail = userToDelete.email;
+
+      await AdminService.deleteUserPermanently(targetId, targetEmail);
+
+      setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id && u.userId !== userToDelete.userId));
+      setUserToDelete(null);
+
+      showSuccess(
+        'Pengguna Berhasil Dihapus Permanen!',
+        `Semua data akun "${targetName}" (${targetEmail}) telah dihapus secara permanen dari sistem. Email tersebut sekarang dapat didaftarkan kembali sebagai akun baru dari awal.`
+      );
+    } catch (err: any) {
+      showToast('Gagal menghapus pengguna: ' + (err.message || 'Terjadi kesalahan'));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const filteredUsers = users.filter((u) =>
@@ -211,6 +238,26 @@ export default function AdminPenggunaPage() {
                       >
                         {u.isSuspended ? 'Aktifkan' : 'Bekukan'}
                       </button>
+                      <button
+                        onClick={() => setUserToDelete(u)}
+                        style={{
+                          background: '#fff1f2',
+                          border: '1.5px solid #f43f5e',
+                          color: '#e11d48',
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                        title="Hapus Pengguna Secara Permanen"
+                      >
+                        <Trash2 size={12} />
+                        <span>Hapus</span>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -286,6 +333,172 @@ export default function AdminPenggunaPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Hapus Pengguna Secara Permanen */}
+      {userToDelete && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.7)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 110,
+            padding: 20,
+          }}
+        >
+          <div
+            className="uda-card"
+            style={{
+              maxWidth: 480,
+              width: '100%',
+              padding: 26,
+              border: '2.5px solid #0f172a',
+              boxShadow: '8px 8px 0px #0f172a',
+              background: '#ffffff',
+            }}
+          >
+            {/* Header Modal */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 10,
+                  background: '#fee2e2',
+                  border: '2px solid #ef4444',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#dc2626',
+                  flexShrink: 0,
+                  boxShadow: '2px 2px 0px #0f172a',
+                }}
+              >
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    background: '#fee2e2',
+                    color: '#b91c1c',
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    letterSpacing: '0.05em',
+                    textTransform: 'uppercase',
+                    marginBottom: 2,
+                    border: '1px solid #f87171',
+                  }}
+                >
+                  Tindakan Permanen
+                </span>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                  Hapus Pengguna Secara Permanen?
+                </h3>
+              </div>
+            </div>
+
+            {/* Kotak Info Pengguna */}
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1.5px solid #cbd5e1',
+                borderRadius: 8,
+                padding: '12px 14px',
+                marginBottom: 16,
+                fontSize: '0.84rem',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ color: '#64748b', fontWeight: 600 }}>Nama:</span>
+                <span style={{ color: '#0f172a', fontWeight: 800 }}>{userToDelete.name}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ color: '#64748b', fontWeight: 600 }}>Email:</span>
+                <span style={{ color: '#0f172a', fontWeight: 800 }}>{userToDelete.email}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#64748b', fontWeight: 600 }}>Paket Saat Ini:</span>
+                <span style={{ color: '#16a34a', fontWeight: 800, textTransform: 'uppercase' }}>{userToDelete.plan}</span>
+              </div>
+            </div>
+
+            {/* Peringatan & Aturan Pendaftaran Kembali */}
+            <div
+              style={{
+                background: '#fff1f2',
+                border: '1.5px solid #fecdd3',
+                borderRadius: 8,
+                padding: '12px 14px',
+                marginBottom: 20,
+                fontSize: '0.82rem',
+                lineHeight: 1.5,
+                color: '#9f1239',
+              }}
+            >
+              <div style={{ fontWeight: 800, marginBottom: 4 }}>⚠️ Konsekuensi Penghapusan:</div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                <li>Semua profil, postingan kalender, dan brand pengguna ini akan dihapus permanen.</li>
+                <li>
+                  <strong>Pendaftaran Kembali:</strong> Email <u>{userToDelete.email}</u> dapat didaftarkan kembali di masa depan, dan statusnya akan <strong>murni menjadi pengguna baru</strong> (wajib melengkapi profil awal dan mengikuti pengenalan sistem).
+                </li>
+              </ul>
+            </div>
+
+            {/* Tombol Aksi */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                className="btn-uda btn-uda-secondary"
+                style={{ flex: 1, height: 42 }}
+                disabled={isDeleting}
+                onClick={() => setUserToDelete(null)}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                className="btn-uda"
+                disabled={isDeleting}
+                onClick={handleConfirmDeletePermanent}
+                style={{
+                  flex: 1.4,
+                  height: 42,
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  border: '2px solid #0f172a',
+                  boxShadow: '3px 3px 0px #0f172a',
+                  fontWeight: 800,
+                  fontSize: '0.84rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  opacity: isDeleting ? 0.7 : 1,
+                }}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Menghapus...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    <span>Ya, Hapus Permanen</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

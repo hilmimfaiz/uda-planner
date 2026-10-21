@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Shield,
@@ -15,6 +16,8 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  MailCheck,
+  Landmark,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 
@@ -58,9 +61,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const adminNav = [
     { name: 'Ringkasan', href: '/admin', icon: LayoutDashboard },
+    { name: 'Verifikasi Email', href: '/admin/verifikasi-email', icon: MailCheck },
     { name: 'Pembayaran', href: '/admin/pembayaran', icon: CreditCard },
+    { name: 'Rekening Bank', href: '/admin/rekening', icon: Landmark },
     { name: 'Pengguna', href: '/admin/pengguna', icon: Users },
-    { name: 'Paket', href: '/admin/paket', icon: Package },
+    { name: 'Paket & Durasi', href: '/admin/paket', icon: Package },
     { name: 'Pengaturan', href: '/admin/pengaturan', icon: Settings },
   ];
 
@@ -141,30 +146,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             const isActive = pathname === item.href;
             const Icon = item.icon;
             return (
-              <button
+              <Link
                 key={item.href}
+                href={item.href}
                 className={`nav-item-btn ${isActive ? 'active' : ''}`}
-                onClick={() => router.push(item.href)}
                 title={item.name}
               >
                 <Icon size={18} />
                 <span>{item.name}</span>
-              </button>
+              </Link>
             );
           })}
         </nav>
 
         <div className="sidebar-admin-bottom">
-          <button
-            className="nav-item-btn"
-            onClick={() => router.push('/app')}
-            style={{ color: '#94a3b8' }}
-            title="Kembali ke Aplikasi"
-          >
-            <ArrowLeft size={16} />
-            <span>Kembali ke Aplikasi</span>
-          </button>
-
           {/* Tombol Logout Admin di Sidebar */}
           <button
             className="nav-item-btn"
@@ -195,7 +190,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           style={{
             height: 64,
             background: '#ffffff',
-            borderBottom: '1px solid #e2e8f0',
+            borderBottom: '2.5px solid #0f172a',
             padding: '0 28px',
             display: 'flex',
             alignItems: 'center',
@@ -204,7 +199,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 800, background: '#16a34a22', color: '#16a34a', padding: '3px 8px', borderRadius: 4, flexShrink: 0 }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 900, background: '#dcfce7', color: '#166534', border: '1.5px solid #0f172a', boxShadow: '1.5px 1.5px 0px #0f172a', padding: '3px 8px', borderRadius: 6, flexShrink: 0 }}>
               ADMIN
             </span>
             <span style={{ fontSize: '0.85rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -213,12 +208,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            <button
-              className="btn-uda btn-uda-secondary btn-uda-sm"
-              onClick={() => router.push('/app')}
-            >
-              Mode Pengguna
-            </button>
             <button
               className="btn-uda btn-uda-secondary btn-uda-sm"
               onClick={() => setShowLogoutModal(true)}
@@ -278,18 +267,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               width: '100%',
               padding: '30px 24px',
               textAlign: 'center',
-              borderRadius: 16,
+              borderRadius: 14,
+              border: '3px solid #0f172a',
+              boxShadow: '6px 6px 0px #0f172a',
               background: '#ffffff',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
             }}
           >
             <div
               style={{
                 width: 58,
                 height: 58,
-                borderRadius: '50%',
+                borderRadius: 12,
                 background: '#fee2e2',
                 color: '#dc2626',
+                border: '2px solid #0f172a',
+                boxShadow: '2.5px 2.5px 0px #0f172a',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

@@ -500,6 +500,112 @@ export interface Database {
         };
         Relationships: [];
       };
+      plan_durations: {
+        Row: {
+          id: string;
+          plan_code: string;
+          name: string;
+          duration_days: number;
+          price: number;
+          discount_percent: number;
+          is_active: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          plan_code: string;
+          name: string;
+          duration_days: number;
+          price: number;
+          discount_percent?: number;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          plan_code?: string;
+          name?: string;
+          duration_days?: number;
+          price?: number;
+          discount_percent?: number;
+          is_active?: boolean;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      bank_accounts: {
+        Row: {
+          id: string;
+          bank_name: string;
+          bank_code: string;
+          account_number: string;
+          account_name: string;
+          logo_url: string | null;
+          is_active: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          bank_name: string;
+          bank_code: string;
+          account_number: string;
+          account_name: string;
+          logo_url?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          bank_name?: string;
+          bank_code?: string;
+          account_number?: string;
+          account_name?: string;
+          logo_url?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      verification_logs: {
+        Row: {
+          id: string;
+          user_id: string;
+          admin_id: string | null;
+          verification_type: string;
+          previous_status: string | null;
+          new_status: string;
+          note: string | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          admin_id?: string | null;
+          verification_type: string;
+          previous_status?: string | null;
+          new_status: string;
+          note?: string | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: {
+          verification_type?: string;
+          previous_status?: string | null;
+          new_status?: string;
+          note?: string | null;
+          metadata?: Json;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -525,6 +631,9 @@ export interface Database {
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type Plan = Database['public']['Tables']['plans']['Row'];
+export type PlanDuration = Database['public']['Tables']['plan_durations']['Row'];
+export type BankAccount = Database['public']['Tables']['bank_accounts']['Row'];
+export type VerificationLog = Database['public']['Tables']['verification_logs']['Row'];
 export type Account = Database['public']['Tables']['accounts']['Row'];
 export type Brand = Database['public']['Tables']['brands']['Row'];
 export type BrandMember = Database['public']['Tables']['brand_members']['Row'];

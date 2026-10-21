@@ -93,6 +93,29 @@ export class PostService {
     return this.filterPostsLocally(combined, filters);
   }
 
+  /**
+   * Mengambil jadwal postingan KHUSUS hari ini (tanggal hari ini di zona waktu lokal/WIB)
+   */
+  static async getTodayPosts(filters: Omit<PostFilterOptions, 'startDate' | 'endDate'> = {}): Promise<DummyPost[]> {
+    return this.getPostsForDate(new Date(), filters);
+  }
+
+  /**
+   * Mengambil jadwal postingan untuk tanggal tertentu secara presisi
+   */
+  static async getPostsForDate(targetDate: Date, filters: Omit<PostFilterOptions, 'startDate' | 'endDate'> = {}): Promise<DummyPost[]> {
+    const all = await this.getPosts(filters);
+    const targetDateStr = targetDate.toDateString();
+    return all.filter((p) => {
+      if (!p.scheduled_at) return false;
+      return new Date(p.scheduled_at).toDateString() === targetDateStr;
+    }).sort((a, b) => {
+      const timeA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0;
+      const timeB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0;
+      return timeA - timeB;
+    });
+  }
+
   private static filterPostsLocally(list: DummyPost[], filters: PostFilterOptions): DummyPost[] {
     let results = [...list];
     if (filters.brandId && filters.brandId !== 'all') {

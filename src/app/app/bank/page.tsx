@@ -7,6 +7,28 @@ import { SnippetService } from '@/services/snippet.service';
 import { BrandService } from '@/services/brand.service';
 import { useAuth } from '@/contexts/auth-context';
 import { useModal } from '@/contexts/modal-context';
+import { GuidedTour, TourStep } from '@/components/guided-tour';
+
+const bankTourSteps: TourStep[] = [
+  {
+    targetId: 'tour-bank-header',
+    title: 'Bank Konten (Caption & Hashtag)',
+    description: 'Penyimpanan terpusat untuk teks hook pembuka, penutup CTA, dan kumpulan hashtag yang sering digunakan dalam kampanye Anda.',
+    placement: 'bottom',
+  },
+  {
+    targetId: 'tour-bank-tabs',
+    title: 'Kategori Template & Filter Brand',
+    description: 'Pilih antara tab Bank Caption atau Bank Hashtag, serta filter berdasarkan brand untuk mengorganisir aset copywriting Anda.',
+    placement: 'bottom',
+  },
+  {
+    targetId: 'tour-bank-list',
+    title: 'Salin Instan 1-Klik',
+    description: 'Gunakan tombol Salin untuk menyalin seluruh template ke clipboard komputer seketika tanpa perlu menyeleksi teks secara manual.',
+    placement: 'top',
+  },
+];
 
 export default function BankKontenPage() {
   const { user } = useAuth();
@@ -94,7 +116,7 @@ export default function BankKontenPage() {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+      <div id="tour-bank-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Bank Konten (Caption & Hashtag)</h1>
           <p style={{ color: '#64748b', fontSize: '0.88rem' }}>
@@ -109,7 +131,7 @@ export default function BankKontenPage() {
       </div>
 
       {/* Tabs & Filter Bar */}
-      <div className="uda-card" style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+      <div id="tour-bank-tabs" className="uda-card" style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
         <div style={{ display: 'flex', gap: 8, background: '#f8fafc', padding: 4, borderRadius: 8, border: '1px solid #e2e8f0' }}>
           <button
             onClick={() => setActiveTab('caption')}
@@ -163,7 +185,7 @@ export default function BankKontenPage() {
       </div>
 
       {/* Grid Kartu Template */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18 }}>
+      <div id="tour-bank-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18 }}>
         {filtered.map((item) => {
           const brand = brands.find((b) => b.id === item.brand_id) || DUMMY_BRANDS.find((b) => b.id === item.brand_id);
           return (
@@ -320,6 +342,8 @@ export default function BankKontenPage() {
           </div>
         </div>
       )}
+
+      <GuidedTour steps={bankTourSteps} tourKey="uda_tour_bank" />
     </div>
   );
 }

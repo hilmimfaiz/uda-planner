@@ -18,6 +18,28 @@ import {
 } from "@/lib/dummy-data";
 import { POST_STATUSES } from "@/lib/platforms";
 import { PostService } from "@/services/post.service";
+import { GuidedTour, TourStep } from "@/components/guided-tour";
+
+const papanTourSteps: TourStep[] = [
+  {
+    targetId: "tour-papan-header",
+    title: "Papan Status Konten (Kanban)",
+    description: "Pantau pipeline produksi konten tim Anda dari tahap pencetusan ide hingga konten berhasil dipublikasikan.",
+    placement: "bottom",
+  },
+  {
+    targetId: "tour-papan-board",
+    title: "5 Tahap Alur Kerja",
+    description: "Konten dikelompokkan ke dalam 5 status: Ide, Draft, Menunggu Review, Siap Posting, dan Sudah Posting. Setiap kolom menghitung total konten secara real-time.",
+    placement: "bottom",
+  },
+  {
+    targetId: "tour-papan-card",
+    title: "Interaksi Kartu & Drag-and-Drop",
+    description: "Tarik (drag) kartu postingan ke kolom lain untuk memindahkan status alur kerja seketika. Klik kartu untuk melihat atau mengedit detail lengkap.",
+    placement: "right",
+  },
+];
 
 export default function PapanKanbanPage() {
   const router = useRouter();
@@ -116,6 +138,7 @@ export default function PapanKanbanPage() {
       )}
 
       <div
+        id="tour-papan-header"
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -134,7 +157,19 @@ export default function PapanKanbanPage() {
       </div>
 
       {/* 5 Kolom Kanban Responsif */}
-      <div className="kanban-board-wrapper">
+      <div className="kanban-board-wrapper" style={{ position: "relative" }}>
+        {/* Target Spotlight Khusus Bagian Atas 5 Kolom (Hanya Header Status, Tidak Sampai Bawah) */}
+        <div
+          id="tour-papan-board"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 56,
+            pointerEvents: "none",
+          }}
+        />
         {columns.map((col) => {
           const colPosts = posts.filter((p) => p.status === col.id);
           return (
@@ -211,7 +246,7 @@ export default function PapanKanbanPage() {
                   flex: 1,
                 }}
               >
-                {colPosts.map((post) => {
+                {colPosts.map((post, postIdx) => {
                   const brand = DUMMY_BRANDS.find(
                     (b) => b.id === post.brand_id,
                   );
@@ -221,6 +256,7 @@ export default function PapanKanbanPage() {
                   return (
                     <div
                       key={post.id}
+                      id={col.id === "ide" && postIdx === 0 ? "tour-papan-card" : undefined}
                       draggable
                       onDragStart={(e) =>
                         e.dataTransfer.setData("text/plain", post.id)
@@ -353,6 +389,8 @@ export default function PapanKanbanPage() {
           );
         })}
       </div>
+
+      <GuidedTour steps={papanTourSteps} tourKey="uda_tour_papan" />
     </div>
   );
 }

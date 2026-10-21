@@ -16,11 +16,22 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const payment = await PaymentService.submitPayment({
+      userId: body.userId,
       accountId: body.accountId || 'acc-001',
       planId: body.planId,
+      planCode: body.planCode,
+      planDurationId: body.planDurationId,
+      durationLabel: body.durationLabel,
+      durationDays: body.durationDays,
       amount: body.amount,
+      senderName: body.senderName,
+      senderBank: body.senderBank,
+      targetBankName: body.targetBankName,
+      targetAccountNumber: body.targetAccountNumber,
+      targetAccountName: body.targetAccountName,
       paymentMethod: body.paymentMethod,
       proofUrl: body.proofUrl,
+      proofPath: body.proofPath,
       notes: body.notes,
     });
     return NextResponse.json({ success: true, data: payment }, { status: 201 });

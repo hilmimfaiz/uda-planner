@@ -175,7 +175,7 @@ let localPlans: EditablePlan[] = DUMMY_PLANS.map((p) => ({
 let localSettings: AppSettingsData = {
   bankName: 'BCA (Bank Central Asia)',
   accountNumber: '8839210928',
-  accountName: 'PT UdaCoding Digital Indonesia',
+  accountName: 'PT. Koding Teknologi Asia',
   adminWhatsapp: '6281234567890',
 };
 
@@ -261,21 +261,29 @@ export class AdminService {
     const supabase = createClient();
     if (supabase) {
       try {
-        const { data, error } = await supabase.from('payments' as any).select('*').order('created_at', { ascending: false });
-        if (!error && data && data.length > 0) {
-          const dbPayments: AdminPaymentItem[] = data.map((p: any) => ({
-            id: p.id,
-            userId: p.user_id,
-            user: p.sender_name || 'Pelanggan',
-            email: p.sender_name ? `${p.sender_name.toLowerCase().replace(/\s+/g, '')}@gmail.com` : 'pelanggan@udaplanner.id',
-            plan: (p.plan_code as any) || 'pro',
-            amount: p.amount || 49000,
-            bank: `${p.sender_bank || 'Transfer'} — A/N ${p.sender_name || 'Pelanggan'}`,
-            proof: p.proof_path || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-            status: p.status || 'pending',
-            date: new Date(p.created_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-            reason: p.admin_note,
-          }));
+        const [payRes, profRes] = await Promise.all([
+          supabase.from('payments' as any).select('*').order('created_at', { ascending: false }),
+          supabase.from('profiles' as any).select('id, full_name, email'),
+        ]);
+
+        if (!payRes.error && payRes.data && payRes.data.length > 0) {
+          const profMap = new Map((profRes.data || []).map((pr: any) => [pr.id, pr]));
+          const dbPayments: AdminPaymentItem[] = payRes.data.map((p: any) => {
+            const prof: any = profMap.get(p.user_id) || {};
+            return {
+              id: p.id,
+              userId: p.user_id,
+              user: p.sender_name || prof.full_name || 'Pelanggan',
+              email: prof.email || (p.sender_name ? `${p.sender_name.toLowerCase().replace(/\s+/g, '')}@gmail.com` : 'pelanggan@udaplanner.id'),
+              plan: (p.plan_code as any) || 'pro',
+              amount: p.amount || 49000,
+              bank: `${p.sender_bank || 'Transfer'} — A/N ${p.sender_name || prof.full_name || 'Pelanggan'}`,
+              proof: p.proof_path || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
+              status: p.status || 'pending',
+              date: new Date(p.created_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+              reason: p.admin_note,
+            };
+          });
 
           const dbIds = new Set(dbPayments.map((p) => p.id));
           const combined = [
@@ -462,6 +470,71 @@ export class AdminService {
     const currentStored = getAdminStorage<AdminUserItem[]>('uda_admin_users', localUsers);
     setAdminStorage('uda_admin_users', currentStored.map(updater));
     return true;
+  }
+
+  static async deleteUserPermanently(userIdOrAccountId: string, email?: string): Promise<{ success: boolean; message: string }> {
+    // 1. Panggil API route server untuk menghapus secara permanen dari Supabase Auth dan database
+    try {
+      await fetch(`/api/admin/users/${userIdOrAccountId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+    } catch (apiErr) {
+      console.warn('API route deleteUserPermanently error:', apiErr);
+    }
+
+    // 2. Direct database cleanup via Supabase client jika aktif di browser
+    const supabase = createClient();
+    if (supabase) {
+      try {
+        await Promise.allSettled([
+          supabase.from('posts' as any).delete().eq('created_by', userIdOrAccountId),
+          supabase.from('snippets' as any).delete().eq('created_by', userIdOrAccountId),
+          supabase.from('brand_members' as any).delete().eq('user_id', userIdOrAccountId),
+          supabase.from('brands' as any).delete().eq('owner_id', userIdOrAccountId),
+          supabase.from('payments' as any).delete().eq('user_id', userIdOrAccountId),
+          supabase.from('accounts' as any).delete().or(`user_id.eq.${userIdOrAccountId},id.eq.${userIdOrAccountId}`),
+          supabase.from('profiles' as any).delete().eq('id', userIdOrAccountId),
+        ]);
+        if (email) {
+          await supabase.from('profiles' as any).delete().eq('email', email);
+        }
+      } catch (dbErr) {
+        console.warn('Direct db delete fallback error:', dbErr);
+      }
+    }
+
+    // 3. Bersihkan memori dan LocalStorage
+    localUsers = localUsers.filter((u) => u.id !== userIdOrAccountId && u.userId !== userIdOrAccountId);
+    const currentStored = getAdminStorage<AdminUserItem[]>('uda_admin_users', localUsers);
+    const filteredStored = currentStored.filter((u) => u.id !== userIdOrAccountId && u.userId !== userIdOrAccountId);
+    setAdminStorage('uda_admin_users', filteredStored);
+
+    if (typeof window !== 'undefined') {
+      try {
+        // Hapus dari penyimpanan verifikasi admin
+        const storedVer = localStorage.getItem('uda_verifiable_users');
+        if (storedVer) {
+          const list = JSON.parse(storedVer);
+          if (Array.isArray(list)) {
+            const filtered = list.filter((u: any) => u.id !== userIdOrAccountId && u.userId !== userIdOrAccountId && u.email !== email);
+            localStorage.setItem('uda_verifiable_users', JSON.stringify(filtered));
+          }
+        }
+
+        // Hapus state onboarding user agar saat didaftarkan ulang murni fresh
+        localStorage.removeItem('uda_custom_avatar_' + userIdOrAccountId);
+        localStorage.removeItem('uda_profile_setup_done_' + userIdOrAccountId);
+        localStorage.removeItem('uda_has_logged_in_before_' + userIdOrAccountId);
+        localStorage.removeItem('uda_disable_auto_tour_' + userIdOrAccountId);
+      } catch (e) {}
+    }
+
+    return {
+      success: true,
+      message: 'Pengguna berhasil dihapus secara permanen. Email kini dapat didaftarkan kembali sebagai akun baru.',
+    };
   }
 
   // ==========================================

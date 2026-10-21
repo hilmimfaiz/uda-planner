@@ -25,6 +25,7 @@ import { uploadBrandLogo } from '@/lib/image-upload';
 import { BrandService } from '@/services/brand.service';
 import { ContentPillarService } from '@/services/content-pillar.service';
 import { useModal } from '@/contexts/modal-context';
+import { getSiteUrl } from '@/lib/site-url';
 
 export default function PengaturanBrandDetailPage() {
   const params = useParams();
@@ -105,7 +106,8 @@ export default function PengaturanBrandDetailPage() {
   const handleGenerateInvite = (e: React.FormEvent) => {
     e.preventDefault();
     const token = Math.random().toString(36).substring(2, 12);
-    const link = `http://localhost:3000/undangan/${token}`;
+    const siteUrl = getSiteUrl();
+    const link = `${siteUrl}/undangan/${token}`;
     setGeneratedInviteLink(link);
     showToast('Link undangan berhasil dibuat!');
   };

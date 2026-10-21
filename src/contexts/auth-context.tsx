@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useTransition } 
 import { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import { getSiteUrl } from '@/lib/site-url';
 
 export interface UserProfile {
   id: string;
@@ -29,8 +30,9 @@ interface AuthContextType {
   account: UserAccount | null;
   isLoading: boolean;
   isAdmin: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null; isAdmin?: boolean }>;
+  signIn: (email: string, password: string) => Promise<{ error: string | null; isAdmin?: boolean; needsOnboarding?: boolean }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; requiresEmailConfirmation: boolean }>;
+  signInWithGoogle: (targetPath?: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshUserData: () => Promise<void>;
 }
@@ -43,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [account, setAccount] = useState<UserAccount | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const supabase = createClient();
   const loadedUserIdRef = React.useRef<string | null>(null);
@@ -81,27 +83,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // 1. Proses Profil
       let finalProfile: UserProfile;
+      const googleFullName = currentUser.user_metadata?.full_name || currentUser.user_metadata?.name;
+      const googleAvatar = currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture;
+
+      // Cek apakah ada avatar custom yang tersimpan di localStorage
+      let localCustomAvatar: string | null = null;
+      try {
+        localCustomAvatar = localStorage.getItem('uda_custom_avatar_' + currentUser.id);
+      } catch (e) {}
+
+      const resolvedAvatar =
+        profRes.data?.avatar_url ||
+        localCustomAvatar ||
+        (googleAvatar && typeof googleAvatar === 'string' && googleAvatar.trim().length > 5 ? googleAvatar : null);
+
+      const isActuallyCompleted =
+        currentUser.user_metadata?.has_completed_onboarding === true ||
+        (typeof window !== 'undefined' && localStorage.getItem('uda_profile_setup_done_' + currentUser.id) === 'true');
+
       if (profRes.data) {
+        if (isActuallyCompleted) {
+          try {
+            localStorage.removeItem('uda_google_auth_pending');
+            localStorage.removeItem('uda_needs_profile_setup');
+            localStorage.setItem('uda_profile_setup_done_' + currentUser.id, 'true');
+            if (currentUser.user_metadata?.has_seen_dashboard_tour === true) {
+              localStorage.setItem('uda_has_logged_in_before_' + currentUser.id, 'true');
+              localStorage.setItem('uda_disable_auto_tour_' + currentUser.id, 'true');
+              localStorage.setItem('uda_user_is_new', 'false');
+            }
+          } catch (e) {}
+        } else {
+          // Profil ada tetapi belum menyelesaikan onboarding /profil-awal
+          try {
+            localStorage.setItem('uda_user_is_new', 'true');
+          } catch (e) {}
+        }
+
         finalProfile = {
           id: profRes.data.id,
           email: profRes.data.email || currentUser.email || '',
-          full_name: profRes.data.full_name || currentUser.user_metadata?.full_name || 'Pengguna UdaPlanner',
-          avatar_url: profRes.data.avatar_url,
+          full_name: profRes.data.full_name || googleFullName || 'Pengguna UdaPlanner',
+          avatar_url: resolvedAvatar,
           reminder_minutes: profRes.data.reminder_minutes ?? 15,
         };
       } else {
         const newProfile = {
           id: currentUser.id,
           email: currentUser.email || '',
-          full_name: currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'Pengguna UdaPlanner',
+          full_name: googleFullName || currentUser.email?.split('@')[0] || 'Pengguna UdaPlanner',
+          avatar_url: resolvedAvatar || null,
+          role: 'user',
           reminder_minutes: 15,
         };
         const { data: createdProf } = await (supabase.from('profiles' as any) as any).insert(newProfile).select().maybeSingle();
-        finalProfile = createdProf || newProfile;
+        finalProfile = createdProf ? { ...createdProf, avatar_url: resolvedAvatar || createdProf.avatar_url } : newProfile;
+
+        // Tandai sebagai user baru pada pendaftaran profil pertama kali
+        try {
+          localStorage.setItem('uda_user_is_new', 'true');
+        } catch (e) {}
       }
       setProfile(finalProfile);
       try {
         localStorage.setItem('uda_auth_profile', JSON.stringify(finalProfile));
+        if (finalProfile.avatar_url) {
+          localStorage.setItem('uda_custom_avatar_' + currentUser.id, finalProfile.avatar_url);
+        }
       } catch (e) {}
 
       // 2. Proses Akun
@@ -258,6 +306,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         localStorage.setItem('uda_auth_user', JSON.stringify(data.user));
       } catch (e) {}
+
       const loaded = await loadUserData(data.user);
 
       const isUserAdmin =
@@ -265,7 +314,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data.user.user_metadata?.role === 'admin' ||
         data.user.email?.toLowerCase() === 'admin@udaplanner.com';
 
-      return { error: null, isAdmin: isUserAdmin };
+      const needsOnboarding =
+        data.user.user_metadata?.has_completed_onboarding !== true &&
+        (typeof window !== 'undefined' ? localStorage.getItem('uda_profile_setup_done_' + data.user.id) !== 'true' : true);
+
+      if (!needsOnboarding) {
+        try {
+          if (data.user.user_metadata?.has_seen_dashboard_tour === true) {
+            localStorage.setItem('uda_user_is_new', 'false');
+            localStorage.setItem('uda_has_logged_in_before_' + data.user.id, 'true');
+            localStorage.setItem('uda_disable_auto_tour_' + data.user.id, 'true');
+          }
+        } catch (e) {}
+
+        if (!data.user.user_metadata?.has_logged_in_before && supabase) {
+          supabase.auth.updateUser({
+            data: { has_logged_in_before: true },
+          }).catch(() => {});
+        }
+      }
+
+      return { error: null, isAdmin: isUserAdmin, needsOnboarding };
     } catch (err: any) {
       return { error: err.message || 'Terjadi kesalahan sistem saat mencoba masuk.' };
     }
@@ -277,10 +346,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      const siteUrl = getSiteUrl();
+      const emailRedirectTo = `${siteUrl}/masuk?verified=true`;
+
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: {
+          emailRedirectTo,
           data: {
             full_name: fullName.trim(),
           },
@@ -319,6 +392,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    if (user?.id) {
+      try {
+        localStorage.setItem('uda_has_logged_in_before_' + user.id, 'true');
+        localStorage.setItem('uda_disable_auto_tour_' + user.id, 'true');
+        localStorage.setItem('uda_user_is_new', 'false');
+      } catch (e) {}
+    }
+
     try {
       localStorage.removeItem('uda_auth_user');
       localStorage.removeItem('uda_auth_profile');
@@ -333,6 +414,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null);
     setAccount(null);
     router.push('/masuk');
+  };
+
+  const signInWithGoogle = async (targetPath: string = '/app') => {
+    if (!supabase) {
+      return { error: 'Konfigurasi Supabase tidak ditemukan. Periksa file .env.local.' };
+    }
+
+    try {
+      const siteUrl = getSiteUrl();
+      const redirectTo = `${siteUrl}${targetPath}`;
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
+        },
+      });
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      return { error: null };
+    } catch (err: any) {
+      return { error: err.message || 'Gagal memulai autentikasi dengan akun Google.' };
+    }
   };
 
   const refreshUserData = async () => {
@@ -354,6 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAdmin,
         signIn,
         signUp,
+        signInWithGoogle,
         signOut,
         refreshUserData,
       }}

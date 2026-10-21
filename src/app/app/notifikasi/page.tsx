@@ -4,6 +4,22 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, Check, ArrowLeft } from 'lucide-react';
 import { DUMMY_NOTIFICATIONS } from '@/lib/dummy-data';
+import { GuidedTour, TourStep } from '@/components/guided-tour';
+
+const notifTourSteps: TourStep[] = [
+  {
+    targetId: 'tour-notif-header',
+    title: 'Pusat Notifikasi & Aktivitas',
+    description: 'Semua informasi jadwal tayang konten, pengingat alarm harian, dan pembaruan sistem akan muncul di sini.',
+    placement: 'bottom',
+  },
+  {
+    targetId: 'tour-notif-list',
+    title: 'Daftar Pesan & Tindakan',
+    description: 'Klik pada kartu notifikasi untuk langsung menuju detail postingan atau konten yang bersangkutan.',
+    placement: 'bottom',
+  },
+];
 
 export default function NotifikasiPage() {
   const router = useRouter();
@@ -15,7 +31,7 @@ export default function NotifikasiPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 680 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div id="tour-notif-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="btn-uda btn-uda-secondary btn-uda-sm" onClick={() => router.back()}>
             <ArrowLeft size={16} />
@@ -28,7 +44,7 @@ export default function NotifikasiPage() {
         </button>
       </div>
 
-      <div className="uda-card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div id="tour-notif-list" className="uda-card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {notifications.map((n) => (
           <div
             key={n.id}
@@ -58,6 +74,8 @@ export default function NotifikasiPage() {
           </div>
         ))}
       </div>
+
+      <GuidedTour steps={notifTourSteps} tourKey="uda_tour_notifikasi" />
     </div>
   );
 }

@@ -17,6 +17,28 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { createClient } from '@/lib/supabase/client';
+import { GuidedTour, TourStep } from '@/components/guided-tour';
+
+const akunTourSteps: TourStep[] = [
+  {
+    targetId: 'tour-akun-header',
+    title: 'Pusat Pengaturan Akun',
+    description: 'Kelola identitas profil, waktu pengingat postingan, preferensi notifikasi, dan keamanan sesi akun Anda.',
+    placement: 'bottom',
+  },
+  {
+    targetId: 'tour-akun-profile',
+    title: 'Profil & Foto Pengguna',
+    description: 'Perbarui nama lengkap dan unggah foto profil Anda. Foto ini akan muncul pada kartu penugasan tim dan dashboard.',
+    placement: 'bottom',
+  },
+  {
+    targetId: 'tour-akun-notif',
+    title: 'Pengingat Otomatis & Notifikasi',
+    description: 'Atur jeda waktu alarm sebelum konten tayang (misal 15 menit sebelumnya) dan izinkan push notification browser agar tidak melewatkan jadwal.',
+    placement: 'top',
+  },
+];
 
 export default function AkunPenggunaPage() {
   const router = useRouter();
@@ -139,6 +161,11 @@ export default function AkunPenggunaPage() {
       if (updateError) {
         showToast('Gagal menyimpan foto profil: ' + updateError.message);
       } else {
+        try {
+          if (finalAvatarUrl) {
+            localStorage.setItem('uda_custom_avatar_' + user.id, finalAvatarUrl);
+          }
+        } catch (e) {}
         await refreshUserData();
         showToast('Foto profil berhasil diperbarui!');
       }
@@ -168,6 +195,9 @@ export default function AkunPenggunaPage() {
       if (error) {
         showToast('Gagal menghapus foto profil: ' + error.message);
       } else {
+        try {
+          localStorage.removeItem('uda_custom_avatar_' + user.id);
+        } catch (e) {}
         await refreshUserData();
         showToast('Foto profil dihapus. Kembali menggunakan inisial.');
       }
@@ -225,6 +255,19 @@ export default function AkunPenggunaPage() {
 
   const initial = (fullName || user?.email || 'U').charAt(0).toUpperCase();
 
+  const [localAvatar, setLocalAvatar] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      try {
+        const stored = localStorage.getItem('uda_custom_avatar_' + user.id);
+        if (stored) setLocalAvatar(stored);
+      } catch (e) {}
+    }
+  }, [user]);
+
+  const currentAvatarUrl = profile?.avatar_url || localAvatar;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 840, width: '100%', margin: '0 auto' }}>
       {toastMessage && (
@@ -247,7 +290,7 @@ export default function AkunPenggunaPage() {
         </div>
       )}
 
-      <div>
+      <div id="tour-akun-header">
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Pengaturan Akun & Profil</h1>
         <p style={{ color: '#64748b', fontSize: '0.88rem' }}>
           Kelola profil pengguna terdaftar, foto profil, preferensi waktu pengingat jadwal, dan keamanan sesi.
@@ -255,7 +298,7 @@ export default function AkunPenggunaPage() {
       </div>
 
       {/* Profil User & Foto Profil */}
-      <div className="uda-card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div id="tour-akun-profile" className="uda-card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>Data Pengguna & Foto Profil</h3>
           <span style={{ fontSize: '0.75rem', padding: '3px 8px', borderRadius: 6, fontWeight: 700, background: '#f0fdf4', color: '#16a34a' }}>
@@ -267,10 +310,11 @@ export default function AkunPenggunaPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '16px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
           {/* Avatar Container with upload overlay */}
           <div style={{ position: 'relative', width: 76, height: 76, flexShrink: 0 }}>
-            {profile?.avatar_url ? (
+            {currentAvatarUrl ? (
               <img
-                src={profile.avatar_url}
+                src={currentAvatarUrl}
                 alt={fullName}
+                onError={() => setLocalAvatar(null)}
                 style={{
                   width: '100%',
                   height: '100%',
@@ -364,12 +408,12 @@ export default function AkunPenggunaPage() {
                 ) : (
                   <>
                     <Upload size={14} />
-                    <span>{profile?.avatar_url ? 'Ganti Foto' : 'Unggah Foto'}</span>
+                    <span>{currentAvatarUrl ? 'Ganti Foto' : 'Unggah Foto'}</span>
                   </>
                 )}
               </button>
 
-              {profile?.avatar_url && (
+              {currentAvatarUrl && (
                 <button
                   type="button"
                   onClick={handleRemoveAvatar}
@@ -431,7 +475,7 @@ export default function AkunPenggunaPage() {
       </div>
 
       {/* Pengingat Jadwal & Notifikasi Browser */}
-      <div className="uda-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div id="tour-akun-notif" className="uda-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>Pengingat Sebelum Jadwal Tayang</h3>
         <p style={{ fontSize: '0.82rem', color: '#64748b' }}>
           Pilih berapa menit sebelum jam tayang aplikasi akan memunculkan alarm pengingat:
@@ -594,6 +638,8 @@ export default function AkunPenggunaPage() {
           </div>
         </div>
       )}
+
+      <GuidedTour steps={akunTourSteps} tourKey="uda_tour_akun" />
     </div>
   );
 }

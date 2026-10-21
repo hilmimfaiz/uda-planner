@@ -11,6 +11,28 @@ import {
 } from "lucide-react";
 import { DUMMY_POSTS, DUMMY_BRANDS } from "@/lib/dummy-data";
 import { POST_STATUSES } from "@/lib/platforms";
+import { GuidedTour, TourStep } from "@/components/guided-tour";
+
+const gridTourSteps: TourStep[] = [
+  {
+    targetId: "tour-grid-header",
+    title: "Simulator Grid Instagram (3x3 Feed)",
+    description: "Visualisasikan bagaimana postingan yang direncanakan akan tersusun di feed Instagram brand Anda secara estetis sebelum dipublikasikan.",
+    placement: "bottom",
+  },
+  {
+    targetId: "tour-grid-controls",
+    title: "Pilih Brand & Rasio Aspek",
+    description: "Ganti brand yang ingin ditinjau dan ubah rasio tampilan antara format klasik 1:1 (Kotak) atau 4:5 (Portrait vertikal modern).",
+    placement: "bottom",
+  },
+  {
+    targetId: "tour-grid-feed",
+    title: "Kanvas Visual Interaktif (3 Grid Teratas)",
+    description: "Pratinjau susunan 3 postingan teratas feed Anda. Klik foto mana saja untuk langsung membuka dan mengedit detail caption serta jadwal tayangnya.",
+    placement: "bottom",
+  },
+];
 
 export default function GridInstagramPage() {
   const router = useRouter();
@@ -30,6 +52,7 @@ export default function GridInstagramPage() {
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Header */}
       <div
+        id="tour-grid-header"
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -50,6 +73,7 @@ export default function GridInstagramPage() {
 
         {/* Controls: Brand Selector, Ratio, and Plan Simulator */}
         <div
+          id="tour-grid-controls"
           style={{
             display: "flex",
             alignItems: "center",
@@ -231,7 +255,97 @@ export default function GridInstagramPage() {
               padding: 4,
             }}
           >
-            {igPosts.map((post) => {
+            {/* Baris 3 Grid Pertama (Target Spotlight Panduan) */}
+            <div
+              id="tour-grid-feed"
+              style={{
+                gridColumn: "1 / -1",
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 4,
+              }}
+            >
+              {igPosts.slice(0, 3).map((post) => {
+                const statusMeta = POST_STATUSES[post.status];
+                return (
+                  <div
+                    key={post.id}
+                    onClick={() => router.push(`/app/postingan/${post.id}`)}
+                    style={{
+                      position: "relative",
+                      aspectRatio: aspectRatio === "1:1" ? "1 / 1" : "4 / 5",
+                      cursor: "pointer",
+                      overflow: "hidden",
+                      background: "#1e293b",
+                    }}
+                  >
+                    <img
+                      src={
+                        post.media_url ||
+                        "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400"
+                      }
+                      alt=""
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        transition: "transform 0.2s ease",
+                      }}
+                    />
+
+                    {/* Icon Carousel or Reels */}
+                    {post.content_type === "carousel" && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 6,
+                          right: 6,
+                          color: "white",
+                          background: "rgba(0,0,0,0.5)",
+                          padding: 4,
+                          borderRadius: 4,
+                        }}
+                      >
+                        <Layers size={13} />
+                      </div>
+                    )}
+
+                    {/* Status Badge jika belum tayang */}
+                    {post.status !== "terposting" && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          bottom: 6,
+                          left: 6,
+                          fontSize: "0.62rem",
+                          fontWeight: 700,
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          background: "rgba(15, 23, 42, 0.85)",
+                          color: statusMeta.color,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 3,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 4,
+                            height: 4,
+                            borderRadius: "50%",
+                            backgroundColor: statusMeta.color,
+                          }}
+                        />
+                        <span>{statusMeta.label}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Sisa Grid Postingan Berikutnya */}
+            {igPosts.slice(3).map((post) => {
               const statusMeta = POST_STATUSES[post.status];
               return (
                 <div
@@ -311,6 +425,8 @@ export default function GridInstagramPage() {
           </div>
         </div>
       </div>
+
+      <GuidedTour steps={gridTourSteps} tourKey="uda_tour_grid" />
     </div>
   );
 }

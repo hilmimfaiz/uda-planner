@@ -1,7 +1,24 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CreditCard, Eye, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
+import {
+  CreditCard,
+  Eye,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  AlertCircle,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  ExternalLink,
+  X,
+  Move,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+} from 'lucide-react';
 import { AdminService, AdminPaymentItem } from '@/services/admin.service';
 import { useModal } from '@/contexts/modal-context';
 
@@ -12,9 +29,41 @@ export default function AdminPembayaranPage() {
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [selectedProof, setSelectedProof] = useState<PaymentItem | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = React.useRef({ x: 0, y: 0 });
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX - panOffset.x,
+      y: e.clientY - panOffset.y,
+    };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    setPanOffset({
+      x: Math.round(e.clientX - dragStartRef.current.x),
+      y: Math.round(e.clientY - dragStartRef.current.y),
+    });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+    } catch (err) {}
+    setIsDragging(false);
+  };
+
+  const nudge = (dx: number, dy: number) => {
+    setPanOffset((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+  };
 
   React.useEffect(() => {
     AdminService.getPayments().then((data) => {
@@ -213,6 +262,7 @@ export default function AdminPembayaranPage() {
                         className="btn-uda btn-uda-secondary btn-uda-sm"
                         onClick={() => {
                           setSelectedProof(p);
+                          setZoomLevel(1);
                           setShowRejectInput(false);
                           setRejectReason('');
                         }}
@@ -235,26 +285,400 @@ export default function AdminPembayaranPage() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.6)',
+            background: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 100,
             padding: 20,
           }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedProof(null);
+              setZoomLevel(1);
+              setShowRejectInput(false);
+            }
+          }}
         >
-          <div className="uda-card" style={{ maxWidth: 500, width: '100%', padding: 24, maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: 6 }}>Periksa Bukti Transfer</h3>
-            <div style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: 14 }}>
-              {selectedProof.user} ({selectedProof.email}) • Transfer: <strong>Rp {selectedProof.amount.toLocaleString('id-ID')}</strong>
+          <div
+            className="uda-card"
+            style={{
+              maxWidth: 620,
+              width: '100%',
+              padding: '24px 26px',
+              maxHeight: '92vh',
+              overflowY: 'auto',
+              position: 'relative',
+              borderRadius: 16,
+              border: '2.5px solid #0f172a',
+              boxShadow: '8px 8px 0px #0f172a',
+              backgroundColor: '#ffffff',
+            }}
+          >
+            {/* Tombol Tutup X di Kanan Atas */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedProof(null);
+                setZoomLevel(1);
+                setShowRejectInput(false);
+              }}
+              style={{
+                position: 'absolute',
+                top: 18,
+                right: 18,
+                background: 'none',
+                border: 'none',
+                color: '#64748b',
+                cursor: 'pointer',
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 6,
+              }}
+              title="Tutup Modal"
+            >
+              <X size={20} />
+            </button>
+
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>
+              Periksa Bukti Transfer
+            </h3>
+            <div style={{ fontSize: '0.86rem', color: '#64748b', marginBottom: 14 }}>
+              <span style={{ fontWeight: 700, color: '#0f172a' }}>{selectedProof.user}</span> ({selectedProof.email}) • Transfer:{' '}
+              <strong style={{ color: '#16a34a', fontSize: '0.92rem' }}>Rp {selectedProof.amount.toLocaleString('id-ID')}</strong>
             </div>
 
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
-              <img
-                src={selectedProof.proof}
-                alt="Bukti Transfer"
-                style={{ width: '100%', maxHeight: 320, objectFit: 'contain', background: '#0f172a', display: 'block' }}
-              />
+            {/* Toolbar Kontrol Zoom */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                backgroundColor: '#f8fafc',
+                border: '2px solid #0f172a',
+                borderRadius: '10px 10px 0 0',
+                padding: '8px 12px',
+                borderBottom: 'none',
+                gap: 8,
+              }}
+            >
+              {/* Tombol Zoom Out */}
+              <button
+                type="button"
+                title="Perkecil Gambar (Zoom Out)"
+                onClick={() => setZoomLevel((z) => Math.max(0.5, +(z - 0.25).toFixed(2)))}
+                disabled={zoomLevel <= 0.5}
+                style={{
+                  background: '#ffffff',
+                  border: '1.5px solid #0f172a',
+                  boxShadow: '1.5px 1.5px 0px #0f172a',
+                  borderRadius: 6,
+                  padding: '4px 10px',
+                  cursor: zoomLevel <= 0.5 ? 'not-allowed' : 'pointer',
+                  opacity: zoomLevel <= 0.5 ? 0.45 : 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  color: '#0f172a',
+                }}
+              >
+                <ZoomOut size={14} />
+                <span>Zoom Out</span>
+              </button>
+
+              {/* Indikator Persentase Zoom */}
+              <span
+                style={{
+                  fontSize: '0.78rem',
+                  fontWeight: 900,
+                  color: '#0f172a',
+                  padding: '3px 9px',
+                  background: '#ffffff',
+                  borderRadius: 6,
+                  border: '1.5px solid #0f172a',
+                  minWidth: 54,
+                  textAlign: 'center',
+                }}
+              >
+                {Math.round(zoomLevel * 100)}%
+              </span>
+
+              {/* Tombol Zoom In */}
+              <button
+                type="button"
+                title="Perbesar Gambar (Zoom In)"
+                onClick={() => setZoomLevel((z) => Math.min(3, +(z + 0.25).toFixed(2)))}
+                disabled={zoomLevel >= 3}
+                style={{
+                  background: '#16a34a',
+                  border: '1.5px solid #0f172a',
+                  boxShadow: '1.5px 1.5px 0px #0f172a',
+                  borderRadius: 6,
+                  padding: '4px 10px',
+                  cursor: zoomLevel >= 3 ? 'not-allowed' : 'pointer',
+                  opacity: zoomLevel >= 3 ? 0.45 : 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  color: '#ffffff',
+                }}
+              >
+                <ZoomIn size={14} />
+                <span>Zoom In</span>
+              </button>
+
+              {/* Tombol Reset Zoom */}
+              {(zoomLevel !== 1 || panOffset.x !== 0 || panOffset.y !== 0) && (
+                <button
+                  type="button"
+                  title="Kembalikan ke Ukuran dan Posisi Semula"
+                  onClick={() => {
+                    setZoomLevel(1);
+                    setPanOffset({ x: 0, y: 0 });
+                  }}
+                  style={{
+                    background: '#ffffff',
+                    border: '1.5px solid #0f172a',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    color: '#475569',
+                  }}
+                >
+                  <RotateCcw size={12} />
+                  <span>Reset</span>
+                </button>
+              )}
+            </div>
+
+            {/* Area Tampilan Gambar Interaktif (Bisa Digeser Bebas & Di-Zoom) */}
+            <div
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              style={{
+                border: '2px solid #0f172a',
+                borderRadius: '0 0 10px 10px',
+                overflow: 'hidden',
+                marginBottom: 16,
+                height: 400,
+                backgroundColor: '#020617',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                cursor: isDragging ? 'grabbing' : 'grab',
+                userSelect: 'none',
+                touchAction: 'none',
+              }}
+            >
+              {/* Layer Gambar yang Digeser (Pan) dan Diperbesar (Zoom) */}
+              <div
+                style={{
+                  transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0)`,
+                  transition: isDragging ? 'none' : 'transform 0.12s ease-out',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  pointerEvents: 'none',
+                }}
+              >
+                <img
+                  src={selectedProof.proof}
+                  alt="Bukti Transfer"
+                  style={{
+                    transform: `scale(${zoomLevel})`,
+                    transformOrigin: 'center center',
+                    transition: 'transform 0.15s ease-out',
+                    maxWidth: '90%',
+                    maxHeight: 340,
+                    objectFit: 'contain',
+                    display: 'block',
+                    borderRadius: 4,
+                    userSelect: 'none',
+                    pointerEvents: 'none',
+                  }}
+                  draggable={false}
+                />
+              </div>
+
+              {/* Pad Tombol Geser Arah (D-Pad Navigasi Cepat) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 12,
+                  right: 12,
+                  backgroundColor: 'rgba(15, 23, 42, 0.88)',
+                  border: '1.5px solid #334155',
+                  borderRadius: 10,
+                  padding: 6,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 3,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                  backdropFilter: 'blur(6px)',
+                  zIndex: 10,
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', marginBottom: 2 }}>
+                  Geser Gambar
+                </div>
+                {/* Tombol Atas */}
+                <button
+                  type="button"
+                  title="Geser ke Atas"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    nudge(0, 60);
+                  }}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 6,
+                    background: '#1e293b',
+                    border: '1px solid #475569',
+                    color: '#f8fafc',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <ArrowUp size={15} />
+                </button>
+                {/* Baris Kiri, Tengah, Kanan */}
+                <div style={{ display: 'flex', gap: 3 }}>
+                  <button
+                    type="button"
+                    title="Geser ke Kiri"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      nudge(60, 0);
+                    }}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 6,
+                      background: '#1e293b',
+                      border: '1px solid #475569',
+                      color: '#f8fafc',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <ArrowLeft size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Kembalikan ke Posisi Tengah"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPanOffset({ x: 0, y: 0 });
+                    }}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 6,
+                      background: '#16a34a',
+                      border: '1px solid #0f172a',
+                      color: '#ffffff',
+                      cursor: 'pointer',
+                      fontSize: '0.68rem',
+                      fontWeight: 900,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    ●
+                  </button>
+                  <button
+                    type="button"
+                    title="Geser ke Kanan"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      nudge(-60, 0);
+                    }}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 6,
+                      background: '#1e293b',
+                      border: '1px solid #475569',
+                      color: '#f8fafc',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <ArrowRight size={15} />
+                  </button>
+                </div>
+                {/* Tombol Bawah */}
+                <button
+                  type="button"
+                  title="Geser ke Bawah"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    nudge(0, -60);
+                  }}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 6,
+                    background: '#1e293b',
+                    border: '1px solid #475569',
+                    color: '#f8fafc',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <ArrowDown size={15} />
+                </button>
+              </div>
+
+              {/* Petunjuk Interaktif di Kiri Bawah */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 12,
+                  left: 12,
+                  backgroundColor: 'rgba(15, 23, 42, 0.8)',
+                  color: '#e2e8f0',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  backdropFilter: 'blur(4px)',
+                  border: '1px solid #334155',
+                  pointerEvents: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Move size={13} style={{ color: '#22c55e' }} />
+                <span>Klik & Tahan Mouse untuk Menggeser</span>
+              </div>
             </div>
 
             {showRejectInput && (
@@ -280,6 +704,7 @@ export default function AdminPembayaranPage() {
                 style={{ flex: 1 }}
                 onClick={() => {
                   setSelectedProof(null);
+                  setZoomLevel(1);
                   setShowRejectInput(false);
                 }}
               >
@@ -300,7 +725,10 @@ export default function AdminPembayaranPage() {
                       <button
                         className="btn-uda btn-uda-primary"
                         style={{ flex: 1 }}
-                        onClick={() => handleApprove(selectedProof.id)}
+                        onClick={() => {
+                          handleApprove(selectedProof.id);
+                          setZoomLevel(1);
+                        }}
                       >
                         Setujui Paket
                       </button>
@@ -309,7 +737,10 @@ export default function AdminPembayaranPage() {
                     <button
                       className="btn-uda btn-uda-danger"
                       style={{ flex: 1 }}
-                      onClick={() => handleReject(selectedProof.id)}
+                      onClick={() => {
+                        handleReject(selectedProof.id);
+                        setZoomLevel(1);
+                      }}
                     >
                       Konfirmasi Tolak
                     </button>

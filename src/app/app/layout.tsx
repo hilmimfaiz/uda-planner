@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Calendar as CalendarIcon,
@@ -70,6 +71,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [isLoading, user, profile, pathname, router]);
 
+  // Kunci admin agar hanya berada di panel admin (/admin)
+  useEffect(() => {
+    if (!isLoading && user && isAdmin) {
+      router.replace('/admin');
+    }
+  }, [isLoading, user, isAdmin, router]);
+
+  // Arahkan ke pengisian profil awal jika pengguna belum melengkapi profil
+  useEffect(() => {
+    if (!isLoading && user) {
+      if (isAdmin) return;
+      try {
+        const hasCompletedOnboarding =
+          user.user_metadata?.has_completed_onboarding === true ||
+          localStorage.getItem('uda_profile_setup_done_' + user.id) === 'true';
+
+        // Jika belum melengkapi profil awal:
+        if (!hasCompletedOnboarding) {
+          router.replace('/profil-awal');
+          return;
+        }
+
+        // Jika sudah melengkapi profil:
+        localStorage.removeItem('uda_google_auth_pending');
+        localStorage.removeItem('uda_needs_profile_setup');
+      } catch (e) {}
+    }
+  }, [isLoading, user, isAdmin, router]);
+
   const selectedBrand =
     selectedBrandId === 'all'
       ? null
@@ -94,6 +124,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const displayName = profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Pengguna UdaPlanner';
   const initial = displayName.charAt(0).toUpperCase();
 
+  const [localAvatar, setLocalAvatar] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      try {
+        const stored = localStorage.getItem('uda_custom_avatar_' + user.id);
+        if (stored) setLocalAvatar(stored);
+      } catch (e) {}
+    }
+  }, [user]);
+
+  const currentAvatarUrl = profile?.avatar_url || localAvatar;
+
+  if (!isLoading && user && isAdmin) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+        <div style={{ textAlign: 'center' }}>
+          <Loader2 className="animate-spin" size={32} style={{ color: '#16a34a', margin: '0 auto 12px' }} />
+          <p style={{ fontWeight: 700, color: '#0f172a' }}>Mengalihkan ke Panel Admin...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-layout">
       {/* Sidebar Desktop */}
@@ -116,23 +170,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 : pathname.startsWith(item.href);
             const Icon = item.icon;
             return (
-              <button
+              <Link
                 key={item.href}
+                href={item.href}
                 className={`nav-item-btn ${isActive ? 'active' : ''}`}
-                onClick={() => router.push(item.href)}
                 title={item.name}
               >
                 <Icon size={18} />
                 <span>{item.name}</span>
-              </button>
+              </Link>
             );
           })}
         </nav>
 
         <div className="sidebar-admin-bottom">
-          <button
+          <Link
+            href="/app/langganan"
             className={`nav-item-btn ${pathname === '/app/langganan' ? 'active' : ''}`}
-            onClick={() => router.push('/app/langganan')}
             title={`Langganan (${account?.plan_code?.toUpperCase() || 'FREE'})`}
           >
             <CreditCard size={17} />
@@ -140,28 +194,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <span style={{ marginLeft: 'auto', fontSize: '0.7rem', padding: '2px 6px', background: '#f0fdf4', color: '#16a34a', borderRadius: 4, fontWeight: 700 }}>
               {account?.plan_code?.toUpperCase() || 'FREE'}
             </span>
-          </button>
+          </Link>
 
-          <button
+          <Link
+            href="/app/akun"
             className={`nav-item-btn ${pathname === '/app/akun' ? 'active' : ''}`}
-            onClick={() => router.push('/app/akun')}
             title="Akun & Profil"
           >
             <User size={17} />
             <span>Akun & Profil</span>
-          </button>
+          </Link>
 
           {/* Panel Admin hanya untuk administrator */}
           {isAdmin && (
-            <button
+            <Link
+              href="/admin"
               className={`nav-item-btn ${pathname.startsWith('/admin') ? 'active' : ''}`}
-              onClick={() => router.push('/admin')}
               style={{ color: '#0f172a' }}
               title="Panel Admin"
             >
               <Shield size={17} style={{ color: '#16a34a' }} />
               <span>Panel Admin</span>
-            </button>
+            </Link>
           )}
 
           {/* Tombol Logout Cepat */}
@@ -272,13 +326,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           <div className="topbar-right">
             {/* Tombol Hijau + Postingan */}
-            <button
+            <Link
+              href="/app/postingan/baru"
               className="btn-uda btn-uda-primary btn-uda-sm"
-              onClick={() => router.push('/app/postingan/baru')}
+              style={{ textDecoration: 'none' }}
             >
               <Plus size={16} />
               <span>+ Postingan</span>
-            </button>
+            </Link>
 
             {/* Notification Bell */}
             <div style={{ position: 'relative' }}>
@@ -368,10 +423,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               onClick={() => router.push('/app/akun')}
               title="Buka Pengaturan Akun"
             >
-              {profile?.avatar_url ? (
+              {currentAvatarUrl ? (
                 <img
-                  src={profile.avatar_url}
+                  src={currentAvatarUrl}
                   alt={displayName}
+                  onError={() => setLocalAvatar(null)}
                   style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }}
                 />
               ) : (
@@ -412,40 +468,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Bottom Navigation (Lebar HP 375px) */}
       <nav className="mobile-bottom-nav">
-        <button
+        <Link
+          href="/app"
           className={`mobile-nav-item ${pathname === '/app' ? 'active' : ''}`}
-          onClick={() => router.push('/app')}
         >
           <LayoutDashboard size={18} />
           <span>Beranda</span>
-        </button>
-        <button
+        </Link>
+        <Link
+          href="/app/kalender"
           className={`mobile-nav-item ${pathname === '/app/kalender' ? 'active' : ''}`}
-          onClick={() => router.push('/app/kalender')}
         >
           <CalendarIcon size={18} />
           <span>Kalender</span>
-        </button>
-        <button
+        </Link>
+        <Link
+          href="/app/postingan/baru"
           className="mobile-nav-center-plus"
-          onClick={() => router.push('/app/postingan/baru')}
         >
           <Plus size={22} />
-        </button>
-        <button
+        </Link>
+        <Link
+          href="/app/papan"
           className={`mobile-nav-item ${pathname === '/app/papan' ? 'active' : ''}`}
-          onClick={() => router.push('/app/papan')}
         >
           <Kanban size={18} />
           <span>Papan</span>
-        </button>
-        <button
+        </Link>
+        <Link
+          href="/app/brand"
           className={`mobile-nav-item ${pathname === '/app/brand' ? 'active' : ''}`}
-          onClick={() => router.push('/app/brand')}
         >
           <Building size={18} />
           <span>Lainnya</span>
-        </button>
+        </Link>
       </nav>
 
       {/* Modal Pop-up Konfirmasi Logout */}
@@ -471,18 +527,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               width: '100%',
               padding: '30px 24px',
               textAlign: 'center',
-              borderRadius: 16,
+              borderRadius: 14,
+              border: '3px solid #0f172a',
+              boxShadow: '6px 6px 0px #0f172a',
               background: '#ffffff',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
             }}
           >
             <div
               style={{
                 width: 58,
                 height: 58,
-                borderRadius: '50%',
+                borderRadius: 12,
                 background: '#fee2e2',
                 color: '#dc2626',
+                border: '2px solid #0f172a',
+                boxShadow: '2.5px 2.5px 0px #0f172a',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

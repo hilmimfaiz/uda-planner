@@ -22,6 +22,7 @@ import { BrandService } from '@/services/brand.service';
 import { SnippetService } from '@/services/snippet.service';
 import { useAuth } from '@/contexts/auth-context';
 import { useModal } from '@/contexts/modal-context';
+import { GuidedTour, TourStep } from '@/components/guided-tour';
 
 export default function PostEditorDetailPage() {
   const params = useParams();
@@ -205,8 +206,45 @@ END:VCALENDAR`;
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
+  // Langkah Panduan Interaktif Editor Postingan
+  const postinganTourSteps: TourStep[] = [
+    {
+      targetId: 'tour-editor-header',
+      title: 'Editor Detail Postingan',
+      description: 'Kelola informasi konten, periksa status postingan saat ini, dan simpan postingan Anda ke kalender.',
+      placement: 'bottom',
+    },
+    {
+      targetId: 'tour-editor-form',
+      title: 'Formulir Konten & Jadwal',
+      description: 'Tentukan judul internal, pilih akun brand bisnis, tipe format konten (Feed, Carousel, Reels, Story), serta jadwalkan tanggal dan jam tayang.',
+      placement: 'right',
+    },
+    {
+      targetId: 'tour-editor-caption',
+      title: 'Caption & Hashtag Cerdas',
+      description: 'Tulis caption dengan indikator batas karakter real-time dan sisipkan kumpulan hashtag otomatis dari Bank Konten.',
+      placement: 'top',
+    },
+    {
+      targetId: 'tour-editor-preview',
+      title: 'Pratinjau Visual Sosmed',
+      description: 'Lihat simulasi visual postingan persis seperti saat tampil di feed media sosial Anda sebelum benar-benar dipublikasikan.',
+      placement: 'left',
+    },
+    {
+      targetId: 'tour-editor-actions',
+      title: 'Aksi Cepat "Saat Posting"',
+      description: 'Salin caption dan hashtag dengan 1-klik, tambahkan ke Google Calendar, unduh file .ics, atau bagikan langsung ke WhatsApp.',
+      placement: 'top',
+    },
+  ];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* GUIDED TOUR POSTINGAN */}
+      <GuidedTour steps={postinganTourSteps} tourKey="uda_tour_postingan" />
+
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -229,7 +267,7 @@ END:VCALENDAR`;
       )}
 
       {/* Top Action Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div id="tour-editor-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button className="btn-uda btn-uda-secondary btn-uda-sm" onClick={() => router.back()}>
           <ArrowLeft size={16} />
           <span>Kembali</span>
@@ -257,7 +295,7 @@ END:VCALENDAR`;
       {/* Desktop 2-Kolom Layout Sesuai PRD Bab 8 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(420px, 1.4fr) minmax(360px, 1fr)', gap: 24 }}>
         {/* KOLOM KIRI: FORM EDITOR */}
-        <div className="uda-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div id="tour-editor-form" className="uda-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>Form Editor Konten</h2>
 
           {/* Judul Internal */}
@@ -324,7 +362,7 @@ END:VCALENDAR`;
           </div>
 
           {/* Caption dengan Penghitung Karakter */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div id="tour-editor-caption" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Caption Postingan</label>
               <span
@@ -403,7 +441,7 @@ END:VCALENDAR`;
         {/* KOLOM KANAN: PRATINJAU SOSMED & KARTU AKSI */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Pratinjau Sosmed (Feed Mockup) */}
-          <div className="uda-card" style={{ padding: 18 }}>
+          <div id="tour-editor-preview" className="uda-card" style={{ padding: 18 }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: 12, color: '#0f172a' }}>
               Pratinjau Feed Media Sosial
             </h3>
@@ -500,7 +538,7 @@ END:VCALENDAR`;
           </div>
 
           {/* Kartu "Saat Posting" Sesuai PRD Bab 8 */}
-          <div className="uda-card" style={{ padding: 18 }}>
+          <div id="tour-editor-actions" className="uda-card" style={{ padding: 18 }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: 12, color: '#0f172a' }}>
               Aksi Cepat "Saat Posting"
             </h3>

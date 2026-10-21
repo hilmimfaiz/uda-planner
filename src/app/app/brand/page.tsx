@@ -23,6 +23,28 @@ import { createClient } from '@/lib/supabase/client';
 import { uploadBrandLogo } from '@/lib/image-upload';
 import { BrandService } from '@/services/brand.service';
 import { useModal } from '@/contexts/modal-context';
+import { GuidedTour, TourStep } from '@/components/guided-tour';
+
+const brandTourSteps: TourStep[] = [
+  {
+    targetId: 'tour-brand-header',
+    title: 'Manajemen Akun Brand',
+    description: 'Kelola seluruh workspace brand media sosial Anda di sini. Atur pilar konten dan undang anggota tim untuk berkolaborasi.',
+    placement: 'bottom',
+  },
+  {
+    targetId: 'tour-brand-grid',
+    title: 'Koleksi Kartu Brand',
+    description: 'Setiap brand memiliki warna identitas, logo, daftar pilar konten, serta jumlah postingan aktif tersendiri.',
+    placement: 'top',
+  },
+  {
+    targetId: 'tour-brand-first-card',
+    title: 'Ubah Logo & Buka Pengaturan',
+    description: 'Arahkan kursor ke foto logo untuk menggantinya secara instan, atau klik kartu brand untuk masuk ke pengaturan detail dan undang tim.',
+    placement: 'right',
+  },
+];
 
 export default function DaftarBrandPage() {
   const router = useRouter();
@@ -148,7 +170,7 @@ export default function DaftarBrandPage() {
       />
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+      <div id="tour-brand-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Manajemen Akun Brand</h1>
           <p style={{ color: '#64748b', fontSize: '0.88rem' }}>
@@ -172,13 +194,14 @@ export default function DaftarBrandPage() {
       </div>
 
       {/* Grid Kartu Brand Responsif */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 290px), 1fr))', gap: 20 }}>
-        {brands.map((b) => {
+      <div id="tour-brand-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 290px), 1fr))', gap: 20 }}>
+        {brands.map((b, bIdx) => {
           const isUpdatingThis = updatingBrandId === b.id;
 
           return (
             <div
               key={b.id}
+              id={bIdx === 0 ? "tour-brand-first-card" : undefined}
               className="uda-card"
               style={{
                 display: 'flex',
@@ -485,6 +508,8 @@ export default function DaftarBrandPage() {
           </div>
         </div>
       )}
+
+      <GuidedTour steps={brandTourSteps} tourKey="uda_tour_brand" />
     </div>
   );
 }

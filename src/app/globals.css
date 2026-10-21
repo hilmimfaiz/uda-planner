@@ -7,43 +7,45 @@
 /* Font didefinisikan dengan preconnect di layout untuk loading instan tanpa render-blocking */
 
 :root {
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: var(--font-sans), 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-mono), 'JetBrains Mono', monospace;
 
-  /* Brand Colors - Hijau UdaCoding */
+  /* Brand Colors - Hijau UdaCoding Tetap Dipertahankan */
   --primary: #16a34a;
   --primary-hover: #15803d;
   --primary-light: #f0fdf4;
-  --primary-border: #bbf7d0;
+  --primary-border: #0f172a;
 
-  /* Neutrals & Surfaces */
-  --bg-app: #ffffff;
-  --bg-content: #f8fafc;
+  /* Neo-Brutalism Retro Surfaces & Borders */
+  --bg-app: #fcfbf9;
+  --bg-content: #f8f6f0;
   --bg-card: #ffffff;
-  --border-color: #e2e8f0;
-  --border-subtle: #f1f5f9;
+  --border-color: #0f172a;
+  --border-subtle: #0f172a;
 
   --text-main: #0f172a;
-  --text-secondary: #64748b;
-  --text-muted: #94a3b8;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
 
   /* Status Colors Sesuai PRD */
-  --status-ide: #94a3b8;
-  --status-draft: #3b82f6;
-  --status-review: #f59e0b;
+  --status-ide: #64748b;
+  --status-draft: #2563eb;
+  --status-review: #d97706;
   --status-siap: #16a34a;
-  --status-terposting: #475569;
+  --status-terposting: #334155;
   --status-terlewat: #dc2626;
 
-  /* Shadows & Radii */
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+  /* Neo-Brutalism Hard Offset Shadows (0 Blur) */
+  --shadow-sm: 2px 2px 0px #0f172a;
+  --shadow-md: 4px 4px 0px #0f172a;
+  --shadow-lg: 6px 6px 0px #0f172a;
+  --shadow-green: 4px 4px 0px #16a34a;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  /* Retro Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 
   /* Responsive Spacing Tokens */
   --page-padding-x: 28px;
@@ -67,6 +69,10 @@
   }
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -74,7 +80,7 @@
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--bg-content);
   color: var(--text-main);
   min-height: 100vh;
@@ -108,7 +114,7 @@ body {
 .app-sidebar {
   width: 250px;
   background: #ffffff;
-  border-right: 1px solid var(--border-color);
+  border-right: 2.5px solid var(--border-color);
   display: flex;
   flex-direction: column;
   position: sticky;
@@ -126,12 +132,12 @@ body {
 .sidebar-admin {
   background: #0f172a !important;
   color: #f8fafc !important;
-  border-right: 1px solid #1e293b !important;
+  border-right: 2.5px solid #000000 !important;
 }
 
 .sidebar-brand-header {
   padding: 18px 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 2.5px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -173,30 +179,31 @@ body {
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background: #f8fafc;
-  color: var(--text-secondary);
+  border: 1.5px solid var(--border-color);
+  background: #ffffff;
+  color: var(--text-main);
+  box-shadow: 1.5px 1.5px 0px var(--border-color);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.12s ease;
   flex-shrink: 0;
 }
 
 .sidebar-toggle-btn:hover {
   background: #f1f5f9;
-  color: var(--text-main);
-  border-color: #cbd5e1;
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0px var(--border-color);
 }
 
 .sidebar-admin .sidebar-toggle-btn {
   background: #1e293b;
-  border-color: #334155;
-  color: #94a3b8;
+  border-color: #4ade80;
+  color: #4ade80;
+  box-shadow: 1.5px 1.5px 0px #16a34a;
 }
 
 .sidebar-admin .sidebar-toggle-btn:hover {
   background: #334155;
   color: #f8fafc;
-  border-color: #475569;
 }
 
 .logo-symbol {
@@ -208,8 +215,10 @@ body {
   align-items: center;
   justify-content: center;
   color: white;
-  font-weight: 800;
+  font-weight: 900;
   font-size: 1.15rem;
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
 }
 
 .logo-text-title {
@@ -251,11 +260,11 @@ body {
   color: var(--text-secondary);
   text-decoration: none;
   font-size: 0.88rem;
-  font-weight: 600;
+  font-weight: 700;
   background: transparent;
-  border: none;
+  border: 2px solid transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.12s ease;
   width: 100%;
   text-align: left;
 }
@@ -263,25 +272,36 @@ body {
 .nav-item-btn:hover {
   background: #f1f5f9;
   color: var(--text-main);
+  border-color: var(--border-color);
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0px var(--border-color);
 }
 
 .nav-item-btn.active {
-  background: var(--primary-light);
-  color: var(--primary);
+  background: #dcfce7;
+  color: #15803d;
+  border: 2px solid var(--border-color);
+  box-shadow: 3px 3px 0px var(--border-color);
+  transform: translate(-1px, -1px);
 }
 
 .sidebar-admin .nav-item-btn {
   color: #94a3b8;
+  border: 2px solid transparent;
 }
 
 .sidebar-admin .nav-item-btn:hover {
   background: #1e293b;
   color: #f8fafc;
+  border-color: #4ade80;
+  box-shadow: 2px 2px 0px #16a34a;
 }
 
 .sidebar-admin .nav-item-btn.active {
-  background: #16a34a22;
-  color: #4ade80;
+  background: #16a34a;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  box-shadow: 3px 3px 0px #ffffff;
 }
 
 .nav-badge-count {
@@ -401,7 +421,7 @@ body {
 .app-topbar {
   height: 64px;
   background: #ffffff;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 2.5px solid var(--border-color);
   padding: 0 28px;
   display: flex;
   align-items: center;
@@ -421,14 +441,21 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  background: #f8fafc;
-  border: 1px solid var(--border-color);
+  padding: 6px 14px;
+  background: #ffffff;
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
   border-radius: var(--radius-md);
   font-size: 0.88rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-main);
   cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.brand-dropdown-select:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px var(--border-color);
 }
 
 .topbar-right {
@@ -437,68 +464,91 @@ body {
   gap: 14px;
 }
 
-/* Buttons */
+/* Neo-Brutalism Retro Tactile Buttons */
 .btn-uda {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 8px 18px;
   border-radius: var(--radius-md);
   font-size: 0.88rem;
-  font-weight: 600;
+  font-weight: 800;
   cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.15s ease;
+  border: 2px solid var(--border-color) !important;
+  box-shadow: 3px 3px 0px var(--border-color);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
   font-family: inherit;
   text-decoration: none;
 }
 
+.btn-uda:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--border-color);
+}
+
+.btn-uda:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--border-color);
+}
+
 .btn-uda-primary {
-  background-color: var(--primary);
-  color: #ffffff;
+  background-color: var(--primary) !important;
+  color: #ffffff !important;
 }
 
 .btn-uda-primary:hover {
-  background-color: var(--primary-hover);
+  background-color: var(--primary-hover) !important;
 }
 
 .btn-uda-secondary {
-  background-color: #ffffff;
-  border-color: var(--border-color);
-  color: var(--text-main);
+  background-color: #ffffff !important;
+  color: var(--text-main) !important;
 }
 
 .btn-uda-secondary:hover {
-  background-color: #f8fafc;
-  border-color: #cbd5e1;
+  background-color: #f8fafc !important;
 }
 
 .btn-uda-danger {
-  background-color: #fef2f2;
-  border-color: #fecaca;
-  color: #dc2626;
+  background-color: #fee2e2 !important;
+  color: #dc2626 !important;
 }
 
 .btn-uda-danger:hover {
-  background-color: #fee2e2;
+  background-color: #fecaca !important;
 }
 
 .btn-uda-sm {
-  padding: 5px 10px;
+  padding: 5px 12px;
   font-size: 0.8rem;
+  box-shadow: 2px 2px 0px var(--border-color);
 }
 
-/* Card */
+.btn-uda-sm:hover {
+  box-shadow: 3px 3px 0px var(--border-color);
+}
+
+.btn-uda-sm:active {
+  box-shadow: 0px 0px 0px var(--border-color);
+}
+
+/* Neo-Brutalism Retro Card */
 .uda-card {
   background: #ffffff;
-  border: 1px solid var(--border-color);
+  border: 2.5px solid var(--border-color) !important;
   border-radius: var(--radius-lg);
   padding: var(--card-padding);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 4px 4px 0px var(--border-color) !important;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.uda-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px var(--border-color) !important;
 }
 
 @media (max-width: 640px) {
@@ -512,23 +562,29 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 6px !important;
+  font-size: 0.74rem;
+  font-weight: 800;
+  border: 1.5px solid var(--border-color);
+  box-shadow: 1.5px 1.5px 0px var(--border-color);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .status-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
+  border: 1px solid var(--border-color);
 }
 
 /* Notification bell */
 .notif-bell-btn {
   position: relative;
-  background: transparent;
-  border: 1px solid var(--border-color);
+  background: #ffffff;
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
   border-radius: var(--radius-md);
   width: 38px;
   height: 38px;
@@ -537,27 +593,30 @@ body {
   justify-content: center;
   cursor: pointer;
   color: var(--text-main);
+  transition: all 0.12s ease;
 }
 
 .notif-bell-btn:hover {
-  background: #f8fafc;
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px var(--border-color);
 }
 
 .notif-unread-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -5px;
+  right: -5px;
   background: #dc2626;
   color: white;
   font-size: 0.65rem;
-  font-weight: 800;
-  width: 18px;
-  height: 18px;
+  font-weight: 900;
+  width: 19px;
+  height: 19px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid white;
+  border: 2px solid var(--border-color);
+  box-shadow: 1px 1px 0px var(--border-color);
 }
 
 /* Mobile Bottom Navigation (Visible on screen < 768px) */
@@ -567,13 +626,13 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 60px;
+  height: 62px;
   background: #ffffff;
-  border-top: 1px solid var(--border-color);
+  border-top: 2.5px solid var(--border-color);
+  box-shadow: 0 -3px 0px var(--border-color);
   z-index: 50;
   justify-content: space-around;
   align-items: center;
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.04);
 }
 
 .mobile-nav-item {
@@ -582,31 +641,103 @@ body {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  font-size: 0.68rem;
-  font-weight: 600;
+  font-size: 0.7rem;
+  font-weight: 700;
   color: var(--text-secondary);
   background: transparent;
   border: none;
   cursor: pointer;
+  text-decoration: none;
+  transition: all 0.12s ease;
 }
 
 .mobile-nav-item.active {
   color: var(--primary);
+  font-weight: 900;
 }
 
 .mobile-nav-center-plus {
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   background: var(--primary);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  box-shadow: 0 4px 10px rgba(22, 163, 74, 0.35);
-  margin-top: -16px;
+  border: 2px solid var(--border-color) !important;
+  box-shadow: 3px 3px 0px var(--border-color);
+  margin-top: -18px;
   cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.mobile-nav-center-plus:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--border-color);
+}
+
+/* Neo-Brutalism Retro Form Inputs */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="date"],
+input[type="time"],
+input[type="number"],
+input[type="search"],
+textarea,
+select {
+  border: 2px solid var(--border-color) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 2px 2px 0px var(--border-color);
+  background-color: #ffffff;
+  color: var(--text-main);
+  font-family: inherit;
+  font-weight: 600;
+  transition: all 0.12s ease;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  border-color: var(--primary) !important;
+  box-shadow: 3px 3px 0px var(--primary) !important;
+}
+
+/* Neo-Brutalism Retro Table */
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 3px 3px 0px var(--border-color);
+}
+
+th {
+  background: #f1f5f9;
+  border-bottom: 2px solid var(--border-color);
+  color: var(--text-main);
+  font-weight: 800;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 12px 14px;
+}
+
+td {
+  padding: 12px 14px;
+  border-bottom: 1.5px solid #e2e8f0;
+  color: var(--text-main);
+  font-size: 0.88rem;
+}
+
+tr:last-child td {
+  border-bottom: none;
 }
 
 /* Content Body Responsif */
@@ -626,7 +757,6 @@ body {
   width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  border-radius: var(--radius-md);
   margin-bottom: 8px;
 }
 
@@ -1207,3 +1337,667 @@ body {
     padding: 36px 14px 28px !important;
   }
 }
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.72), 0 0 0 3px #16a34a, 0 10px 30px rgba(22, 163, 74, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.72), 0 0 0 4px #22c55e, 0 14px 40px rgba(34, 197, 94, 0.55);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Guided Tour Floating Trigger Responsive (Di Atas Ikon WhatsApp) */
+.guided-tour-floating-trigger {
+  bottom: 80px;
+  right: 24px;
+}
+
+/* WhatsApp Floating Consultation Trigger */
+.whatsapp-floating-container {
+  bottom: 24px;
+  right: 24px;
+}
+
+@media (max-width: 768px) {
+  .guided-tour-floating-trigger {
+    bottom: 128px !important;
+    right: 14px !important;
+    left: auto !important;
+  }
+  .whatsapp-floating-container {
+    bottom: 74px !important;
+    right: 14px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .whatsapp-floating-btn {
+    padding: 10px !important;
+    border-radius: 50% !important;
+  }
+  .whatsapp-floating-btn .whatsapp-floating-label {
+    display: none !important;
+  }
+  .guided-tour-floating-trigger {
+    padding: 7px 11px !important;
+    font-size: 0.78rem !important;
+  }
+}
+
+/* ==============================================================================
+   Auth Sliding & Split Layouts (Animasi Masuk & Split Card Desktop Retro)
+   ============================================================================== */
+@keyframes authCardEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(22px) scale(0.975);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.auth-slider-root {
+  max-width: 1040px;
+  width: 100%;
+  min-height: 668px;
+  border-radius: 24px;
+  border: 2.5px solid #0f172a;
+  box-shadow: 7px 7px 0px #0f172a;
+  background-color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+  animation: authCardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Split Card for Lupa Password, Kode Verifikasi, and Ubah Password */
+.auth-split-card {
+  max-width: 1040px;
+  width: 100%;
+  min-height: 620px;
+  border-radius: 24px;
+  border: 2.5px solid #0f172a;
+  box-shadow: 7px 7px 0px #0f172a;
+  background-color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+  display: flex;
+  animation: authCardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.auth-split-banner {
+  width: 48%;
+  background: linear-gradient(145deg, #064e3b 0%, #043d2e 60%, #022c22 100%);
+  border-right: 2.5px solid #0f172a;
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-split-form-pane {
+  width: 52%;
+  padding: 36px 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+@media (max-width: 1023px) {
+  .auth-split-card {
+    max-width: 480px;
+    min-height: auto;
+    flex-direction: column;
+    border-radius: 18px;
+    padding: clamp(24px, 5vw, 36px) clamp(16px, 4vw, 24px);
+    overflow: visible;
+  }
+
+  .auth-split-banner {
+    display: none !important;
+  }
+
+  .auth-split-form-pane {
+    width: 100% !important;
+    padding: 0 !important;
+  }
+}
+
+/* Sliding Banner on Desktop */
+.auth-sliding-banner {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 14px;
+  width: calc(50% - 20px);
+  background: linear-gradient(145deg, #064e3b 0%, #043d2e 60%, #022c22 100%);
+  border-radius: 18px;
+  border: 2.5px solid #0f172a;
+  box-shadow: 3px 3px 0px #0f172a;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  z-index: 10;
+  transition: transform 0.65s cubic-bezier(0.65, 0, 0.35, 1);
+  will-change: transform;
+}
+
+/* Di Register, Banner bergeser ke kanan */
+.auth-slider-root.mode-register .auth-sliding-banner {
+  transform: translateX(calc(100% + 12px));
+}
+
+/* Di Login, Banner berada di kiri */
+.auth-slider-root.mode-login .auth-sliding-banner {
+  transform: translateX(0);
+}
+
+/* Form Panes on Desktop */
+.auth-sliding-form-pane {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  width: calc(50% - 20px);
+  padding: 12px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: opacity 0.4s ease, transform 0.55s cubic-bezier(0.65, 0, 0.35, 1), visibility 0.4s;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.auth-sliding-form-pane::-webkit-scrollbar {
+  display: none;
+}
+
+.auth-pane-login {
+  right: 14px;
+}
+
+.auth-pane-register {
+  left: 14px;
+}
+
+/* State Visibility on Desktop */
+.auth-slider-root.mode-login .auth-pane-login {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+  visibility: visible;
+  z-index: 5;
+}
+
+.auth-slider-root.mode-login .auth-pane-register {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-40px);
+  visibility: hidden;
+  z-index: 1;
+}
+
+.auth-slider-root.mode-register .auth-pane-register {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+  visibility: visible;
+  z-index: 5;
+}
+
+.auth-slider-root.mode-register .auth-pane-login {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(40px);
+  visibility: hidden;
+  z-index: 1;
+}
+
+/* Mode Mobile & Tablet (< 1024px): Sembunyikan banner gambar, tampilkan form aktif secara ringkas */
+@media (max-width: 1023px) {
+  .auth-slider-root {
+    max-width: 460px;
+    min-height: auto;
+    padding: clamp(24px, 5vw, 36px) clamp(16px, 4vw, 24px);
+    border-radius: 18px;
+    overflow: visible;
+  }
+
+  .auth-sliding-banner {
+    display: none !important;
+  }
+
+  .auth-sliding-form-pane {
+    position: static !important;
+    width: 100% !important;
+    padding: 0 !important;
+    transform: none !important;
+    overflow-y: visible !important;
+  }
+
+  .auth-slider-root.mode-login .auth-pane-login {
+    display: flex !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    visibility: visible !important;
+  }
+
+  .auth-slider-root.mode-login .auth-pane-register {
+    display: none !important;
+  }
+
+  .auth-slider-root.mode-register .auth-pane-register {
+    display: flex !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    visibility: visible !important;
+  }
+
+  .auth-slider-root.mode-register .auth-pane-login {
+    display: none !important;
+  }
+}
+
+/* ==============================================================================
+   Landing Page: Camply Reference Layout (Neo-Brutalism Retro)
+   ============================================================================== */
+.camply-hero-grid {
+  display: grid;
+  grid-template-columns: 1.12fr 0.88fr;
+  gap: 52px;
+  align-items: center;
+  text-align: left;
+}
+
+@media (max-width: 1024px) {
+  .camply-hero-grid {
+    grid-template-columns: 1fr;
+    gap: 44px;
+    text-align: center;
+  }
+
+  .camply-hero-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+.desktop-menu {
+  display: none;
+}
+
+@media (min-width: 860px) {
+  .desktop-menu {
+    display: flex !important;
+  }
+}
+
+.desktop-menu a {
+  position: relative;
+  text-decoration: none;
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.92rem;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.desktop-menu a:hover {
+  color: #0f172a;
+  background-color: #f1f5f9;
+}
+
+/* Neo-Brutalist Pill Buttons (Camply Style) */
+.btn-camply-dark {
+  background-color: #0f172a;
+  color: #ffffff !important;
+  border: 2.5px solid #0f172a;
+  border-radius: 999px;
+  padding: 10px 24px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 3.5px 3.5px 0px #16a34a;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-camply-dark:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5.5px 5.5px 0px #16a34a;
+}
+
+.btn-camply-dark:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #16a34a;
+}
+
+.btn-camply-outline {
+  background-color: #ffffff;
+  color: #0f172a !important;
+  border: 2.5px solid #0f172a;
+  border-radius: 999px;
+  padding: 10px 22px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 3.5px 3.5px 0px #0f172a;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.btn-camply-outline:hover {
+  background-color: #f8fafc;
+  transform: translate(-2px, -2px);
+  box-shadow: 5.5px 5.5px 0px #0f172a;
+}
+
+.btn-camply-outline:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #0f172a;
+}
+
+.btn-camply-forest {
+  background-color: #064e3b;
+  color: #ffffff !important;
+  border: 2.5px solid #0f172a;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 4px 4px 0px #0f172a;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-camply-forest:hover:not(:disabled) {
+  background-color: #043d2e;
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px #0f172a;
+}
+
+.btn-camply-forest:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px #0f172a;
+}
+
+/* ==============================================================================
+   Footer: Camply Multi-Column Dark Green Retro Design
+   ============================================================================== */
+.camply-footer {
+  background-color: #064e3b;
+  color: #ffffff;
+  border-top: 3.5px solid #0f172a;
+  padding: 68px 24px 32px;
+}
+
+.camply-footer-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr 1fr 1.2fr;
+  gap: 36px;
+  max-width: 1200px;
+  margin: 0 auto 48px;
+}
+
+@media (max-width: 1024px) {
+  .camply-footer-grid {
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  .camply-footer-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+  }
+}
+
+@media (max-width: 520px) {
+  .camply-footer-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+}
+
+.footer-nav-link {
+  color: #d1fae5;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: inline-block;
+  transition: all 0.15s ease;
+  margin-bottom: 10px;
+}
+
+.footer-nav-link:hover {
+  color: #ffffff;
+  transform: translateX(3px);
+}
+
+.footer-social-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  color: #064e3b;
+  border: 2px solid #0f172a;
+  box-shadow: 2.5px 2.5px 0px #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.footer-social-btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0px #0f172a;
+  background-color: #dcfce7;
+  color: #065f46;
+}
+
+/* ==============================================================================
+   Camply Layouts for Dashboard Simulation, Features, Workflow & FAQ
+   ============================================================================== */
+.camply-stats-bar {
+  background-color: #064e3b;
+  color: #ffffff;
+  border-top: 3.5px solid #0f172a;
+  border-bottom: 3.5px solid #0f172a;
+  padding: 34px 24px;
+}
+
+.camply-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  max-width: 1140px;
+  margin: 0 auto;
+  gap: 20px;
+}
+
+.camply-stat-item {
+  text-align: center;
+  position: relative;
+}
+
+.camply-stat-item:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 15%;
+  height: 70%;
+  width: 1px;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 768px) {
+  .camply-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px;
+  }
+  .camply-stat-item:not(:last-child)::after {
+    display: none;
+  }
+}
+
+.camply-simulasi-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 48px;
+  align-items: center;
+}
+
+@media (max-width: 1024px) {
+  .camply-simulasi-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+}
+
+.camply-faq-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 52px;
+  align-items: flex-start;
+}
+
+@media (max-width: 1024px) {
+  .camply-faq-grid {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+}
+
+.camply-capsule-input {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border: 2.5px solid #0f172a;
+  border-radius: 999px;
+  padding: 4px 6px 4px 18px;
+  box-shadow: 3.5px 3.5px 0px #0f172a;
+  max-width: 440px;
+  transition: box-shadow 0.15s ease;
+}
+
+.camply-capsule-input:focus-within {
+  box-shadow: 5px 5px 0px #16a34a;
+}
+
+.camply-capsule-input input {
+  border: none;
+  outline: none;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #0f172a;
+  width: 100%;
+  background: transparent;
+}
+
+.camply-dock-pill {
+  background: #ffffff;
+  border: 2.5px solid #0f172a;
+  border-radius: 999px;
+  box-shadow: 4px 4px 0px #0f172a;
+  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+/* ========================================================
+   Landing Page Scroll Reveal Animations
+   ======================================================== */
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(36px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.scroll-reveal.revealed {
+  opacity: 1;
+  transform: translateY(0) scale(1) translateX(0) !important;
+}
+
+.scroll-reveal.reveal-left {
+  transform: translateX(-40px);
+}
+
+.scroll-reveal.reveal-right {
+  transform: translateX(40px);
+}
+
+.scroll-reveal.reveal-scale {
+  transform: scale(0.92) translateY(24px);
+}
+
+.scroll-reveal.reveal-pop {
+  transform: scale(0.85);
+  transition: opacity 0.65s cubic-bezier(0.34, 1.56, 0.64, 1),
+              transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Stagger Delays */
+.delay-100 { transition-delay: 100ms; }
+.delay-150 { transition-delay: 150ms; }
+.delay-200 { transition-delay: 200ms; }
+.delay-250 { transition-delay: 250ms; }
+.delay-300 { transition-delay: 300ms; }
+.delay-350 { transition-delay: 350ms; }
+.delay-400 { transition-delay: 400ms; }
+.delay-450 { transition-delay: 450ms; }
+.delay-500 { transition-delay: 500ms; }
+.delay-600 { transition-delay: 600ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+
+
+
+

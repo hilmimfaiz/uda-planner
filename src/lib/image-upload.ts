@@ -95,3 +95,55 @@ export async function uploadBrandLogo(
     return await compressImageToBase64(file);
   }
 }
+
+/**
+ * Upload foto bukti transfer pembayaran ke Supabase Storage.
+ * Jika bucket belum tersedia, fallback ke kompresi Base64 Data URL berkualitas tinggi.
+ */
+export async function uploadPaymentProof(
+  supabase: any,
+  file: File,
+  userId: string
+): Promise<string> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Harap pilih file gambar bukti transfer (JPG, PNG, atau WebP).');
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error('Ukuran file foto maksimal 10 MB.');
+  }
+
+  if (supabase) {
+    try {
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const filePath = `payments/${userId}_${Date.now()}.${fileExt}`;
+
+      // Coba upload ke bucket 'payment-proofs' atau 'avatars'
+      let uploadRes = await supabase.storage
+        .from('payment-proofs')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadRes.error) {
+        uploadRes = await supabase.storage
+          .from('avatars')
+          .upload(filePath, file, { upsert: true });
+      }
+
+      if (!uploadRes.error && uploadRes.data) {
+        const bucket = (uploadRes.data as any).fullPath?.split('/')[0] || 'avatars';
+        const { data: publicUrlData } = supabase.storage
+          .from(bucket)
+          .getPublicUrl(filePath);
+
+        if (publicUrlData?.publicUrl) {
+          return publicUrlData.publicUrl;
+        }
+      }
+    } catch (e) {
+      console.warn('Storage upload error, fallback to compressed image:', e);
+    }
+  }
+
+  // Fallback kompresi data URL
+  return await compressImageToBase64(file, 900, 900, 0.82);
+}

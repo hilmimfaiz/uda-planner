@@ -23,6 +23,40 @@ import {
 import { POST_STATUSES } from "@/lib/platforms";
 import { PostService } from "@/services/post.service";
 import { BrandService } from "@/services/brand.service";
+import { GuidedTour, TourStep } from "@/components/guided-tour";
+
+const kalenderTourSteps: TourStep[] = [
+  {
+    targetId: "tour-calendar-header",
+    title: "Kalender Perencanaan Konten",
+    description: "Atur, pantau, dan jadwalkan semua konten media sosial dalam satu tampilan kalender yang interaktif.",
+    placement: "bottom",
+  },
+  {
+    targetId: "tour-calendar-modes",
+    title: "Mode Tampilan Fleksibel",
+    description: "Beralih dengan mudah antara mode Bulan (ikhtisar menyeluruh), Minggu (fokus mingguan), atau Agenda (daftar runut waktu).",
+    placement: "bottom",
+  },
+  {
+    targetId: "tour-calendar-nav",
+    title: "Navigasi Bulan & Filter",
+    description: "Pindah antar bulan dengan cepat, kembali ke 'Hari Ini', serta filter konten berdasarkan Brand atau Status publikasi.",
+    placement: "bottom",
+  },
+  {
+    targetId: "tour-calendar-grid",
+    title: "Grid Kalender Interaktif",
+    description: "Klik tanggal mana saja untuk membuat postingan baru di tanggal tersebut, atau drag & drop kartu postingan untuk mengubah jadwal secara instan.",
+    placement: "top",
+  },
+  {
+    targetId: "tour-calendar-unscheduled",
+    title: "Postingan Belum Terjadwal",
+    description: "Daftar ide dan draft yang belum memiliki tanggal. Anda dapat menariknya (drag) langsung ke tanggal target di grid kalender!",
+    placement: "left",
+  },
+];
 
 export default function KalenderPage() {
   const router = useRouter();
@@ -188,6 +222,7 @@ export default function KalenderPage() {
 
       {/* Header & Controls */}
       <div
+        id="tour-calendar-header"
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -208,6 +243,7 @@ export default function KalenderPage() {
 
         {/* View Switcher: Bulan, Minggu, Agenda */}
         <div
+          id="tour-calendar-modes"
           style={{
             display: "flex",
             alignItems: "center",
@@ -243,6 +279,7 @@ export default function KalenderPage() {
       {/* Month Navigator & Filters */}
 
       <div
+        id="tour-calendar-nav"
         className="uda-card"
         style={{
           padding: "16px 18px",
@@ -331,6 +368,7 @@ export default function KalenderPage() {
       <div className="calendar-layout">
         {/* Main Grid Kalender */}
         <div
+          id="tour-calendar-grid"
           className="uda-card"
           style={{
             padding: 12,
@@ -691,6 +729,7 @@ export default function KalenderPage() {
 
         {/* Kotak "Belum Dijadwalkan" di Samping (Desktop) */}
         <div
+          id="tour-calendar-unscheduled"
           className="uda-card"
           style={{ padding: 16, height: "fit-content" }}
         >
@@ -796,6 +835,8 @@ export default function KalenderPage() {
           </div>
         </div>
       </div>
+
+      <GuidedTour steps={kalenderTourSteps} tourKey="uda_tour_kalender" />
     </div>
   );
 }

@@ -136,11 +136,12 @@ export function ModalProvider({ children }: { children: ReactNode }) {
           <div
             style={{
               background: '#ffffff',
-              borderRadius: 16,
+              borderRadius: 14,
               maxWidth: 440,
               width: '100%',
-              padding: 24,
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              padding: 26,
+              border: '3px solid #0f172a',
+              boxShadow: '6px 6px 0px #0f172a',
               display: 'flex',
               flexDirection: 'column',
               gap: 16,
@@ -150,16 +151,17 @@ export function ModalProvider({ children }: { children: ReactNode }) {
           >
             <div
               style={{
-                width: 56,
-                height: 56,
-                borderRadius: '50%',
+                width: 58,
+                height: 58,
+                borderRadius: 12,
                 background: confirmState.options.danger ? '#fef2f2' : '#eff6ff',
                 color: confirmState.options.danger ? '#ef4444' : '#2563eb',
+                border: '2px solid #0f172a',
+                boxShadow: '2.5px 2.5px 0px #0f172a',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 margin: '0 auto',
-                boxShadow: confirmState.options.danger ? '0 0 0 6px #fee2e2' : '0 0 0 6px #dbeafe',
               }}
             >
               {confirmState.options.icon === 'trash' ? (
@@ -235,11 +237,12 @@ export function ModalProvider({ children }: { children: ReactNode }) {
           <div
             style={{
               background: '#ffffff',
-              borderRadius: 16,
+              borderRadius: 14,
               maxWidth: 420,
               width: '100%',
-              padding: 24,
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              padding: 26,
+              border: '3px solid #0f172a',
+              boxShadow: '6px 6px 0px #0f172a',
               display: 'flex',
               flexDirection: 'column',
               gap: 16,
@@ -257,7 +260,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: '#94a3b8',
+                color: '#64748b',
               }}
             >
               <X size={18} />
@@ -265,19 +268,17 @@ export function ModalProvider({ children }: { children: ReactNode }) {
 
             <div
               style={{
-                width: 60,
-                height: 60,
-                borderRadius: '50%',
+                width: 62,
+                height: 62,
+                borderRadius: 12,
                 background: feedbackState.type === 'success' ? '#f0fdf4' : '#fef2f2',
                 color: feedbackState.type === 'success' ? '#16a34a' : '#ef4444',
+                border: '2px solid #0f172a',
+                boxShadow: '2.5px 2.5px 0px #0f172a',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 margin: '0 auto',
-                boxShadow:
-                  feedbackState.type === 'success'
-                    ? '0 0 0 6px #dcfce7'
-                    : '0 0 0 6px #fee2e2',
               }}
             >
               {feedbackState.type === 'success' ? (
