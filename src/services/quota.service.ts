@@ -29,7 +29,7 @@ export class QuotaService {
     const currentPlan = plans.find((p) => p.id === account?.plan_id) || plans[0];
 
     const brands = await BrandService.getBrands(accountId);
-    const posts = await PostService.getPosts();
+    const posts = await PostService.getPosts({}, accountId);
 
     return {
       plan: currentPlan,

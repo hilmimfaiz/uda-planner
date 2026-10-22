@@ -136,9 +136,13 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
       setShowLoadingModal(true);
 
       setTimeout(() => {
-        router.push(targetDestination);
-        router.refresh();
-      }, 900);
+        if (typeof window !== 'undefined') {
+          window.location.href = targetDestination;
+        } else {
+          router.push(targetDestination);
+          router.refresh();
+        }
+      }, 700);
     } catch (err: any) {
       setLoginError(err.message || 'Terjadi kesalahan sistem saat mencoba masuk.');
       setIsLoginLoading(false);
@@ -688,7 +692,7 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
                 </span>
               </div>
 
-              <p style={{ color: '#64748b', fontSize: '0.82rem', lineHeight: 1.55, marginBottom: 18 }}>
+              <p style={{ color: '#64748b', fontSize: '0.82rem', lineHeight: 1.55, marginBottom: 20 }}>
                 Silakan periksa kotak masuk (inbox) atau folder spam pada email Anda, lalu klik tautan konfirmasi untuk mengaktifkan akun Anda sebelum masuk.
               </p>
 

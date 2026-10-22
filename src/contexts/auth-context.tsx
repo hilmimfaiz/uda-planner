@@ -5,12 +5,14 @@ import { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { getSiteUrl } from '@/lib/site-url';
+import { VerificationService } from '@/services/verification.service';
 
 export interface UserProfile {
   id: string;
   email: string;
   full_name: string;
   avatar_url?: string | null;
+  phone?: string | null;
   reminder_minutes?: number;
 }
 
@@ -120,24 +122,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (e) {}
         }
 
+        let localPhone: string | null = null;
+        try {
+          localPhone = localStorage.getItem('uda_custom_phone_' + currentUser.id);
+        } catch (e) {}
+
         finalProfile = {
           id: profRes.data.id,
           email: profRes.data.email || currentUser.email || '',
           full_name: profRes.data.full_name || googleFullName || 'Pengguna UdaPlanner',
           avatar_url: resolvedAvatar,
+          phone: profRes.data.phone || localPhone || currentUser.phone || null,
           reminder_minutes: profRes.data.reminder_minutes ?? 15,
         };
       } else {
+        let localPhone: string | null = null;
+        try {
+          localPhone = localStorage.getItem('uda_custom_phone_' + currentUser.id);
+        } catch (e) {}
+
         const newProfile = {
           id: currentUser.id,
           email: currentUser.email || '',
           full_name: googleFullName || currentUser.email?.split('@')[0] || 'Pengguna UdaPlanner',
           avatar_url: resolvedAvatar || null,
+          phone: localPhone || currentUser.phone || null,
           role: 'user',
           reminder_minutes: 15,
         };
         const { data: createdProf } = await (supabase.from('profiles' as any) as any).insert(newProfile).select().maybeSingle();
-        finalProfile = createdProf ? { ...createdProf, avatar_url: resolvedAvatar || createdProf.avatar_url } : newProfile;
+        finalProfile = createdProf ? { ...createdProf, avatar_url: resolvedAvatar || createdProf.avatar_url, phone: createdProf.phone || localPhone } : newProfile;
 
         // Tandai sebagai user baru pada pendaftaran profil pertama kali
         try {
@@ -154,20 +168,116 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // 2. Proses Akun
       let finalAccount: UserAccount;
+
+      // Cek apakah ada upgrade paket yang tersimpan di cache lokal / admin
+      let cachedLocalPlan: string | null = null;
+      let cachedLocalPlanUntil: string | null = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const rawAcc = localStorage.getItem('uda_auth_account');
+          if (rawAcc) {
+            const parsed = JSON.parse(rawAcc);
+            if (parsed.plan_code && parsed.plan_code !== 'free') {
+              cachedLocalPlan = parsed.plan_code;
+              cachedLocalPlanUntil = parsed.plan_until;
+            }
+          }
+          const upgradeEvt = localStorage.getItem('uda_last_upgraded_user');
+          if (upgradeEvt) {
+            const parsedEvt = JSON.parse(upgradeEvt);
+            if (
+              (parsedEvt.userId === currentUser.id || (currentUser.email && parsedEvt.email?.toLowerCase() === currentUser.email.toLowerCase())) &&
+              parsedEvt.planCode
+            ) {
+              cachedLocalPlan = parsedEvt.planCode;
+              cachedLocalPlanUntil = parsedEvt.planUntil || cachedLocalPlanUntil;
+            }
+          }
+        } catch (e) {}
+      }
+
       if (accRes.data) {
+        const resolvedPlan =
+          accRes.data.plan_code && accRes.data.plan_code !== 'free'
+            ? accRes.data.plan_code
+            : cachedLocalPlan || 'free';
+        let resolvedUntil = accRes.data.plan_until || cachedLocalPlanUntil;
+
+        // Auto-heal / fix jika user memiliki pembayaran 1 tahun atau berdurasi panjang
+        if (typeof window !== 'undefined') {
+          try {
+            const rawAdminPays = localStorage.getItem('uda_admin_payments');
+            if (rawAdminPays) {
+              const payList = JSON.parse(rawAdminPays);
+              const myApproved = payList.filter(
+                (p: any) =>
+                  (p.userId === currentUser.id || (currentUser.email && p.email?.toLowerCase() === currentUser.email.toLowerCase())) &&
+                  p.status === 'approved'
+              );
+              if (myApproved.length > 0) {
+                const latest = myApproved[0];
+                const amt = latest.amount || 0;
+                const isOneYear =
+                  latest.durationDays >= 365 ||
+                  (latest.durationLabel && (latest.durationLabel.includes('1 Tahun') || latest.durationLabel.includes('12 Bulan'))) ||
+                  amt >= 1200000 ||
+                  (amt >= 400000 && resolvedPlan === 'pro');
+
+                if (isOneYear) {
+                  const curExp = resolvedUntil ? new Date(resolvedUntil).getTime() : 0;
+                  const payTime = latest.date ? new Date(latest.date).getTime() : Date.now();
+                  const targetTime = (isNaN(payTime) ? Date.now() : payTime) + 365 * 86400000;
+                  // Jika masa aktif saat ini kurang dari 300 hari ke depan, perbaiki ke 1 tahun penuh
+                  if (isNaN(curExp) || curExp < targetTime - 86400000 * 30) {
+                    resolvedUntil = new Date(targetTime).toISOString();
+                  }
+                }
+              }
+            }
+          } catch (e) {}
+        }
+
         finalAccount = {
           id: accRes.data.id,
           user_id: accRes.data.user_id,
           role: (accRes.data.role as 'user' | 'admin') || 'user',
-          plan_code: accRes.data.plan_code || 'free',
-          plan_until: accRes.data.plan_until,
+          plan_code: resolvedPlan,
+          plan_until: resolvedUntil,
           is_suspended: !!accRes.data.is_suspended,
         };
       } else {
+        let fallbackUntil = cachedLocalPlanUntil;
+        if (typeof window !== 'undefined') {
+          try {
+            const rawAdminPays = localStorage.getItem('uda_admin_payments');
+            if (rawAdminPays) {
+              const payList = JSON.parse(rawAdminPays);
+              const myApproved = payList.filter(
+                (p: any) =>
+                  (p.userId === currentUser.id || (currentUser.email && p.email?.toLowerCase() === currentUser.email.toLowerCase())) &&
+                  p.status === 'approved'
+              );
+              if (myApproved.length > 0) {
+                const latest = myApproved[0];
+                const amt = latest.amount || 0;
+                const isOneYear =
+                  latest.durationDays >= 365 ||
+                  (latest.durationLabel && (latest.durationLabel.includes('1 Tahun') || latest.durationLabel.includes('12 Bulan'))) ||
+                  amt >= 1200000 ||
+                  (amt >= 400000 && cachedLocalPlan === 'pro');
+                if (isOneYear) {
+                  fallbackUntil = new Date(Date.now() + 365 * 86400000).toISOString();
+                }
+              }
+            }
+          } catch (e) {}
+        }
+
         const newAccount = {
           user_id: currentUser.id,
           role: (currentUser.user_metadata?.role as 'user' | 'admin') || 'user',
-          plan_code: 'free',
+          plan_code: cachedLocalPlan || 'free',
+          plan_until: fallbackUntil,
           payment_code: Math.floor(100 + Math.random() * 899),
         };
         const { data: createdAcc } = await (supabase.from('accounts' as any) as any).insert(newAccount).select().maybeSingle();
@@ -175,14 +285,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: createdAcc.id,
           user_id: createdAcc.user_id,
           role: createdAcc.role as 'user' | 'admin',
-          plan_code: createdAcc.plan_code,
-          plan_until: createdAcc.plan_until,
+          plan_code: createdAcc.plan_code || cachedLocalPlan || 'free',
+          plan_until: createdAcc.plan_until || fallbackUntil,
           is_suspended: !!createdAcc.is_suspended,
         } : {
           id: currentUser.id,
           user_id: currentUser.id,
           role: (currentUser.user_metadata?.role as 'user' | 'admin') || 'user',
-          plan_code: 'free',
+          plan_code: cachedLocalPlan || 'free',
+          plan_until: fallbackUntil,
         };
       }
       setAccount(finalAccount);
@@ -270,9 +381,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(safetyTimeout);
     });
 
+    const handleAccountSync = (e?: any) => {
+      try {
+        if (e && e.detail) {
+          const detail = e.detail;
+          const authUser = user || (localStorage.getItem('uda_auth_user') ? JSON.parse(localStorage.getItem('uda_auth_user')!) : null);
+          const isTarget =
+            (detail.userId && authUser?.id === detail.userId) ||
+            (detail.email && authUser?.email?.toLowerCase() === detail.email.toLowerCase()) ||
+            (!detail.userId && !detail.email);
+
+          if (isTarget && detail.planCode) {
+            setAccount((prev) => {
+              const updated = {
+                ...(prev || { id: authUser?.id || 'acc-001', user_id: authUser?.id || 'acc-001', role: 'user' as const }),
+                plan_code: detail.planCode,
+                plan_until: detail.planUntil || prev?.plan_until,
+              };
+              try {
+                localStorage.setItem('uda_auth_account', JSON.stringify(updated));
+              } catch (e) {}
+              return updated;
+            });
+            return;
+          }
+        }
+
+        const cachedAccount = localStorage.getItem('uda_auth_account');
+        if (cachedAccount) {
+          const parsed = JSON.parse(cachedAccount);
+          setAccount((prev) => {
+            if (!prev) return parsed;
+            return { ...prev, ...parsed };
+          });
+        }
+      } catch (err) {}
+    };
+
+    window.addEventListener('storage', handleAccountSync);
+    window.addEventListener('uda_account_updated', handleAccountSync);
+
     return () => {
       clearTimeout(safetyTimeout);
       subscription.unsubscribe();
+      window.removeEventListener('storage', handleAccountSync);
+      window.removeEventListener('uda_account_updated', handleAccountSync);
     };
   }, []);
 
@@ -292,7 +445,93 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { error: 'Email atau kata sandi salah. Pastikan akun sudah terdaftar di UdaPlanner.' };
         }
         if (error.message.includes('Email not confirmed') || error.code === 'email_not_confirmed') {
-          return { error: 'Email akun Anda belum dikonfirmasi. Silakan periksa kotak masuk/spam email Anda untuk verifikasi pendaftaran.' };
+          const cleanEmail = email.trim().toLowerCase();
+          // Cek apakah akun ini telah diverifikasi secara manual oleh Admin di Panel Admin
+          let isManuallyVerified = await VerificationService.isUserVerified(cleanEmail);
+          if (!isManuallyVerified && typeof window !== 'undefined') {
+            try {
+              isManuallyVerified =
+                localStorage.getItem(`uda_manually_verified_${cleanEmail}`) === 'true' ||
+                localStorage.getItem(`uda_manually_verified_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`) === 'true';
+            } catch (e) {}
+          }
+
+          if (isManuallyVerified) {
+            // 1. Panggil API backend untuk mengonfirmasi email_confirm = true langsung di Supabase Auth (auth.users)
+            try {
+              await fetch('/api/admin/verify-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'manual_verify', email: cleanEmail }),
+              });
+            } catch (e) {}
+
+            // 2. Sekarang login ulang dengan Supabase Auth karena akun sudah terkonfirmasi di server
+            const retryRes = await supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password,
+            });
+
+            if (!retryRes.error && retryRes.data?.user) {
+              setUser(retryRes.data.user);
+              setSession(retryRes.data.session);
+              try {
+                localStorage.setItem('uda_auth_user', JSON.stringify(retryRes.data.user));
+              } catch (e) {}
+
+              const loaded = await loadUserData(retryRes.data.user);
+              const isUserAdmin =
+                loaded?.account?.role === 'admin' ||
+                retryRes.data.user.user_metadata?.role === 'admin' ||
+                retryRes.data.user.email?.toLowerCase() === 'admin@udaplanner.id' ||
+                retryRes.data.user.email?.toLowerCase().startsWith('admin@');
+
+              const needsOnboarding =
+                retryRes.data.user.user_metadata?.has_completed_onboarding !== true &&
+                (typeof window !== 'undefined'
+                  ? localStorage.getItem('uda_profile_setup_done_' + retryRes.data.user.id) !== 'true'
+                  : true);
+
+              return { error: null, isAdmin: isUserAdmin, needsOnboarding };
+            }
+
+            // Fallback jika retry tertunda sesaat: bangun sesi manual
+            const storedUsers = await VerificationService.getVerifiableUsers();
+            const matched = storedUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+
+            const manualUser: any = {
+              id: matched?.userId || matched?.id || `usr-${Date.now()}`,
+              email: cleanEmail,
+              app_metadata: { provider: 'email', providers: ['email'] },
+              user_metadata: { full_name: matched?.name || cleanEmail.split('@')[0] },
+              aud: 'authenticated',
+              created_at: new Date().toISOString(),
+              email_confirmed_at: new Date().toISOString(),
+            };
+
+            setUser(manualUser);
+            try {
+              localStorage.setItem('uda_auth_user', JSON.stringify(manualUser));
+            } catch (e) {}
+
+            const loaded = await loadUserData(manualUser);
+            const isUserAdmin =
+              loaded?.account?.role === 'admin' ||
+              manualUser.email?.toLowerCase() === 'admin@udaplanner.id' ||
+              manualUser.email?.toLowerCase().startsWith('admin@');
+
+            const needsOnboarding =
+              typeof window !== 'undefined'
+                ? localStorage.getItem('uda_profile_setup_done_' + manualUser.id) !== 'true'
+                : true;
+
+            return { error: null, isAdmin: isUserAdmin, needsOnboarding };
+          }
+
+          return {
+            error:
+              'Email akun Anda belum terverifikasi. Silakan periksa kotak masuk (inbox) atau folder spam pada email Anda. Jika Anda tidak menerima pesan email verifikasi, Admin UdaPlanner dapat mengonfirmasi akun Anda secara manual melalui Panel Admin.',
+          };
         }
         return { error: error.message };
       }
@@ -345,17 +584,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { error: 'Konfigurasi Supabase tidak ditemukan.', requiresEmailConfirmation: false };
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = fullName.trim() || 'Pengguna Baru';
+
     try {
       const siteUrl = getSiteUrl();
       const emailRedirectTo = `${siteUrl}/masuk?verified=true`;
 
+      let authResultUser: any = null;
+      let isRateLimited = false;
+
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
+        email: cleanEmail,
         password,
         options: {
           emailRedirectTo,
           data: {
-            full_name: fullName.trim(),
+            full_name: cleanName,
           },
         },
       });
@@ -365,27 +610,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { error: 'Email ini sudah terdaftar. Silakan gunakan menu Masuk.', requiresEmailConfirmation: false };
         }
         if (error.message.includes('rate limit') || (error as any).status === 429 || error.code === 'over_email_send_rate_limit') {
-          return {
-            error: 'Batas pengiriman email Supabase (SMTP gratis) tercapai: "email rate limit exceeded". Solusi: Matikan opsi "Confirm email" di Dashboard Supabase (Authentication > Providers > Email > matikan Confirm email) agar pendaftaran dapat langsung aktif tanpa batas kuota email.',
-            requiresEmailConfirmation: false,
-          };
+          // Supabase SMTP rate limit tercapai: catat akun agar admin bisa konfirmasi manual
+          isRateLimited = true;
+        } else {
+          return { error: error.message, requiresEmailConfirmation: false };
         }
-        return { error: error.message, requiresEmailConfirmation: false };
+      } else {
+        authResultUser = data.user;
       }
 
-      // Jika session null tetapi user terbuat, artinya Supabase mewajibkan email confirmation
-      const requiresConfirmation = !data.session && !!data.user;
+      // Catat akun pendaftaran ini ke VerificationService agar LANGSUNG MUNCUL di Panel Admin
+      // dengan status "Belum Terverifikasi" (agar Admin dapat konfirmasi manual jika email tidak masuk)
+      const generatedUserId = authResultUser?.id || `usr-${Date.now()}`;
+      await VerificationService.recordNewRegistration({
+        userId: generatedUserId,
+        email: cleanEmail,
+        name: cleanName,
+        authProvider: 'email', // pendaftaran email biasa
+        deliveryStatus: isRateLimited ? 'failed' : 'pending',
+        notes: isRateLimited
+          ? 'Email verifikasi gagal terkirim otomatis (SMTP limit). Menunggu konfirmasi manual oleh Admin di Panel Admin.'
+          : 'Pendaftaran email biasa: Menunggu konfirmasi email pengguna atau konfirmasi manual Admin.',
+      });
 
-      if (data.user && data.session) {
+      // Jika session aktif langsung dari supabase (confirm email off di Supabase)
+      if (data?.user && data?.session) {
         setUser(data.user);
         setSession(data.session);
         try {
           localStorage.setItem('uda_auth_user', JSON.stringify(data.user));
         } catch (e) {}
         await loadUserData(data.user);
+        return { error: null, requiresEmailConfirmation: false };
       }
 
-      return { error: null, requiresEmailConfirmation: requiresConfirmation };
+      return { error: null, requiresEmailConfirmation: true, isRateLimited };
     } catch (err: any) {
       return { error: err.message || 'Terjadi kesalahan saat pendaftaran.', requiresEmailConfirmation: false };
     }

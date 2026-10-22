@@ -20,24 +20,142 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
+  BookOpen,
   LogOut,
   Loader2,
+  Menu,
+  X,
 } from 'lucide-react';
-import { DUMMY_BRANDS, DUMMY_NOTIFICATIONS } from '@/lib/dummy-data';
+import { DUMMY_NOTIFICATIONS } from '@/lib/dummy-data';
 import { useAuth } from '@/contexts/auth-context';
+import { getStoredNotifications, markAllNotificationsAsRead, addAppNotification, syncServerInvitations } from '@/lib/notification-manager';
+import { PostService } from '@/services/post.service';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, profile, account, isLoading, isAdmin, signOut } = useAuth();
 
-  const [selectedBrandId, setSelectedBrandId] = useState<string>('all');
-  const [showBrandDropdown, setShowBrandDropdown] = useState(false);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [notifications, setNotifications] = useState(DUMMY_NOTIFICATIONS);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  useEffect(() => {
+    setShowMobileMenu(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const refreshNotifs = () => {
+      setNotifications(getStoredNotifications(user?.email || undefined, user?.id || undefined));
+    };
+    refreshNotifs();
+
+    if (user?.email || user?.id) {
+      syncServerInvitations(user?.email || undefined, user?.id || undefined).then(refreshNotifs);
+    }
+
+    const interval = setInterval(() => {
+      if (user?.email || user?.id) {
+        syncServerInvitations(user?.email || undefined, user?.id || undefined).then(refreshNotifs);
+      }
+    }, 10000);
+
+    const onFocus = () => {
+      if (user?.email || user?.id) {
+        syncServerInvitations(user?.email || undefined, user?.id || undefined).then(refreshNotifs);
+      }
+    };
+
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('uda_notification_added', refreshNotifs);
+    window.addEventListener('uda_notifications_read', refreshNotifs);
+    window.addEventListener('storage', refreshNotifs);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('uda_notification_added', refreshNotifs);
+      window.removeEventListener('uda_notifications_read', refreshNotifs);
+      window.removeEventListener('storage', refreshNotifs);
+    };
+  }, [user?.email, user?.id]);
+
+  // Scheduler Background Pengingat Jadwal Tayang Otomatis
+  useEffect(() => {
+    const checkUpcomingPosts = async () => {
+      if (typeof window === 'undefined') return;
+      try {
+        const storedMins = localStorage.getItem('uda_reminder_minutes');
+        const reminderMinutes = storedMins ? parseInt(storedMins, 10) : 15;
+        const browserNotifAllowed =
+          'Notification' in window &&
+          Notification.permission === 'granted' &&
+          localStorage.getItem('uda_browser_notif_enabled') === 'true';
+
+        const posts = await PostService.getPosts({}, user?.id);
+        const now = Date.now();
+
+        posts.forEach((post) => {
+          if (!post.scheduled_at || (post.status as string) === 'terposting' || (post.status as string) === 'published') return;
+          const schedTime = new Date(post.scheduled_at).getTime();
+          if (isNaN(schedTime)) return;
+
+          const diffMs = schedTime - now;
+          const diffMinutes = Math.round(diffMs / (60 * 1000));
+
+          // Jika postingan berada dalam rentang menit pengingat (misal antara 1 menit hingga reminderMinutes)
+          if (diffMinutes > 0 && diffMinutes <= reminderMinutes) {
+            const alertKey = `uda_alerted_${post.id}_${post.scheduled_at}_${reminderMinutes}`;
+            const alreadyAlerted = sessionStorage.getItem(alertKey);
+
+            if (!alreadyAlerted) {
+              sessionStorage.setItem(alertKey, 'true');
+
+              // 1. Notifikasi internal aplikasi dengan audio dering
+              addAppNotification({
+                type: 'system',
+                title: '⏰ Alarm Pengingat Jadwal Tayang',
+                message: `Pengingat: Postingan "${post.title}" dijadwalkan tayang dalam ${diffMinutes} menit!`,
+                link: '/app/daftar',
+                playSound: true,
+              });
+
+              // 2. Notifikasi peramban browser asli
+              if (browserNotifAllowed) {
+                try {
+                  new Notification(`⏰ Alarm Tayang: ${diffMinutes} Menit Lagi`, {
+                    body: `Postingan "${post.title}" akan segera tayang sesuai jadwal!`,
+                    icon: '/favicon.ico',
+                  });
+                } catch (e) {}
+              }
+            }
+          }
+        });
+      } catch (err) {
+        console.debug('checkUpcomingPosts error:', err);
+      }
+    };
+
+    // Jalankan pertama kali saat masuk, lalu cek setiap 30 detik
+    checkUpcomingPosts();
+    const interval = setInterval(checkUpcomingPosts, 30000);
+
+    const onReminderChanged = () => {
+      checkUpcomingPosts();
+    };
+
+    window.addEventListener('uda_reminder_changed', onReminderChanged);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('uda_reminder_changed', onReminderChanged);
+    };
+  }, [user?.id]);
+
 
   useEffect(() => {
     try {
@@ -100,15 +218,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [isLoading, user, isAdmin, router]);
 
-  const selectedBrand =
-    selectedBrandId === 'all'
-      ? null
-      : DUMMY_BRANDS.find((b) => b.id === selectedBrandId) || null;
-
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const markAllAsRead = () => {
-    setNotifications(notifications.map((n) => ({ ...n, is_read: true })));
+    setNotifications(markAllNotificationsAsRead());
   };
 
   const navItems = [
@@ -169,15 +282,34 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 ? pathname === '/app'
                 : pathname.startsWith(item.href);
             const Icon = item.icon;
+            const isGridLocked = item.href === '/app/grid' && (!account || account.plan_code === 'free');
+
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={`nav-item-btn ${isActive ? 'active' : ''}`}
-                title={item.name}
+                title={item.name + (isGridLocked ? ' (Khusus Pro & Tim)' : '')}
               >
                 <Icon size={18} />
                 <span>{item.name}</span>
+                {isGridLocked && (
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      fontSize: '0.62rem',
+                      fontWeight: 800,
+                      padding: '1px 5px',
+                      borderRadius: 4,
+                      background: '#fef3c7',
+                      color: '#b45309',
+                      border: '1px solid #fde68a',
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    PRO
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -191,7 +323,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <CreditCard size={17} />
             <span>Langganan</span>
-            <span style={{ marginLeft: 'auto', fontSize: '0.7rem', padding: '2px 6px', background: '#f0fdf4', color: '#16a34a', borderRadius: 4, fontWeight: 700 }}>
+            <span
+              style={{
+                marginLeft: 'auto',
+                fontSize: '0.7rem',
+                padding: '2px 6px',
+                background:
+                  account?.plan_code === 'team'
+                    ? '#f5f3ff'
+                    : account?.plan_code === 'pro'
+                    ? '#f0fdf4'
+                    : '#f1f5f9',
+                color:
+                  account?.plan_code === 'team'
+                    ? '#7c3aed'
+                    : account?.plan_code === 'pro'
+                    ? '#16a34a'
+                    : '#64748b',
+                borderRadius: 4,
+                fontWeight: 800,
+              }}
+            >
               {account?.plan_code?.toUpperCase() || 'FREE'}
             </span>
           </Link>
@@ -246,89 +398,58 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Topbar */}
         <header className="app-topbar">
           <div className="topbar-left">
-            {/* Brand Switcher */}
-            <div style={{ position: 'relative' }}>
-              <button
-                className="brand-dropdown-select"
-                onClick={() => setShowBrandDropdown(!showBrandDropdown)}
-              >
-                {selectedBrand ? (
-                  <>
-                    <span
-                      style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: '50%',
-                        backgroundColor: selectedBrand.color,
-                      }}
-                    />
-                    <span>{selectedBrand.name}</span>
-                  </>
-                ) : (
-                  <>
-                    <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#16a34a' }} />
-                    <span>Semua Brand</span>
-                  </>
-                )}
-                <ChevronDown size={14} style={{ color: '#64748b' }} />
-              </button>
+            {/* Mobile / Tablet App Logo & Brand Header */}
+            <Link href="/app" className="mobile-app-header-brand" title="UdaPlanner">
+              <div className="logo-symbol" style={{ width: 34, height: 34, fontSize: '1.05rem', flexShrink: 0 }}>
+                U
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontWeight: 900, fontSize: '1.05rem', color: '#0f172a', letterSpacing: '-0.025em', lineHeight: 1.15 }}>
+                  UdaPlanner
+                </span>
+                <span style={{ fontSize: '0.64rem', color: '#16a34a', fontWeight: 800, letterSpacing: '0.04em' }}>
+                  {account?.plan_code ? `PLAN ${account.plan_code.toUpperCase()}` : 'PLAN FREE'}
+                </span>
+              </div>
+            </Link>
 
-              {showBrandDropdown && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    marginTop: 6,
-                    background: '#ffffff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 10,
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-                    width: 220,
-                    zIndex: 60,
-                    padding: 6,
-                  }}
-                >
-                  <button
-                    className="nav-item-btn"
-                    style={{ fontSize: '0.85rem' }}
-                    onClick={() => {
-                      setSelectedBrandId('all');
-                      setShowBrandDropdown(false);
-                    }}
-                  >
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#16a34a' }} />
-                    <span>Semua Brand</span>
-                    {selectedBrandId === 'all' && <Check size={14} style={{ marginLeft: 'auto', color: '#16a34a' }} />}
-                  </button>
-
-                  <div style={{ height: 1, background: '#f1f5f9', margin: '4px 0' }} />
-
-                  {DUMMY_BRANDS.map((b) => (
-                    <button
-                      key={b.id}
-                      className="nav-item-btn"
-                      style={{ fontSize: '0.85rem' }}
-                      onClick={() => {
-                        setSelectedBrandId(b.id);
-                        setShowBrandDropdown(false);
-                      }}
-                    >
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: b.color }} />
-                      <span>{b.name}</span>
-                      {selectedBrandId === b.id && <Check size={14} style={{ marginLeft: 'auto', color: '#16a34a' }} />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Tombol Panduan Halaman di Header Pojok Kiri Atas */}
+            <button
+              type="button"
+              id="header-guided-tour-btn"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('uda_start_guided_tour'));
+                }
+              }}
+              className="btn-uda"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                backgroundColor: '#fef08a',
+                color: '#0f172a',
+                border: '1.5px solid #0f172a',
+                boxShadow: '2.5px 2.5px 0px #0f172a',
+                padding: '6px 12px',
+                borderRadius: 9,
+                fontSize: '0.82rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              title="Buka Panduan Langkah Halaman Ini"
+            >
+              <BookOpen size={15} style={{ color: '#16a34a' }} />
+              <span className="tour-btn-label">Panduan Halaman</span>
+            </button>
           </div>
 
           <div className="topbar-right">
-            {/* Tombol Hijau + Postingan */}
+            {/* Tombol Hijau + Postingan (Disembunyikan di HP kecil karena ada tombol bulat tengah di bottom nav) */}
             <Link
               href="/app/postingan/baru"
-              className="btn-uda btn-uda-primary btn-uda-sm"
+              className="btn-uda btn-uda-primary btn-uda-sm topbar-plus-post-btn"
               style={{ textDecoration: 'none' }}
             >
               <Plus size={16} />
@@ -466,7 +587,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation (Lebar HP 375px) */}
+      {/* Mobile Bottom Navigation (Lebar Layar <= 991px) */}
       <nav className="mobile-bottom-nav">
         <Link
           href="/app"
@@ -485,6 +606,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Link
           href="/app/postingan/baru"
           className="mobile-nav-center-plus"
+          title="Buat Postingan Baru"
         >
           <Plus size={22} />
         </Link>
@@ -495,14 +617,199 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Kanban size={18} />
           <span>Papan</span>
         </Link>
-        <Link
-          href="/app/brand"
-          className={`mobile-nav-item ${pathname === '/app/brand' ? 'active' : ''}`}
+        <button
+          type="button"
+          onClick={() => setShowMobileMenu(true)}
+          className={`mobile-nav-item ${showMobileMenu || (!['/app', '/app/kalender', '/app/papan'].includes(pathname) && !pathname.startsWith('/app/postingan')) ? 'active' : ''}`}
+          title="Buka Menu Aplikasi"
         >
-          <Building size={18} />
-          <span>Lainnya</span>
-        </Link>
+          <Menu size={18} />
+          <span>Menu</span>
+        </button>
       </nav>
+
+      {/* Mobile App Drawer / Menu Sheet (Akses Cepat Semua Fitur) */}
+      {showMobileMenu && (
+        <div
+          className="mobile-drawer-overlay"
+          onClick={() => setShowMobileMenu(false)}
+        >
+          <div
+            className="mobile-drawer-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mobile-drawer-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {currentAvatarUrl ? (
+                  <img
+                    src={currentAvatarUrl}
+                    alt={displayName}
+                    onError={() => setLocalAvatar(null)}
+                    style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #0f172a' }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: '50%',
+                      background: '#16a34a',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '1rem',
+                      border: '1.5px solid #0f172a',
+                    }}
+                  >
+                    {initial}
+                  </div>
+                )}
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.96rem', color: '#0f172a', lineHeight: 1.2 }}>
+                    {displayName}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                    Paket: <span style={{ fontWeight: 800, color: '#16a34a' }}>{account?.plan_code?.toUpperCase() || 'FREE'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowMobileMenu(false)}
+                style={{
+                  background: '#f1f5f9',
+                  border: '1.5px solid #0f172a',
+                  borderRadius: 8,
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#0f172a',
+                }}
+                aria-label="Tutup Menu"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+              Jelajahi Fitur Aplikasi
+            </div>
+
+            <div className="mobile-drawer-grid">
+              <Link
+                href="/app"
+                className={`mobile-drawer-item ${pathname === '/app' ? 'active' : ''}`}
+                onClick={() => setShowMobileMenu(false)}
+              >
+                <LayoutDashboard size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <span>Beranda</span>
+              </Link>
+              <Link
+                href="/app/kalender"
+                className={`mobile-drawer-item ${pathname === '/app/kalender' ? 'active' : ''}`}
+                onClick={() => setShowMobileMenu(false)}
+              >
+                <CalendarIcon size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <span>Kalender</span>
+              </Link>
+              <Link
+                href="/app/papan"
+                className={`mobile-drawer-item ${pathname === '/app/papan' ? 'active' : ''}`}
+                onClick={() => setShowMobileMenu(false)}
+              >
+                <Kanban size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <span>Papan Status</span>
+              </Link>
+              <Link
+                href="/app/daftar"
+                className={`mobile-drawer-item ${pathname === '/app/daftar' ? 'active' : ''}`}
+                onClick={() => setShowMobileMenu(false)}
+              >
+                <List size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <span>Daftar Post</span>
+              </Link>
+              <Link
+                href="/app/grid"
+                className={`mobile-drawer-item ${pathname === '/app/grid' ? 'active' : ''}`}
+                onClick={() => setShowMobileMenu(false)}
+              >
+                <Grid size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <span>Grid IG Feed</span>
+              </Link>
+              <Link
+                href="/app/bank"
+                className={`mobile-drawer-item ${pathname === '/app/bank' ? 'active' : ''}`}
+                onClick={() => setShowMobileMenu(false)}
+              >
+                <FileText size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <span>Bank Konten</span>
+              </Link>
+              <Link
+                href="/app/brand"
+                className={`mobile-drawer-item ${pathname.startsWith('/app/brand') ? 'active' : ''}`}
+                onClick={() => setShowMobileMenu(false)}
+              >
+                <Building size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <span>Brand & Tim</span>
+              </Link>
+              <Link
+                href="/app/langganan"
+                className={`mobile-drawer-item ${pathname === '/app/langganan' ? 'active' : ''}`}
+                onClick={() => setShowMobileMenu(false)}
+              >
+                <CreditCard size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <span>Langganan</span>
+              </Link>
+              <Link
+                href="/app/akun"
+                className={`mobile-drawer-item ${pathname === '/app/akun' ? 'active' : ''}`}
+                onClick={() => setShowMobileMenu(false)}
+              >
+                <User size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <span>Akun & Profil</span>
+              </Link>
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  className={`mobile-drawer-item ${pathname.startsWith('/admin') ? 'active' : ''}`}
+                  onClick={() => setShowMobileMenu(false)}
+                >
+                  <Shield size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                  <span>Panel Admin</span>
+                </Link>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowMobileMenu(false);
+                setShowLogoutModal(true);
+              }}
+              className="btn-uda btn-uda-danger"
+              style={{
+                width: '100%',
+                minHeight: 44,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                fontWeight: 800,
+                fontSize: '0.88rem',
+              }}
+            >
+              <LogOut size={16} />
+              <span>Keluar dari Akun</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal Pop-up Konfirmasi Logout */}
       {showLogoutModal && (

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, Trash2, X, Info } from 'lucide-react';
+import { playSuccessSound, playErrorSound } from '@/lib/audio-effects';
 
 interface ConfirmModalOptions {
   title: string;
@@ -76,6 +77,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   };
 
   const showSuccess = (title: string, message?: string, onClose?: () => void) => {
+    playSuccessSound();
     setFeedbackState({
       isOpen: true,
       type: 'success',
@@ -87,6 +89,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   };
 
   const showError = (title: string, message?: string) => {
+    playErrorSound();
     setFeedbackState({
       isOpen: true,
       type: 'error',

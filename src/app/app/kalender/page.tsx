@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Calendar as CalendarIcon,
   Filter,
+  X,
 } from "lucide-react";
 import {
   DUMMY_POSTS,
@@ -23,6 +24,7 @@ import {
 import { POST_STATUSES } from "@/lib/platforms";
 import { PostService } from "@/services/post.service";
 import { BrandService } from "@/services/brand.service";
+import { useAuth } from "@/contexts/auth-context";
 import { GuidedTour, TourStep } from "@/components/guided-tour";
 
 const kalenderTourSteps: TourStep[] = [
@@ -60,6 +62,7 @@ const kalenderTourSteps: TourStep[] = [
 
 export default function KalenderPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [viewMode, setViewMode] = useState<"bulan" | "minggu" | "agenda">(
@@ -76,13 +79,29 @@ export default function KalenderPage() {
   } | null>(null);
 
   React.useEffect(() => {
-    PostService.getPosts().then((data) => {
-      if (data && data.length > 0) setPosts(data);
+    const loadPosts = () => {
+      PostService.getPosts({}, user?.id).then((data) => {
+        setPosts(data || []);
+      });
+    };
+
+    loadPosts();
+    BrandService.getBrands(user?.id).then((data) => {
+      setBrands(data || []);
     });
-    BrandService.getBrands().then((data) => {
-      if (data && data.length > 0) setBrands(data);
-    });
-  }, []);
+
+    window.addEventListener('uda_post_updated', loadPosts);
+    window.addEventListener('uda_post_created', loadPosts);
+    window.addEventListener('uda_post_deleted', loadPosts);
+    window.addEventListener('storage', loadPosts);
+
+    return () => {
+      window.removeEventListener('uda_post_updated', loadPosts);
+      window.removeEventListener('uda_post_created', loadPosts);
+      window.removeEventListener('uda_post_deleted', loadPosts);
+      window.removeEventListener('storage', loadPosts);
+    };
+  }, [user?.id]);
 
   // Filtered posts
   const filteredPosts = posts.filter((p) => {
@@ -93,6 +112,71 @@ export default function KalenderPage() {
 
   const unscheduledPosts = filteredPosts.filter((p) => !p.scheduled_at);
   const scheduledPosts = filteredPosts.filter((p) => p.scheduled_at);
+
+  // Week Grid Calculation for mode "minggu"
+  const getWeekRange = (baseDate: Date) => {
+    const d = new Date(baseDate);
+    const day = d.getDay(); // 0 is Sunday, 1 is Monday
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+
+    const weekDays = Array.from({ length: 7 }, (_, i) => {
+      const dayDate = new Date(monday);
+      dayDate.setDate(monday.getDate() + i);
+      return dayDate;
+    });
+
+    return { monday, sunday: weekDays[6], weekDays };
+  };
+
+  const { monday: weekStart, sunday: weekEnd, weekDays } = getWeekRange(currentDate);
+
+  // Handlers untuk navigasi tanggal yang sinkron dengan viewMode (Bulan / Minggu)
+  const handlePrev = () => {
+    const next = new Date(currentDate);
+    if (viewMode === "minggu") {
+      next.setDate(next.getDate() - 7);
+    } else {
+      next.setMonth(next.getMonth() - 1);
+    }
+    setCurrentDate(next);
+  };
+
+  const handleNext = () => {
+    const next = new Date(currentDate);
+    if (viewMode === "minggu") {
+      next.setDate(next.getDate() + 7);
+    } else {
+      next.setMonth(next.getMonth() + 1);
+    }
+    setCurrentDate(next);
+  };
+
+  const handleToday = () => {
+    setCurrentDate(new Date());
+  };
+
+  // Label judul periode aktif
+  let navTitle = "";
+  if (viewMode === "minggu") {
+    const startMonth = weekStart.toLocaleDateString("id-ID", { month: "short" });
+    const endMonth = weekEnd.toLocaleDateString("id-ID", { month: "short" });
+    const yearStr = weekEnd.getFullYear();
+    if (weekStart.getMonth() === weekEnd.getMonth()) {
+      navTitle = `${weekStart.getDate()} - ${weekEnd.getDate()} ${startMonth} ${yearStr}`;
+    } else {
+      navTitle = `${weekStart.getDate()} ${startMonth} - ${weekEnd.getDate()} ${endMonth} ${yearStr}`;
+    }
+  } else {
+    navTitle = currentDate.toLocaleDateString("id-ID", {
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  const isFilterActive = filterBrand !== "all" || filterStatus !== "all";
 
   // Month Grid Calculation
   const year = currentDate.getFullYear();
@@ -276,18 +360,12 @@ export default function KalenderPage() {
         </div>
       </div>
 
-      {/* Month Navigator & Filters */}
-
+      {/* Month Navigator & Filters Responsif */}
       <div
         id="tour-calendar-nav"
         className="uda-card"
         style={{
           padding: "16px 18px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 16,
           width: "100%",
           maxWidth: "100%",
           minWidth: 0,
@@ -298,69 +376,111 @@ export default function KalenderPage() {
           boxShadow: "0 2px 8px rgba(15, 23, 42, 0.03)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button
-            className="btn-uda btn-uda-secondary btn-uda-sm"
-            onClick={() => {
-              const prev = new Date(currentDate);
-              prev.setMonth(prev.getMonth() - 1);
-              setCurrentDate(prev);
-            }}
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <h2
-            style={{ fontSize: "1.15rem", fontWeight: 800, color: "#0f172a" }}
-          >
-            {currentDate.toLocaleDateString("id-ID", {
-              month: "long",
-              year: "numeric",
-            })}
-          </h2>
-          <button
-            className="btn-uda btn-uda-secondary btn-uda-sm"
-            onClick={() => {
-              const next = new Date(currentDate);
-              next.setMonth(next.getMonth() + 1);
-              setCurrentDate(next);
-            }}
-          >
-            <ChevronRight size={16} />
-          </button>
-          <button
-            className="btn-uda btn-uda-secondary btn-uda-sm"
-            onClick={() => setCurrentDate(new Date())}
-          >
-            Hari Ini
-          </button>
-        </div>
+        <div className="calendar-nav-bar">
+          <div className="calendar-nav-left">
+            <button
+              className="btn-uda btn-uda-secondary btn-uda-sm"
+              onClick={handlePrev}
+              title={viewMode === "minggu" ? "Minggu Sebelumnya" : "Bulan Sebelumnya"}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <h2
+              style={{
+                fontSize: "1.15rem",
+                fontWeight: 800,
+                color: "#0f172a",
+                margin: 0,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {navTitle}
+            </h2>
+            <button
+              className="btn-uda btn-uda-secondary btn-uda-sm"
+              onClick={handleNext}
+              title={viewMode === "minggu" ? "Minggu Selanjutnya" : "Bulan Selanjutnya"}
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              className="btn-uda btn-uda-secondary btn-uda-sm"
+              onClick={handleToday}
+            >
+              {viewMode === "minggu" ? "Minggu Ini" : "Hari Ini"}
+            </button>
+          </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <select
-            className="brand-dropdown-select"
-            value={filterBrand}
-            onChange={(e) => setFilterBrand(e.target.value)}
-          >
-            <option value="all">Semua Brand</option>
-            {brands.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+          <div className="calendar-nav-filters">
+            <select
+              className="calendar-filter-select"
+              value={filterBrand}
+              onChange={(e) => setFilterBrand(e.target.value)}
+              title="Filter Berdasarkan Brand"
+            >
+              <option value="all">Semua Brand</option>
+              {brands.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
 
-          <select
-            className="brand-dropdown-select"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-          >
-            <option value="all">Semua Status</option>
-            <option value="ide">Ide</option>
-            <option value="draft">Draft</option>
-            <option value="review">Menunggu Review</option>
-            <option value="siap">Siap Posting</option>
-            <option value="terposting">Sudah Posting</option>
-          </select>
+            <select
+              className="calendar-filter-select"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              title="Filter Berdasarkan Status"
+            >
+              <option value="all">Semua Status</option>
+              <option value="ide">Ide</option>
+              <option value="draft">Draft</option>
+              <option value="review">Menunggu Review</option>
+              <option value="siap">Siap Posting</option>
+              <option value="terposting">Sudah Posting</option>
+            </select>
+
+            {/* Indikator Filter Aktif & Tombol Reset */}
+            {isFilterActive && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <span
+                  style={{
+                    fontSize: "0.76rem",
+                    fontWeight: 800,
+                    background: "#dcfce7",
+                    color: "#166534",
+                    border: "1.5px solid #16a34a",
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {filteredPosts.length} Konten
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterBrand("all");
+                    setFilterStatus("all");
+                  }}
+                  className="btn-uda btn-uda-secondary btn-uda-sm"
+                  style={{
+                    padding: "6px 10px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: "0.8rem",
+                    color: "#dc2626",
+                    borderColor: "#fecaca",
+                  }}
+                  title="Hapus / Reset Filter"
+                >
+                  <X size={14} />
+                  <span>Reset</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -371,7 +491,7 @@ export default function KalenderPage() {
           id="tour-calendar-grid"
           className="uda-card"
           style={{
-            padding: 12,
+            padding: 14,
             minWidth: 0,
             width: "100%",
             maxWidth: "100%",
@@ -381,78 +501,337 @@ export default function KalenderPage() {
         >
           {viewMode === "agenda" ? (
             /* Mode Agenda (Daftar per hari) */
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {scheduledPosts.map((post) => {
-                const brand = DUMMY_BRANDS.find((b) => b.id === post.brand_id);
-                const statusMeta = POST_STATUSES[post.status];
-                return (
-                  <div
-                    key={post.id}
-                    style={{
-                      padding: 14,
-                      borderRadius: 10,
-                      background: "#f8fafc",
-                      border: "1px solid #e2e8f0",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <div>
-                      <div
-                        style={{
-                          fontSize: "0.78rem",
-                          color: "#64748b",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {post.scheduled_at
-                          ? new Date(post.scheduled_at).toLocaleDateString(
-                              "id-ID",
-                              {
-                                weekday: "long",
-                                day: "numeric",
-                                month: "short",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              },
-                            )
-                          : ""}
-                      </div>
-                      <div
-                        style={{
-                          fontWeight: 700,
-                          fontSize: "0.92rem",
-                          marginTop: 3,
-                        }}
-                      >
-                        {post.title}
-                      </div>
-                      {brand && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {scheduledPosts.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 20px", color: "#64748b" }}>
+                  <CalendarIcon size={40} style={{ color: "#94a3b8", margin: "0 auto 12px" }} />
+                  <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
+                    Tidak Ada Postingan Terjadwal
+                  </h3>
+                  <p style={{ fontSize: "0.85rem", color: "#64748b", maxWidth: 400, margin: "0 auto 16px" }}>
+                    {isFilterActive
+                      ? "Tidak ada postingan yang sesuai dengan filter yang Anda terapkan."
+                      : "Belum ada postingan yang memiliki tanggal jadwal tayang."}
+                  </p>
+                  {isFilterActive && (
+                    <button
+                      onClick={() => {
+                        setFilterBrand("all");
+                        setFilterStatus("all");
+                      }}
+                      className="btn-uda btn-uda-secondary btn-uda-sm"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                    >
+                      <RotateCcw size={14} />
+                      <span>Reset Filter</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                scheduledPosts.map((post) => {
+                  const brand = brands.find((b) => b.id === post.brand_id);
+                  const statusMeta = POST_STATUSES[post.status];
+                  return (
+                    <div
+                      key={post.id}
+                      style={{
+                        padding: 14,
+                        borderRadius: 10,
+                        background: "#f8fafc",
+                        border: "1px solid #e2e8f0",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                      onClick={() => router.push(`/app/postingan/${post.id}`)}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f1f5f9")}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f8fafc")}
+                    >
+                      <div>
                         <div
                           style={{
-                            fontSize: "0.75rem",
-                            color: brand.color,
-                            fontWeight: 700,
-                            marginTop: 2,
+                            fontSize: "0.78rem",
+                            color: "#64748b",
+                            fontWeight: 600,
                           }}
                         >
-                          {brand.name}
+                          {post.scheduled_at
+                            ? new Date(post.scheduled_at).toLocaleDateString(
+                                "id-ID",
+                                {
+                                  weekday: "long",
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )
+                            : ""}
                         </div>
-                      )}
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            fontSize: "0.92rem",
+                            marginTop: 3,
+                            color: "#0f172a",
+                          }}
+                        >
+                          {post.title}
+                        </div>
+                        {brand && (
+                          <div
+                            style={{
+                              fontSize: "0.75rem",
+                              color: brand.color,
+                              fontWeight: 700,
+                              marginTop: 2,
+                            }}
+                          >
+                            {brand.name}
+                          </div>
+                        )}
+                      </div>
+                      <span
+                        className="status-pill"
+                        style={{
+                          background: statusMeta.bg,
+                          color: statusMeta.text,
+                        }}
+                      >
+                        {statusMeta.label}
+                      </span>
                     </div>
-                    <span
-                      className="status-pill"
+                  );
+                })
+              )}
+            </div>
+          ) : viewMode === "minggu" ? (
+            /* Mode Minggu (7 Kolom Harian Lengkap & Responsif) */
+            <div className="calendar-scroll-container">
+              <div className="calendar-week-grid">
+                {weekDays.map((dayDate, dayIdx) => {
+                  const dayDateStr = dayDate.toDateString();
+                  const isToday = dayDateStr === new Date().toDateString();
+                  const dayPosts = scheduledPosts.filter(
+                    (p) =>
+                      p.scheduled_at &&
+                      new Date(p.scheduled_at).toDateString() === dayDateStr
+                  );
+                  const dayName = dayDate.toLocaleDateString("id-ID", {
+                    weekday: "short",
+                  });
+                  const dayNumber = dayDate.getDate();
+
+                  return (
+                    <div
+                      key={dayIdx}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const postId = e.dataTransfer.getData("text/plain");
+                        if (postId) handleDropToDate(dayDate, postId);
+                      }}
+                      onClick={() => setSelectedDate(new Date(dayDate))}
                       style={{
-                        background: statusMeta.bg,
-                        color: statusMeta.text,
+                        minWidth: 0,
+                        minHeight: 320,
+                        background: isToday ? "#f0fdf4" : "#ffffff",
+                        border: isToday
+                          ? "2px solid #16a34a"
+                          : "1px solid #e2e8f0",
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                        boxShadow: isToday
+                          ? "0 4px 12px rgba(22, 163, 74, 0.12)"
+                          : "none",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
                       }}
                     >
-                      {statusMeta.label}
-                    </span>
-                  </div>
-                );
-              })}
+                      {/* Header Hari Minggu */}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          borderBottom: "1px solid #f1f5f9",
+                          paddingBottom: 8,
+                        }}
+                      >
+                        <div>
+                          <span
+                            style={{
+                              fontSize: "0.82rem",
+                              fontWeight: 800,
+                              color: isToday ? "#16a34a" : "#0f172a",
+                            }}
+                          >
+                            {dayName}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "0.95rem",
+                              fontWeight: 900,
+                              color: isToday ? "#16a34a" : "#334155",
+                              marginLeft: 6,
+                            }}
+                          >
+                            {dayNumber}
+                          </span>
+                        </div>
+                        {isToday && (
+                          <span
+                            style={{
+                              fontSize: "0.65rem",
+                              fontWeight: 800,
+                              backgroundColor: "#16a34a",
+                              color: "#ffffff",
+                              padding: "2px 6px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            Hari Ini
+                          </span>
+                        )}
+                      </div>
+
+                      {/* List Postingan Hari Ini */}
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                          flex: 1,
+                        }}
+                      >
+                        {dayPosts.map((post) => {
+                          const brand = brands.find(
+                            (b) => b.id === post.brand_id
+                          );
+                          const statusMeta = POST_STATUSES[post.status];
+                          const schedTime = post.scheduled_at
+                            ? new Date(post.scheduled_at).toLocaleTimeString(
+                                "id-ID",
+                                { hour: "2-digit", minute: "2-digit" }
+                              )
+                            : "";
+
+                          return (
+                            <div
+                              key={post.id}
+                              draggable
+                              onDragStart={(e) => {
+                                e.stopPropagation();
+                                e.dataTransfer.setData("text/plain", post.id);
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/app/postingan/${post.id}`);
+                              }}
+                              style={{
+                                background: "#ffffff",
+                                border: `1px solid ${brand ? brand.color + "44" : "#e2e8f0"}`,
+                                borderLeft: `3.5px solid ${brand ? brand.color : "#16a34a"}`,
+                                borderRadius: 6,
+                                padding: "8px 8px",
+                                fontSize: "0.78rem",
+                                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                                cursor: "grab",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  marginBottom: 4,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: "0.65rem",
+                                    fontWeight: 700,
+                                    backgroundColor: statusMeta.bg,
+                                    color: statusMeta.text,
+                                    padding: "1px 5px",
+                                    borderRadius: 4,
+                                  }}
+                                >
+                                  {statusMeta.label}
+                                </span>
+                                {schedTime && (
+                                  <span
+                                    style={{
+                                      fontSize: "0.68rem",
+                                      color: "#64748b",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {schedTime}
+                                  </span>
+                                )}
+                              </div>
+                              <div
+                                style={{
+                                  fontWeight: 800,
+                                  color: "#0f172a",
+                                  lineHeight: 1.25,
+                                  marginBottom: 2,
+                                }}
+                              >
+                                {post.title}
+                              </div>
+                              {brand && (
+                                <div
+                                  style={{
+                                    fontSize: "0.7rem",
+                                    color: brand.color,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {brand.name}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {dayPosts.length === 0 && (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(
+                                `/app/postingan/baru?date=${dayDate.toISOString()}`
+                              );
+                            }}
+                            style={{
+                              flex: 1,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              border: "1px dashed #e2e8f0",
+                              borderRadius: 6,
+                              padding: 8,
+                              color: "#94a3b8",
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                            }}
+                            title="Klik untuk jadwalkan postingan di tanggal ini"
+                          >
+                            + Jadwal
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : (
             /* Mode Bulan Grid 7 Kolom */
@@ -535,7 +914,7 @@ export default function KalenderPage() {
                       </div>
 
                       {cellPosts.map((post) => {
-                        const brand = DUMMY_BRANDS.find(
+                        const brand = brands.find(
                           (b) => b.id === post.brand_id,
                         );
                         const statusMeta = POST_STATUSES[post.status];
@@ -782,7 +1161,7 @@ export default function KalenderPage() {
               </p>
             ) : (
               unscheduledPosts.map((post) => {
-                const brand = DUMMY_BRANDS.find((b) => b.id === post.brand_id);
+                const brand = brands.find((b) => b.id === post.brand_id);
                 return (
                   <div
                     key={post.id}

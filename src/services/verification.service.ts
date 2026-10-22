@@ -44,104 +44,9 @@ export interface VerificationAuditLog {
 const STORAGE_USERS_KEY = 'uda_verifiable_users';
 const STORAGE_LOGS_KEY = 'uda_verification_logs';
 
-const INITIAL_USERS: VerifiableUser[] = [
-  {
-    id: 'usr-1',
-    userId: 'usr-1',
-    name: 'Administrator UdaPlanner',
-    email: 'admin@udaplanner.id',
-    registeredAt: '2026-10-10 08:30 WIB',
-    isEmailVerified: true,
-    emailVerifiedAt: '2026-10-10 08:31 WIB',
-    emailDeliveryStatus: 'delivered',
-    registrationStatus: 'verified',
-    role: 'admin',
-    planCode: 'team',
-  },
-  {
-    id: 'usr-2',
-    userId: 'usr-2',
-    name: 'Rizki Pratama',
-    email: 'rizki@udacoding.id',
-    registeredAt: '2026-10-11 11:20 WIB',
-    isEmailVerified: true,
-    emailVerifiedAt: '2026-10-11 11:22 WIB',
-    emailDeliveryStatus: 'delivered',
-    registrationStatus: 'verified',
-    role: 'user',
-    planCode: 'pro',
-  },
-  {
-    id: 'usr-3',
-    userId: 'usr-3',
-    name: 'Sarah Rahmawati',
-    email: 'sarah@udaplanner.id',
-    registeredAt: '2026-10-12 14:15 WIB',
-    isEmailVerified: false,
-    emailVerifiedAt: null,
-    emailDeliveryStatus: 'failed',
-    registrationStatus: 'pending',
-    role: 'user',
-    planCode: 'free',
-    notes: 'SMTP error: over_email_send_rate_limit',
-  },
-  {
-    id: 'usr-4',
-    userId: 'usr-4',
-    name: 'Budi Santoso',
-    email: 'budi@gmail.com',
-    registeredAt: '2026-10-13 09:45 WIB',
-    isEmailVerified: false,
-    emailVerifiedAt: null,
-    emailDeliveryStatus: 'pending',
-    registrationStatus: 'pending',
-    role: 'user',
-    planCode: 'free',
-  },
-  {
-    id: 'usr-5',
-    userId: 'usr-5',
-    name: 'Ahmad Fauzan',
-    email: 'ahmad.fauzan@agencykreatif.com',
-    registeredAt: '2026-10-14 16:10 WIB',
-    isEmailVerified: false,
-    emailVerifiedAt: null,
-    emailDeliveryStatus: 'failed',
-    registrationStatus: 'pending',
-    role: 'user',
-    planCode: 'pro',
-    notes: 'SMTP limit reached',
-  },
-  {
-    id: 'usr-6',
-    userId: 'usr-6',
-    name: 'Dewi Lestari',
-    email: 'dewi.lestari@brandfashion.id',
-    registeredAt: '2026-10-15 10:00 WIB',
-    isEmailVerified: true,
-    emailVerifiedAt: '2026-10-15 10:05 WIB',
-    emailDeliveryStatus: 'delivered',
-    registrationStatus: 'verified',
-    role: 'user',
-    planCode: 'pro',
-  },
-];
+const INITIAL_USERS: VerifiableUser[] = [];
 
-const INITIAL_LOGS: VerificationAuditLog[] = [
-  {
-    id: 'log-1',
-    userId: 'usr-2',
-    userName: 'Rizki Pratama',
-    userEmail: 'rizki@udacoding.id',
-    adminId: 'usr-1',
-    adminName: 'Administrator',
-    verificationType: 'email_manual',
-    previousStatus: 'unverified',
-    newStatus: 'verified',
-    note: 'Verifikasi manual karena konfirmasi WhatsApp langsung',
-    createdAt: '2026-10-11 11:22 WIB',
-  },
-];
+const INITIAL_LOGS: VerificationAuditLog[] = [];
 
 const getStoredUsers = (): VerifiableUser[] => {
   if (typeof window === 'undefined') return INITIAL_USERS;
@@ -179,6 +84,168 @@ const setStoredLogs = (data: VerificationAuditLog[]) => {
 
 export class VerificationService {
   /**
+   * Merekam pendaftaran pengguna baru (terutama pendaftaran email biasa non-Google)
+   * agar langsung muncul di Panel Admin dengan status "Belum Terverifikasi".
+   */
+  static async recordNewRegistration(payload: {
+    userId?: string;
+    email: string;
+    name: string;
+    authProvider?: 'email' | 'google';
+    deliveryStatus?: EmailDeliveryStatus;
+    notes?: string;
+  }): Promise<VerifiableUser> {
+    const isGoogle = payload.authProvider === 'google';
+    const nowIso = new Date().toISOString();
+    const nowFormatted = new Date().toLocaleString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }) + ' WIB';
+
+    const userId = payload.userId || `usr-${Date.now()}`;
+    const cleanEmail = payload.email.trim().toLowerCase();
+    const cleanName = payload.name.trim() || 'Pengguna Baru';
+
+    const newUser: VerifiableUser = {
+      id: userId,
+      userId,
+      name: cleanName,
+      email: cleanEmail,
+      registeredAt: nowFormatted,
+      isEmailVerified: isGoogle, // Jika Google OAuth, otomatis terverifikasi. Jika email biasa, false (belum terverifikasi)!
+      emailVerifiedAt: isGoogle ? nowFormatted : null,
+      emailDeliveryStatus: isGoogle ? 'delivered' : (payload.deliveryStatus || 'pending'),
+      registrationStatus: isGoogle ? 'verified' : 'pending',
+      role: 'user',
+      planCode: 'free',
+      notes: payload.notes || (isGoogle ? 'Registrasi via Akun Google' : 'Pendaftaran email biasa (menunggu verifikasi manual/link)'),
+    };
+
+    // 1. Simpan ke database Supabase jika tersedia
+    const supabase = createClient();
+    if (supabase) {
+      try {
+        await (supabase.from('profiles' as any) as any).upsert({
+          id: userId,
+          email: cleanEmail,
+          full_name: cleanName,
+          is_email_verified: newUser.isEmailVerified,
+          email_verified_at: isGoogle ? nowIso : null,
+          email_delivery_status: newUser.emailDeliveryStatus,
+          registration_status: newUser.registrationStatus,
+          created_at: nowIso,
+          updated_at: nowIso,
+        });
+      } catch (err) {
+        console.warn('VerificationService.recordNewRegistration db warning:', err);
+      }
+    }
+
+    // 2. Simpan ke localStorage agar langsung tampil di Panel Admin
+    if (typeof window !== 'undefined') {
+      try {
+        if (isGoogle) {
+          localStorage.setItem(`uda_manually_verified_${cleanEmail}`, 'true');
+          localStorage.setItem(`uda_manually_verified_${userId}`, 'true');
+          localStorage.removeItem(`uda_unverified_registration_${cleanEmail}`);
+          localStorage.removeItem(`uda_unverified_registration_${userId}`);
+        } else {
+          localStorage.setItem(`uda_unverified_registration_${cleanEmail}`, 'true');
+          localStorage.setItem(`uda_unverified_registration_${userId}`, 'true');
+        }
+      } catch (e) {}
+    }
+
+    const currentUsers = getStoredUsers();
+    const filtered = currentUsers.filter((u) => u.email.toLowerCase() !== cleanEmail && u.userId !== userId && u.id !== userId);
+    const updatedUsers = [newUser, ...filtered];
+    setStoredUsers(updatedUsers);
+
+    // 3. Tambahkan ke daftar Admin Users (uda_admin_users)
+    try {
+      if (typeof window !== 'undefined') {
+        const rawAdminUsers = localStorage.getItem('uda_admin_users');
+        const adminUsers = rawAdminUsers ? JSON.parse(rawAdminUsers) : [];
+        const exists = adminUsers.some((u: any) => u.email?.toLowerCase() === cleanEmail || u.id === userId);
+        if (!exists) {
+          const newAdminUser = {
+            id: userId,
+            userId,
+            name: cleanName,
+            email: cleanEmail,
+            avatarUrl: null,
+            phone: '-',
+            role: 'user',
+            plan: 'free',
+            planUntil: null,
+            brandsCount: 1,
+            postsCount: 0,
+            storageMb: 0,
+            isSuspended: false,
+            createdAt: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
+            isEmailVerified: newUser.isEmailVerified,
+            registrationStatus: newUser.registrationStatus,
+          };
+          localStorage.setItem('uda_admin_users', JSON.stringify([newAdminUser, ...adminUsers]));
+        }
+      }
+    } catch (e) {}
+
+    // 4. Dispatch event untuk sinkronisasi realtime di panel admin
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('uda_user_registered', { detail: newUser }));
+      window.dispatchEvent(new Event('storage'));
+    }
+
+    return newUser;
+  }
+
+  /**
+   * Mengecek apakah user telah diverifikasi (baik via link email/Google, maupun konfirmasi manual oleh Admin)
+   */
+  static async isUserVerified(emailOrUserId: string): Promise<boolean> {
+    const term = (emailOrUserId || '').trim().toLowerCase();
+    if (!term) return false;
+
+    // Cek flag verifikasi manual cepat
+    if (typeof window !== 'undefined') {
+      try {
+        if (localStorage.getItem(`uda_manually_verified_${term}`) === 'true') {
+          return true;
+        }
+      } catch (e) {}
+    }
+
+    // Cek di stored users
+    const users = getStoredUsers();
+    const match = users.find((u) => u.email.toLowerCase() === term || u.userId === term || u.id === term);
+    if (match && match.isEmailVerified) {
+      return true;
+    }
+
+    // Cek di Supabase profiles
+    const supabase = createClient();
+    if (supabase) {
+      try {
+        const { data } = await supabase
+          .from('profiles' as any)
+          .select('is_email_verified')
+          .or(`email.eq.${term},id.eq.${term}`)
+          .maybeSingle();
+
+        if (data && (data as any).is_email_verified === true) {
+          return true;
+        }
+      } catch (err) {}
+    }
+
+    return false;
+  }
+
+  /**
    * Mengambil daftar pengguna beserta status verifikasi email dan registrasi
    */
   static async getVerifiableUsers(): Promise<VerifiableUser[]> {
@@ -200,6 +267,12 @@ export class VerificationService {
             const acc = accMap.get(p.id) || {};
             const localUser = localMap.get(p.id);
 
+            // Default jika belum terverifikasi adalah FALSE untuk pendaftaran email
+            const verified =
+              p.is_email_verified !== undefined && p.is_email_verified !== null
+                ? !!p.is_email_verified
+                : (localUser?.isEmailVerified ?? false);
+
             return {
               id: p.id,
               userId: p.id,
@@ -208,24 +281,46 @@ export class VerificationService {
               registeredAt: p.created_at
                 ? new Date(p.created_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
                 : '10 Okt 2026',
-              isEmailVerified: p.is_email_verified ?? (localUser?.isEmailVerified ?? true),
+              isEmailVerified: verified,
               emailVerifiedAt: p.email_verified_at
                 ? new Date(p.email_verified_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
                 : (localUser?.emailVerifiedAt || null),
-              emailDeliveryStatus: (p.email_delivery_status || localUser?.emailDeliveryStatus || 'delivered') as EmailDeliveryStatus,
-              registrationStatus: (p.registration_status || localUser?.registrationStatus || 'verified') as RegistrationStatus,
+              emailDeliveryStatus: (p.email_delivery_status || localUser?.emailDeliveryStatus || (verified ? 'delivered' : 'pending')) as EmailDeliveryStatus,
+              registrationStatus: (p.registration_status || localUser?.registrationStatus || (verified ? 'verified' : 'pending')) as RegistrationStatus,
               role: (acc.role as 'user' | 'admin') || 'user',
               planCode: acc.plan_code || 'free',
               notes: localUser?.notes,
             };
           });
 
-          // Gabungkan data DB dengan mock data jika ada
           const dbIds = new Set(dbUsers.map((u) => u.userId));
-          const combined = [
-            ...dbUsers,
-            ...local.filter((u) => !dbIds.has(u.userId)),
-          ];
+          const dbEmails = new Set(dbUsers.map((u) => (u.email || '').toLowerCase().trim()).filter(Boolean));
+          const cleanLocal = local.filter((u) => {
+            const em = (u.email || '').toLowerCase().trim();
+            if (dbIds.has(u.userId) || dbIds.has(u.id)) return false;
+            if (em && dbEmails.has(em)) return false;
+            return true;
+          });
+
+          const seenEmails = new Set<string>();
+          const combined: VerifiableUser[] = [];
+          for (const u of dbUsers) {
+            const em = (u.email || '').toLowerCase().trim();
+            if (em) {
+              if (seenEmails.has(em)) continue;
+              seenEmails.add(em);
+            }
+            combined.push(u);
+          }
+          for (const u of cleanLocal) {
+            const em = (u.email || '').toLowerCase().trim();
+            if (em) {
+              if (seenEmails.has(em)) continue;
+              seenEmails.add(em);
+            }
+            combined.push(u);
+          }
+
           setStoredUsers(combined);
           return combined;
         }
@@ -262,80 +357,218 @@ export class VerificationService {
    */
   static async manualVerifyEmail(
     targetUserId: string,
-    adminId: string = 'admin-001',
-    adminName: string = 'Administrator',
-    note: string = 'Verifikasi manual oleh admin'
+    targetEmailOrAdminId?: string,
+    adminNameOrNote?: string,
+    noteText?: string
   ): Promise<boolean> {
+    const isEmailParam = targetEmailOrAdminId && targetEmailOrAdminId.includes('@');
+    const explicitEmail = isEmailParam ? targetEmailOrAdminId.trim().toLowerCase() : undefined;
+    const adminId = !isEmailParam && targetEmailOrAdminId ? targetEmailOrAdminId : 'admin-001';
+    const adminName =
+      adminNameOrNote && !adminNameOrNote.startsWith('Konfirmasi manual')
+        ? adminNameOrNote
+        : 'Administrator';
+    const note =
+      noteText ||
+      (adminNameOrNote && adminNameOrNote.startsWith('Konfirmasi manual')
+        ? adminNameOrNote
+        : 'Verifikasi manual oleh admin');
+
     const users = getStoredUsers();
-    const target = users.find((u) => u.userId === targetUserId || u.id === targetUserId);
-    if (!target) return false;
+    let target = users.find(
+      (u) =>
+        u.userId === targetUserId ||
+        u.id === targetUserId ||
+        (explicitEmail && u.email?.toLowerCase() === explicitEmail)
+    );
 
-    const previousStatus = target.isEmailVerified ? 'verified' : 'unverified';
-    const nowIso = new Date().toISOString();
-    const nowFormatted = new Date().toLocaleString('id-ID', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    // Cari dari uda_admin_users jika belum ketemu di verifiable users
+    let cleanEmail = explicitEmail || target?.email?.toLowerCase();
+    let targetName = target?.name || 'Pengguna';
 
-    const supabase = createClient();
-    if (supabase) {
+    if (!cleanEmail && typeof window !== 'undefined') {
       try {
-        await (supabase.from('profiles' as any) as any)
-          .update({
-            is_email_verified: true,
-            email_verified_at: nowIso,
-            email_delivery_status: 'delivered',
-            updated_at: nowIso,
-          })
-          .eq('id', targetUserId);
-
-        await (supabase.from('verification_logs' as any) as any).insert({
-          user_id: targetUserId,
-          admin_id: adminId,
-          verification_type: 'email_manual',
-          previous_status: previousStatus,
-          new_status: 'verified',
-          note,
-          metadata: { adminName, email: target.email },
-        });
-      } catch (err) {
-        console.warn('VerificationService.manualVerifyEmail db error:', err);
-      }
+        const rawAdminUsers = localStorage.getItem('uda_admin_users');
+        if (rawAdminUsers) {
+          const parsed = JSON.parse(rawAdminUsers);
+          const match = parsed.find(
+            (u: any) => u.id === targetUserId || u.userId === targetUserId
+          );
+          if (match) {
+            cleanEmail = match.email?.toLowerCase();
+            targetName = match.name || targetName;
+          }
+        }
+      } catch (e) {}
     }
 
-    // Update local storage
+    if (!cleanEmail) {
+      cleanEmail = targetUserId.toLowerCase();
+    }
+
+    const previousStatus = target?.isEmailVerified ? 'verified' : 'unverified';
+    const nowIso = new Date().toISOString();
+    const nowFormatted =
+      new Date().toLocaleString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }) + ' WIB';
+
+    // 1. Simpan flag cepat ke localStorage dan hapus flag pending
+    if (typeof window !== 'undefined') {
+      try {
+        if (cleanEmail && cleanEmail.includes('@')) {
+          localStorage.setItem(`uda_manually_verified_${cleanEmail}`, 'true');
+          localStorage.removeItem(`uda_unverified_registration_${cleanEmail}`);
+        }
+        localStorage.setItem(`uda_manually_verified_${targetUserId}`, 'true');
+        localStorage.removeItem(`uda_unverified_registration_${targetUserId}`);
+        if (target?.id && target.id !== targetUserId) {
+          localStorage.setItem(`uda_manually_verified_${target.id}`, 'true');
+          localStorage.removeItem(`uda_unverified_registration_${target.id}`);
+        }
+      } catch (e) {}
+    }
+
+    // 2. Pastikan target ada di verifiable users
+    if (!target) {
+      target = {
+        id: targetUserId,
+        userId: targetUserId,
+        name: targetName,
+        email: cleanEmail,
+        registeredAt: nowFormatted,
+        isEmailVerified: true,
+        emailVerifiedAt: nowFormatted,
+        emailDeliveryStatus: 'delivered',
+        registrationStatus: 'verified',
+        role: 'user',
+        planCode: 'free',
+        notes: note,
+      };
+      users.push(target);
+    }
+
+    // 3. Update data di stored verifiable users
     const updatedUsers = users.map((u) => {
-      if (u.userId === targetUserId || u.id === targetUserId) {
+      if (
+        u.userId === targetUserId ||
+        u.id === targetUserId ||
+        (cleanEmail && u.email?.toLowerCase() === cleanEmail)
+      ) {
         return {
           ...u,
           isEmailVerified: true,
           emailVerifiedAt: nowFormatted,
           emailDeliveryStatus: 'delivered' as EmailDeliveryStatus,
+          registrationStatus: 'verified' as RegistrationStatus,
         };
       }
       return u;
     });
     setStoredUsers(updatedUsers);
 
-    // Tambahkan ke audit log
+    // 4. Update di daftar Admin Users (uda_admin_users)
+    try {
+      if (typeof window !== 'undefined') {
+        const rawAdminUsers = localStorage.getItem('uda_admin_users');
+        if (rawAdminUsers) {
+          const parsedAdminUsers = JSON.parse(rawAdminUsers);
+          const updatedAdminUsers = parsedAdminUsers.map((au: any) => {
+            if (
+              au.id === targetUserId ||
+              au.userId === targetUserId ||
+              (cleanEmail && au.email?.toLowerCase() === cleanEmail)
+            ) {
+              return {
+                ...au,
+                isEmailVerified: true,
+                registrationStatus: 'verified',
+              };
+            }
+            return au;
+          });
+          localStorage.setItem('uda_admin_users', JSON.stringify(updatedAdminUsers));
+        }
+      }
+    } catch (e) {}
+
+    // 5. Update di database Supabase (jika tersedia)
+    const supabase = createClient();
+    if (supabase) {
+      try {
+        await Promise.allSettled([
+          (supabase.from('profiles' as any) as any)
+            .update({
+              is_email_verified: true,
+              email_verified_at: nowIso,
+              email_delivery_status: 'delivered',
+              registration_status: 'verified',
+              updated_at: nowIso,
+            })
+            .or(`id.eq.${targetUserId},email.eq.${cleanEmail}`),
+          (supabase.from('verification_logs' as any) as any).insert({
+            user_id: targetUserId,
+            admin_id: adminId,
+            verification_type: 'email_manual',
+            previous_status: previousStatus,
+            new_status: 'verified',
+            note,
+            metadata: { adminName, email: cleanEmail },
+          }),
+        ]);
+      } catch (err) {
+        console.warn('VerificationService.manualVerifyEmail db error:', err);
+      }
+    }
+
+    // Panggil API admin untuk mengonfirmasi email pengguna langsung di Supabase Auth (auth.users)
+    try {
+      if (typeof window !== 'undefined') {
+        fetch('/api/admin/verify-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'manual_verify',
+            userId: targetUserId,
+            email: cleanEmail,
+            adminId,
+            adminName,
+            note,
+          }),
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
+    // 6. Tambahkan ke audit log
     const newLog: VerificationAuditLog = {
       id: `log-${Date.now()}`,
       userId: targetUserId,
-      userName: target.name,
-      userEmail: target.email,
+      userName: targetName,
+      userEmail: cleanEmail,
       adminId,
       adminName,
       verificationType: 'email_manual',
       previousStatus,
       newStatus: 'verified',
       note,
-      createdAt: nowFormatted + ' WIB',
+      createdAt: nowFormatted,
     };
     const currentLogs = getStoredLogs();
     setStoredLogs([newLog, ...currentLogs]);
+
+    // 7. Dispatch event real-time ke antarmuka pengguna
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('uda_user_verified', {
+          detail: { userId: targetUserId, email: cleanEmail },
+        })
+      );
+      window.dispatchEvent(new Event('storage'));
+    }
 
     return true;
   }

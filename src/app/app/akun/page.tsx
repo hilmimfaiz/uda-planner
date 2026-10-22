@@ -14,10 +14,14 @@ import {
   Camera,
   Trash2,
   Upload,
+  Volume2,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { GuidedTour, TourStep } from '@/components/guided-tour';
+import { playNotificationSound, playSuccessSound, playErrorSound } from '@/lib/audio-effects';
+import { addAppNotification } from '@/lib/notification-manager';
 
 const akunTourSteps: TourStep[] = [
   {
@@ -47,8 +51,10 @@ export default function AkunPenggunaPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
   const [reminderMinutes, setReminderMinutes] = useState<number>(15);
   const [browserNotifEnabled, setBrowserNotifEnabled] = useState(false);
+  const [userRole, setUserRole] = useState<'Owner' | 'Reviewer' | 'Editor' | 'Viewer'>('Owner');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -56,13 +62,64 @@ export default function AkunPenggunaPage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
+    // 1. Inisialisasi Nama & Waktu Pengingat
+    if (typeof window !== 'undefined') {
+      const storedMins = localStorage.getItem('uda_reminder_minutes');
+      if (storedMins) {
+        setReminderMinutes(Number(storedMins));
+      } else if (profile?.reminder_minutes) {
+        setReminderMinutes(profile.reminder_minutes);
+      }
+    }
+
     if (profile) {
       setFullName(profile.full_name || '');
-      setReminderMinutes(profile.reminder_minutes ?? 15);
+      setPhone(profile.phone || (user ? localStorage.getItem('uda_custom_phone_' + user.id) || '' : ''));
+      if (profile.reminder_minutes && typeof window !== 'undefined' && !localStorage.getItem('uda_reminder_minutes')) {
+        setReminderMinutes(profile.reminder_minutes);
+      }
     } else if (user) {
       setFullName(user.user_metadata?.full_name || user.email?.split('@')[0] || '');
+      setPhone(localStorage.getItem('uda_custom_phone_' + user.id) || user.phone || '');
     }
-  }, [profile, user]);
+
+    // 2. Inisialisasi Role Pengguna di Sistem
+    if (user) {
+      try {
+        const storedRole = localStorage.getItem('uda_system_role_' + user.id) as any;
+        if (storedRole && ['Owner', 'Reviewer', 'Editor', 'Viewer'].includes(storedRole)) {
+          setUserRole(storedRole);
+        } else if (isAdmin) {
+          setUserRole('Owner');
+        } else if ((profile as any)?.role) {
+          const r = String((profile as any).role).toLowerCase();
+          if (r === 'reviewer') setUserRole('Reviewer');
+          else if (r === 'editor') setUserRole('Editor');
+          else if (r === 'viewer') setUserRole('Viewer');
+          else setUserRole('Owner');
+        } else {
+          setUserRole('Owner');
+        }
+      } catch (e) {
+        setUserRole('Owner');
+      }
+    }
+
+    // 3. Status Notifikasi Browser Tetap Aktif saat Refresh
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      const currentPerm = Notification.permission as string;
+      if (currentPerm === 'granted') {
+        setBrowserNotifEnabled(true);
+        localStorage.setItem('uda_browser_notif_enabled', 'true');
+      } else if (currentPerm === 'denied') {
+        setBrowserNotifEnabled(false);
+        localStorage.setItem('uda_browser_notif_enabled', 'false');
+      } else {
+        const savedPref = localStorage.getItem('uda_browser_notif_enabled');
+        setBrowserNotifEnabled(savedPref === 'true');
+      }
+    }
+  }, [profile, user, isAdmin]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -209,23 +266,38 @@ export default function AkunPenggunaPage() {
   };
 
   const handleSaveProfile = async () => {
-    if (!user || !supabase) return;
+    if (!user) return;
     setIsSaving(true);
     try {
-      const { error } = await (supabase.from('profiles' as any) as any)
-        .update({
-          full_name: fullName.trim(),
-          reminder_minutes: reminderMinutes,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) {
-        showToast('Gagal memperbarui profil: ' + error.message);
-      } else {
-        await refreshUserData();
-        showToast('Profil berhasil disimpan.');
+      // 1. Simpan preferensi role, phone & reminder ke localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('uda_reminder_minutes', String(reminderMinutes));
+        localStorage.setItem('uda_system_role_' + user.id, userRole);
+        localStorage.setItem('uda_custom_phone_' + user.id, phone.trim());
+        window.dispatchEvent(new CustomEvent('uda_reminder_changed', { detail: { minutes: reminderMinutes } }));
+        window.dispatchEvent(new CustomEvent('uda_role_updated', { detail: { role: userRole } }));
       }
+
+      // 2. Simpan ke database Supabase jika koneksi aktif
+      if (supabase) {
+        const { error } = await (supabase.from('profiles' as any) as any)
+          .update({
+            full_name: fullName.trim(),
+            phone: phone.trim() || null,
+            reminder_minutes: reminderMinutes,
+            role: userRole === 'Owner' && isAdmin ? 'admin' : 'user',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
+
+        if (error) {
+          console.warn('Update profiles error, local state saved:', error.message);
+        }
+      }
+
+      await refreshUserData();
+      playSuccessSound();
+      showToast('Profil dan Role sistem berhasil diperbarui!');
     } catch (err: any) {
       showToast('Gagal menyimpan profil.');
     } finally {
@@ -235,17 +307,58 @@ export default function AkunPenggunaPage() {
 
   const handleRequestNotif = async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
-      const perm = await Notification.requestPermission();
-      if (perm === 'granted') {
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          setBrowserNotifEnabled(true);
+          localStorage.setItem('uda_browser_notif_enabled', 'true');
+          playNotificationSound();
+          try {
+            new Notification('🔔 Notifikasi Peramban UdaPlanner Aktif!', {
+              body: `Alarm pengingat tayang akan muncul otomatis ${reminderMinutes} menit sebelum jadwal postingan.`,
+              icon: '/favicon.ico',
+            });
+          } catch (e) {}
+          showToast('🔔 Notifikasi peramban browser diterapkan & tetap aktif!');
+        } else {
+          setBrowserNotifEnabled(false);
+          localStorage.setItem('uda_browser_notif_enabled', 'false');
+          playErrorSound();
+          showToast('Izin notifikasi peramban ditolak.');
+        }
+      } catch (err) {
         setBrowserNotifEnabled(true);
-        showToast('🔔 Notifikasi browser berhasil diaktifkan!');
-      } else {
-        showToast('Izin notifikasi peramban ditolak.');
+        localStorage.setItem('uda_browser_notif_enabled', 'true');
+        playNotificationSound();
+        showToast('Izin notifikasi peramban diterapkan.');
       }
     } else {
       setBrowserNotifEnabled(true);
-      showToast('Simulasi notifikasi browser diaktifkan.');
+      localStorage.setItem('uda_browser_notif_enabled', 'true');
+      playNotificationSound();
+      showToast('Simulasi notifikasi peramban diaktifkan.');
     }
+  };
+
+  const handleTestSoundAndNotif = () => {
+    playNotificationSound();
+    addAppNotification({
+      type: 'system',
+      title: 'Alarm Pengingat Tayang (Uji Coba)',
+      message: `🔔 Pengingat sinkron: Postingan Anda akan tayang dalam ${reminderMinutes} menit! Bunyi alarm berdering lancar.`,
+      link: '/app/daftar',
+      playSound: false,
+    });
+
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(`⏰ Alarm Pengingat UdaPlanner (${reminderMinutes} Menit Lagi)`, {
+          body: `Uji coba sukses! Notifikasi browser dan suara sinkron dengan pilihan ${reminderMinutes} menit Anda.`,
+          icon: '/favicon.ico',
+        });
+      } catch (e) {}
+    }
+    showToast(`🔊 Bunyi alarm & notifikasi ${reminderMinutes} menit berhasil diuji!`);
   };
 
   const handleLogout = async () => {
@@ -440,8 +553,8 @@ export default function AkunPenggunaPage() {
           </div>
         </div>
 
-        {/* Input Nama & Email Responsive Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 16 }}>
+        {/* Input Nama, Email & Nomor Handphone / WhatsApp */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 16 }}>
           <div>
             <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>Nama Lengkap</label>
             <input
@@ -461,63 +574,175 @@ export default function AkunPenggunaPage() {
               style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, marginTop: 5, background: '#f8fafc', color: '#64748b', fontSize: '0.9rem' }}
             />
           </div>
+
+          <div>
+            <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Nomor WhatsApp / HP</span>
+              <span style={{ fontSize: '0.68rem', color: '#16a34a', fontWeight: 800, background: '#dcfce7', padding: '1px 6px', borderRadius: 4 }}>
+                Undangan WA
+              </span>
+            </label>
+            <input
+              type="tel"
+              placeholder="Contoh: 081234567890 / 62812..."
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: 8, marginTop: 5, outline: 'none', fontSize: '0.9rem' }}
+            />
+          </div>
         </div>
+        <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: -8 }}>
+          💡 <strong>Nomor WhatsApp</strong> dapat digunakan oleh Brand Owner untuk mengundang Anda langsung melalui tautan WhatsApp.
+        </div>
+
+        {/* Kolom Status Role Pengguna di Sistem (Hanya tampil jika bukan Paket Pro) */}
+        {account?.plan_code !== 'pro' && (
+          <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+              <label style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
+                Status Role di Sistem
+              </label>
+              <span
+                style={{
+                  fontSize: '0.74rem',
+                  color: userRole === 'Owner' ? '#16a34a' : userRole === 'Reviewer' ? '#7c3aed' : userRole === 'Editor' ? '#2563eb' : '#64748b',
+                  fontWeight: 800,
+                  background: userRole === 'Owner' ? '#f0fdf4' : userRole === 'Reviewer' ? '#f5f3ff' : userRole === 'Editor' ? '#eff6ff' : '#f1f5f9',
+                  border: `1.5px solid ${userRole === 'Owner' ? '#86efac' : userRole === 'Reviewer' ? '#c4b5fd' : userRole === 'Editor' ? '#93c5fd' : '#cbd5e1'}`,
+                  padding: '4px 12px',
+                  borderRadius: 999,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Shield size={13} />
+                <span>Role Aktif: {userRole}</span>
+              </span>
+            </div>
+
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1.5px solid #e2e8f0',
+                borderRadius: 10,
+                padding: '14px 16px',
+                marginTop: 8,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a' }}>
+                  {userRole === 'Owner' ? 'Owner (Pemilik Workspace Utama)' : `Anggota Tim: ${userRole}`}
+                </span>
+                <span style={{ fontSize: '0.72rem', background: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
+                  Tersinkronisasi Real (Tetap)
+                </span>
+              </div>
+              <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+                {userRole === 'Owner'
+                  ? 'Sebagai pemilik workspace, Anda memiliki kendali penuh atas sistem dan hak akses tidak dapat diturunkan. Anda dapat menetapkan status peran anggota kolaborator (Reviewer, Editor, Viewer) di menu Pengaturan Brand saat mengundang tim.'
+                  : `Status peran Anda saat ini sebagai ${userRole} diatur oleh Pemilik Brand di pengaturan brand yang mengundang Anda.`}
+              </p>
+            </div>
+          </div>
+        )}
 
         <button
           className="btn-uda btn-uda-primary"
-          style={{ width: 'fit-content', display: 'flex', alignItems: 'center', gap: 6 }}
+          style={{ width: 'fit-content', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}
           onClick={handleSaveProfile}
           disabled={isSaving}
         >
           {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          <span>Simpan Perubahan Profil</span>
+          <span>Simpan Profil Pengguna</span>
         </button>
       </div>
 
       {/* Pengingat Jadwal & Notifikasi Browser */}
       <div id="tour-akun-notif" className="uda-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>Pengingat Sebelum Jadwal Tayang</h3>
-        <p style={{ fontSize: '0.82rem', color: '#64748b' }}>
-          Pilih berapa menit sebelum jam tayang aplikasi akan memunculkan alarm pengingat:
-        </p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 110px), 1fr))', gap: 10 }}>
-          {[5, 15, 30, 60].map((mins) => (
-            <button
-              key={mins}
-              onClick={() => {
-                setReminderMinutes(mins);
-                showToast(`Waktu pengingat diset ke ${mins} menit sebelum posting`);
-              }}
-              style={{
-                padding: '10px 8px',
-                borderRadius: 8,
-                border: `1px solid ${reminderMinutes === mins ? '#16a34a' : '#e2e8f0'}`,
-                background: reminderMinutes === mins ? '#f0fdf4' : '#ffffff',
-                color: reminderMinutes === mins ? '#16a34a' : '#0f172a',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                textAlign: 'center',
-              }}
-            >
-              {mins} Menit
-            </button>
-          ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>Pengingat Sebelum Jadwal Tayang</h3>
+            <p style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 2 }}>
+              Tentukan berapa menit sebelum postingan tayang alarm dering & notifikasi peramban dimunculkan:
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn-uda btn-uda-secondary btn-uda-sm"
+            onClick={handleTestSoundAndNotif}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            title="Dengarkan bunyi alarm pengingat sekarang"
+          >
+            <Volume2 size={14} style={{ color: '#16a34a' }} />
+            <span>Uji Bunyi Alarm</span>
+          </button>
         </div>
 
-        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 110px), 1fr))', gap: 10 }}>
+          {[5, 15, 30, 60].map((mins) => {
+            const isSelected = reminderMinutes === mins;
+            return (
+              <button
+                key={mins}
+                type="button"
+                onClick={() => {
+                  setReminderMinutes(mins);
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem('uda_reminder_minutes', String(mins));
+                    window.dispatchEvent(new CustomEvent('uda_reminder_changed', { detail: { minutes: mins } }));
+                  }
+                  playNotificationSound();
+                  showToast(`🔔 Waktu alarm pengingat diset ke ${mins} menit sebelum jam tayang!`);
+                }}
+                style={{
+                  padding: '12px 10px',
+                  borderRadius: 10,
+                  border: `2px solid ${isSelected ? '#16a34a' : '#e2e8f0'}`,
+                  background: isSelected ? '#f0fdf4' : '#ffffff',
+                  color: isSelected ? '#16a34a' : '#0f172a',
+                  fontWeight: 800,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  boxShadow: isSelected ? '2px 2px 0px #16a34a' : 'none',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 3,
+                }}
+              >
+                <span>{mins} Menit</span>
+                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: isSelected ? '#15803d' : '#94a3b8' }}>
+                  {isSelected ? '✓ Dipilih' : 'sebelum tayang'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div>
-              <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>Notifikasi Peramban (Browser)</div>
-              <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
-                Status: {browserNotifEnabled ? 'Aktif (Diizinkan)' : 'Belum diizinkan'}
+              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a' }}>
+                Notifikasi Peramban (Browser Push)
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 3 }}>
+                Status izin peramban otomatis dipertahankan bahkan saat halaman dimuat ulang (refresh).
               </div>
             </div>
-            <button className="btn-uda btn-uda-secondary btn-uda-sm" onClick={handleRequestNotif}>
-              <Bell size={14} />
-              <span>{browserNotifEnabled ? 'Periksa Izin' : 'Izinkan Notifikasi'}</span>
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn-uda btn-uda-secondary btn-uda-sm"
+                onClick={handleRequestNotif}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Bell size={14} />
+                <span>{browserNotifEnabled ? 'Perbarui Izin' : 'Izinkan Notifikasi'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -188,7 +188,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <header
           className="admin-header"
           style={{
-            height: 64,
+            height: 68,
+            minHeight: 68,
+            maxHeight: 68,
+            boxSizing: 'border-box',
             background: '#ffffff',
             borderBottom: '2.5px solid #0f172a',
             padding: '0 28px',
@@ -198,7 +201,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             gap: 12,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
+            <div className="mobile-app-header-brand" style={{ alignItems: 'center', gap: 7, flexShrink: 0 }}>
+              <div className="logo-symbol" style={{ width: 30, height: 30, fontSize: '0.85rem', background: '#16a34a', flexShrink: 0 }}>
+                <Shield size={16} />
+              </div>
+              <span style={{ fontWeight: 900, fontSize: '0.94rem', color: '#0f172a' }}>Admin</span>
+            </div>
             <span style={{ fontSize: '0.75rem', fontWeight: 900, background: '#dcfce7', color: '#166534', border: '1.5px solid #0f172a', boxShadow: '1.5px 1.5px 0px #0f172a', padding: '3px 8px', borderRadius: 6, flexShrink: 0 }}>
               ADMIN
             </span>

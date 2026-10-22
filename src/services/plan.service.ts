@@ -55,6 +55,53 @@ const DEFAULT_DURATIONS: Record<string, PlanDurationItem[]> = {
   ],
 };
 
+export function resolvePaymentDuration(
+  durationDays?: number,
+  durationLabel?: string,
+  amount?: number,
+  planCode?: string
+): { days: number; label: string } {
+  let days = Number(durationDays) || 0;
+  const amt = Number(amount) || 0;
+  const plan = (planCode || 'pro').toLowerCase();
+
+  // Jika terdapat label durasi eksplisit
+  if (durationLabel) {
+    const l = durationLabel.toLowerCase();
+    if (l.includes('12 bulan') || l.includes('1 tahun') || l.includes('365')) days = 365;
+    else if (l.includes('6 bulan') || l.includes('180')) days = 180;
+    else if (l.includes('3 bulan') || l.includes('90')) days = 90;
+    else if (l.includes('1 bulan') || l.includes('30')) days = 30;
+  }
+
+  // Jika durasi kosong atau default 30 hari tetapi nominal menunjukkan paket berdurasi lebih panjang
+  if (days <= 0 || (days === 30 && amt >= 200000)) {
+    if (plan === 'team') {
+      if (amt >= 1200000) days = 365;
+      else if (amt >= 600000) days = 180;
+      else if (amt >= 300000) days = 90;
+      else days = 30;
+    } else {
+      if (amt >= 400000) days = 365;
+      else if (amt >= 200000) days = 180;
+      else if (amt >= 100000) days = 90;
+      else days = 30;
+    }
+  }
+
+  if (days <= 0) days = 30;
+
+  let label = durationLabel || '';
+  if (!label || label === '30 Hari' || label === '1 Bulan') {
+    if (days >= 365) label = '1 Tahun';
+    else if (days >= 180) label = '6 Bulan';
+    else if (days >= 90) label = '3 Bulan';
+    else label = '1 Bulan';
+  }
+
+  return { days, label };
+}
+
 const DEFAULT_PLANS: DynamicPlan[] = DUMMY_PLANS.map((p, idx) => ({
   id: `plan-${p.code}`,
   code: p.code,

@@ -23,11 +23,25 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
+    const isUuid = (val?: string | null) =>
+      !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
     // 1. Hapus dari Supabase Auth
     const adminClient = createAdminClient();
     if (adminClient) {
       try {
-        await adminClient.auth.admin.deleteUser(targetUserId);
+        if (isUuid(targetUserId)) {
+          await adminClient.auth.admin.deleteUser(targetUserId);
+        }
+        if (targetEmail) {
+          const { data: listData } = await adminClient.auth.admin.listUsers();
+          const matchUser = ((listData as any)?.users || []).find(
+            (u: any) => u.email?.toLowerCase() === targetEmail.toLowerCase()
+          );
+          if (matchUser && matchUser.id !== targetUserId) {
+            await adminClient.auth.admin.deleteUser(matchUser.id);
+          }
+        }
       } catch (authEx: any) {
         console.warn('adminClient deleteUser warning:', authEx.message);
       }
@@ -37,9 +51,16 @@ export async function DELETE(req: NextRequest) {
     const serverClient = createServerClient();
     if (serverClient) {
       try {
-        await (serverClient as any).rpc('admin_delete_user', { target_user_id: targetUserId });
+        await (serverClient as any).rpc('admin_delete_user_complete', {
+          target_email: targetEmail || undefined,
+          target_id: targetUserId || undefined,
+        });
       } catch {
-        // Fallback
+        if (isUuid(targetUserId)) {
+          try {
+            await (serverClient as any).rpc('admin_delete_user', { target_user_id: targetUserId });
+          } catch {}
+        }
       }
 
       try {
@@ -58,6 +79,7 @@ export async function DELETE(req: NextRequest) {
           await Promise.allSettled([
             serverClient.from('invitations' as any).delete().eq('email', targetEmail),
             serverClient.from('profiles' as any).delete().eq('email', targetEmail),
+            serverClient.from('accounts' as any).delete().eq('email', targetEmail),
           ]);
         }
       } catch (dbErr: any) {

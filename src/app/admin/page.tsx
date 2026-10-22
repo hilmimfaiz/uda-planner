@@ -22,6 +22,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { AdminService } from '@/services/admin.service';
+import { resolvePaymentDuration } from '@/services/plan.service';
 import { GuidedTour, TourStep } from '@/components/guided-tour';
 
 const adminTourSteps: TourStep[] = [
@@ -50,16 +51,52 @@ export default function AdminDashboardPage() {
   const [activeAdminTab, setActiveAdminTab] = useState<'ringkasan' | 'pembayaran' | 'pengguna' | 'paket' | 'pengaturan'>('ringkasan');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Demo Admin Payments State
+  // Realtime Admin Statistics State
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [allPayments, setAllPayments] = useState<any[]>([]);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
 
-  React.useEffect(() => {
-    AdminService.getPayments().then((data) => {
-      if (data && data.length > 0) {
-        setPendingPayments(data.filter((p) => p.status === 'pending'));
+  const fetchDashboardStats = React.useCallback(async () => {
+    try {
+      const [paymentsData, usersData] = await Promise.all([
+        AdminService.getPayments(),
+        AdminService.getAdminUsers(),
+      ]);
+      if (paymentsData) {
+        setAllPayments(paymentsData);
+        setPendingPayments(paymentsData.filter((p) => p.status === 'pending'));
       }
-    });
+      if (usersData) {
+        setAdminUsers(usersData);
+      }
+    } catch (err) {
+      console.warn('fetchDashboardStats error:', err);
+    }
   }, []);
+
+  React.useEffect(() => {
+    fetchDashboardStats();
+
+    const handleSync = () => {
+      fetchDashboardStats();
+    };
+
+    window.addEventListener('uda_payment_submitted', handleSync);
+    window.addEventListener('uda_payment_approved', handleSync);
+    window.addEventListener('uda_payment_rejected', handleSync);
+    window.addEventListener('uda_account_updated', handleSync);
+    window.addEventListener('uda_user_registered', handleSync);
+    window.addEventListener('storage', handleSync);
+
+    return () => {
+      window.removeEventListener('uda_payment_submitted', handleSync);
+      window.removeEventListener('uda_payment_approved', handleSync);
+      window.removeEventListener('uda_payment_rejected', handleSync);
+      window.removeEventListener('uda_account_updated', handleSync);
+      window.removeEventListener('uda_user_registered', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, [fetchDashboardStats]);
 
   // Proof Modal
   const [selectedProof, setSelectedProof] = useState<any | null>(null);
@@ -105,10 +142,20 @@ export default function AdminDashboardPage() {
 
   const handleApprovePayment = async (id: string) => {
     const item = pendingPayments.find((p) => p.id === id);
-    await AdminService.approvePayment(id, item?.userId, item?.plan || 'pro');
+    const targetPlan = item?.plan || 'pro';
+    const dur = resolvePaymentDuration(
+      (item as any)?.durationDays,
+      (item as any)?.durationLabel,
+      item?.amount,
+      targetPlan
+    );
+    await AdminService.approvePayment(id, item?.userId, targetPlan, {
+      email: item?.email,
+      durationDays: dur.days,
+    });
     setPendingPayments(pendingPayments.filter((p) => p.id !== id));
     setSelectedProof(null);
-    showToast('✅ Pembayaran disetujui! Paket pengguna otomatis ditingkatkan di database.');
+    showToast(`✅ Pembayaran disetujui! Pengguna ${item?.user || ''} otomatis ditingkatkan ke paket ${targetPlan.toUpperCase()} (${dur.label} / ${dur.days} Hari).`);
   };
 
   const handleRejectPayment = async (id: string) => {
@@ -122,6 +169,21 @@ export default function AdminDashboardPage() {
     setShowRejectInput(false);
     showToast(`❌ Pembayaran ditolak. Alasan: ${rejectReason}`);
   };
+
+
+  // Perhitungan Statistik Real-time & Sinkron
+  const totalUsersCount = adminUsers.length || 0;
+  const proUsersCount = adminUsers.filter((u) => u.plan === 'pro' && !u.isSuspended).length;
+  const teamUsersCount = adminUsers.filter((u) => u.plan === 'team' && !u.isSuspended).length;
+  const freeUsersCount = adminUsers.filter((u) => u.plan === 'free').length;
+  const totalApprovedRevenue = allPayments
+    .filter((p) => p.status === 'approved')
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+  const formattedRevenue = new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0,
+  }).format(totalApprovedRevenue || 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -149,26 +211,49 @@ export default function AdminDashboardPage() {
       <div id="tour-admin-header">
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Ringkasan Operasional Admin</h1>
         <p style={{ color: '#64748b', fontSize: '0.88rem' }}>
-          Pantau statistik pengguna, verifikasi bukti transfer, dan konfigurasi paket UdaPlanner.
+          Pantau statistik pengguna secara realtime & sinkron, verifikasi bukti transfer, dan konfigurasi paket UdaPlanner.
         </p>
       </div>
 
       <div id="tour-admin-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-        <div className="uda-card" style={{ padding: 18 }}>
-          <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PENGGUNA</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>142</div>
-          <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>+12 minggu ini</div>
+        <div
+          className="uda-card"
+          onClick={() => router.push('/admin/pengguna')}
+          style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
+          title="Klik untuk membuka Manajemen Pengguna"
+        >
+          <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PENGGUNA TERDAFTAR</div>
+          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
+            {totalUsersCount}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>
+            {freeUsersCount} akun gratis (free)
+          </div>
         </div>
 
-        <div className="uda-card" style={{ padding: 18 }}>
+        <div
+          className="uda-card"
+          onClick={() => router.push('/admin/pengguna')}
+          style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
+          title="Klik untuk menyaring Pengguna Pro"
+        >
           <div style={{ color: '#3b82f6', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA PRO AKTIF</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#1d4ed8', marginTop: 4 }}>48</div>
+          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#1d4ed8', marginTop: 4 }}>
+            {proUsersCount}
+          </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Rp 49.000 / 30 hari</div>
         </div>
 
-        <div className="uda-card" style={{ padding: 18 }}>
+        <div
+          className="uda-card"
+          onClick={() => router.push('/admin/pengguna')}
+          style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
+          title="Klik untuk menyaring Pengguna Tim"
+        >
           <div style={{ color: '#8b5cf6', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA TIM AKTIF</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#6d28d9', marginTop: 4 }}>19</div>
+          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#6d28d9', marginTop: 4 }}>
+            {teamUsersCount}
+          </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Rp 149.000 / 30 hari</div>
         </div>
 
@@ -181,7 +266,7 @@ export default function AdminDashboardPage() {
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#d97706', marginTop: 4 }}>
             {pendingPayments.length}
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600, marginTop: 4 }}>Klik untuk cek →</div>
+          <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600, marginTop: 4 }}>Klik untuk cek transfer →</div>
         </div>
 
         <div
@@ -190,16 +275,28 @@ export default function AdminDashboardPage() {
           style={{ padding: 18, border: '1px solid #fed7aa', background: '#fff7ed', cursor: 'pointer', transition: 'transform 0.15s' }}
         >
           <div style={{ color: '#c2410c', fontSize: '0.78rem', fontWeight: 700 }}>EMAIL BELUM DIVERIFIKASI</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#ea580c', marginTop: 4 }}>3</div>
-          <div style={{ fontSize: '0.72rem', color: '#c2410c', fontWeight: 600, marginTop: 4 }}>Verifikasi manual SMTP →</div>
+          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#ea580c', marginTop: 4 }}>
+            {Math.max(0, adminUsers.filter((u) => u.isSuspended).length)}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#c2410c', fontWeight: 600, marginTop: 4 }}>Verifikasi akun manual →</div>
         </div>
 
-        <div className="uda-card" style={{ padding: 18, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-          <div style={{ color: '#15803d', fontSize: '0.78rem', fontWeight: 700 }}>PEMASUKAN BULAN INI</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#166534', marginTop: 4 }}>Rp 5.183.000</div>
-          <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>Target: Rp 10.000.000</div>
+        <div
+          className="uda-card"
+          onClick={() => router.push('/admin/pembayaran')}
+          style={{ padding: 18, background: '#f0fdf4', border: '1px solid #bbf7d0', cursor: 'pointer' }}
+          title="Total Pembayaran Berhasil Disetujui"
+        >
+          <div style={{ color: '#15803d', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PEMASUKAN DIVERIFIKASI</div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#166534', marginTop: 4 }}>
+            {formattedRevenue}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>
+            Dari {allPayments.filter((p) => p.status === 'approved').length} transaksi berhasil
+          </div>
         </div>
       </div>
+
 
       {/* Tabel Verifikasi Pembayaran Sesuai PRD Bab 8 */}
       <div className="uda-card">

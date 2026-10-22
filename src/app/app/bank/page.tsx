@@ -31,8 +31,8 @@ const bankTourSteps: TourStep[] = [
 ];
 
 export default function BankKontenPage() {
-  const { user } = useAuth();
-  const { confirmDelete, showSuccess } = useModal();
+  const { user, account } = useAuth();
+  const { confirmDelete, showSuccess, showError } = useModal();
   const [snippets, setSnippets] = useState<DummySnippet[]>(DUMMY_SNIPPETS);
   const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
   const [activeTab, setActiveTab] = useState<'caption' | 'hashtag'>('caption');
@@ -45,14 +45,17 @@ export default function BankKontenPage() {
   const [newBody, setNewBody] = useState('');
   const [newBrand, setNewBrand] = useState('brand-1');
 
+  const isFreePlan = !account || account.plan_code === 'free';
+  const isSnippetQuotaExceeded = isFreePlan && snippets.length >= 5;
+
   React.useEffect(() => {
-    SnippetService.getSnippets().then((data) => {
-      if (data && data.length > 0) setSnippets(data);
+    SnippetService.getSnippets(undefined, undefined, user?.id).then((data) => {
+      setSnippets(data || []);
     });
 
     BrandService.getBrands(user?.id).then((bList) => {
+      setBrands(bList || []);
       if (bList && bList.length > 0) {
-        setBrands(bList);
         setNewBrand(bList[0].id);
       }
     });
@@ -74,23 +77,38 @@ export default function BankKontenPage() {
     showToast(`📋 ${title} berhasil disalin ke clipboard!`);
   };
 
+  const handleOpenAddModal = () => {
+    if (isSnippetQuotaExceeded) {
+      showError(
+        'Batas Kuota Bank Konten Tercapai (5 Item)',
+        'Paket Gratis dibatasi maksimal 5 template bank konten. Tingkatkan langganan ke Paket Pro atau Tim untuk menyimpan caption dan hashtag tanpa batas!'
+      );
+      return;
+    }
+    setShowAddModal(true);
+  };
+
   const handleAddSnippet = async (e: React.FormEvent) => {
     e.preventDefault();
-    const created = await SnippetService.createSnippet({
-      brandId: newBrand,
-      type: activeTab,
-      title: newTitle,
-      body: newBody,
-      userId: user?.id,
-    });
-    setSnippets((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
-    setShowAddModal(false);
-    setNewTitle('');
-    setNewBody('');
-    showSuccess(
-      `Berhasil Menambahkan ${activeTab === 'caption' ? 'Caption' : 'Hashtag'}!`,
-      `Template "${created.title}" telah tersimpan ke database Bank Konten dan siap digunakan.`
-    );
+    try {
+      const created = await SnippetService.createSnippet({
+        brandId: newBrand,
+        type: activeTab,
+        title: newTitle,
+        body: newBody,
+        userId: user?.id,
+      });
+      setSnippets((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
+      setShowAddModal(false);
+      setNewTitle('');
+      setNewBody('');
+      showSuccess(
+        `Berhasil Menambahkan ${activeTab === 'caption' ? 'Caption' : 'Hashtag'}!`,
+        `Template "${created.title}" telah tersimpan ke database Bank Konten dan siap digunakan.`
+      );
+    } catch (err: any) {
+      showError('Gagal Menyimpan Template', err.message || 'Terjadi kesalahan sistem.');
+    }
   };
 
   return (
@@ -124,7 +142,7 @@ export default function BankKontenPage() {
           </p>
         </div>
 
-        <button className="btn-uda btn-uda-primary btn-uda-sm" onClick={() => setShowAddModal(true)}>
+        <button className="btn-uda btn-uda-primary btn-uda-sm" onClick={handleOpenAddModal}>
           <Plus size={16} />
           <span>Tambah Template</span>
         </button>
@@ -167,8 +185,8 @@ export default function BankKontenPage() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {/* Indikator Kuota Sesuai PRD Bab 8: "3 dari 5 item" jika gratis */}
-          <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 600 }}>
-            Tersimpan: <strong>{filtered.length} item</strong> (Tanpa Batas di Pro)
+          <span style={{ fontSize: '0.82rem', color: isSnippetQuotaExceeded ? '#dc2626' : '#64748b', fontWeight: 600 }}>
+            Tersimpan: <strong>{snippets.length} {isFreePlan ? 'dari 5 item (Paket Gratis)' : 'item (Tanpa Batas)'}</strong>
           </span>
 
           <select
@@ -184,10 +202,10 @@ export default function BankKontenPage() {
         </div>
       </div>
 
-      {/* Grid Kartu Template */}
-      <div id="tour-bank-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18 }}>
+      {/* Grid Kartu Template Responsif */}
+      <div id="tour-bank-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 18 }}>
         {filtered.map((item) => {
-          const brand = brands.find((b) => b.id === item.brand_id) || DUMMY_BRANDS.find((b) => b.id === item.brand_id);
+          const brand = brands.find((b) => b.id === item.brand_id);
           return (
             <div
               key={item.id}
@@ -246,9 +264,13 @@ export default function BankKontenPage() {
                         title: 'Hapus Template Konten?',
                         message: `Apakah Anda yakin ingin menghapus template "${item.title}"? Template ini akan dihapus permanen.`,
                         onConfirm: async () => {
-                          await SnippetService.deleteSnippet(item.id);
-                          setSnippets((prev) => prev.filter((s) => s.id !== item.id));
-                          showSuccess('Template Berhasil Dihapus', `Template "${item.title}" telah dihapus.`);
+                          try {
+                            await SnippetService.deleteSnippet(item.id, user?.id);
+                            setSnippets((prev) => prev.filter((s) => s.id !== item.id));
+                            showSuccess('Template Berhasil Dihapus', `Template "${item.title}" telah dihapus.`);
+                          } catch (err: any) {
+                            showError('Akses Ditolak', err.message || 'Gagal menghapus template');
+                          }
                         },
                       });
                     }}

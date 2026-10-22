@@ -75,7 +75,7 @@ export default function BerandaPage() {
     setErrorMessage(null);
     try {
       const filters = brandId !== 'all' ? { brandId } : {};
-      const data = await PostService.getPostsForDate(targetDate, filters);
+      const data = await PostService.getPostsForDate(targetDate, filters, user?.id);
       setPosts(data || []);
     } catch (err: any) {
       setErrorMessage(err.message || 'Gagal memuat jadwal dari server.');
@@ -86,7 +86,7 @@ export default function BerandaPage() {
 
   useEffect(() => {
     BrandService.getBrands(user?.id).then((bList) => {
-      if (bList && bList.length > 0) setBrands(bList);
+      setBrands(bList || []);
     });
     loadPostsForDate(selectedDate, selectedBrandFilter);
   }, [user?.id, selectedBrandFilter]);
@@ -180,7 +180,7 @@ export default function BerandaPage() {
     {
       title: 'Panduan Selesai!',
       description:
-        'Anda siap menggunakan UdaPlanner! Tombol "Lihat Panduan Lagi" tersedia di pojok kiri bawah jika Anda ingin mengulang panduan ini kapan saja.',
+        'Anda siap menggunakan UdaPlanner! Tombol "Panduan Halaman" tersedia di header pojok kiri atas jika Anda ingin mengulang panduan ini kapan saja.',
       placement: 'center',
     },
   ];
@@ -207,24 +207,6 @@ export default function BerandaPage() {
         }}
       >
         <div>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '3px 10px',
-              backgroundColor: '#dcfce7',
-              color: '#15803d',
-              borderRadius: 999,
-              fontSize: '0.76rem',
-              fontWeight: 800,
-              marginBottom: 8,
-            }}
-          >
-            <Sparkles size={13} />
-            <span>Fokus Harian Anda</span>
-          </div>
-
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             {currentAvatarUrl ? (
               <img

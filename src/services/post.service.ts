@@ -8,7 +8,10 @@ const getStoredPosts = (): DummyPost[] => {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    return (Array.isArray(parsed) ? parsed : []).filter(
+      (p: any) => p && !p.id?.startsWith('post-gen-') && !['post-1', 'post-2', 'post-3', 'post-4', 'post-5', 'post-6'].includes(p.id)
+    );
   } catch {
     return [];
   }
@@ -33,17 +36,43 @@ export interface PostFilterOptions {
 }
 
 export class PostService {
-  static async getPosts(filters: PostFilterOptions = {}): Promise<DummyPost[]> {
+  static async getPosts(filters: PostFilterOptions = {}, userId?: string): Promise<DummyPost[]> {
     const supabase = createClient();
-    const stored = getStoredPosts();
+
+    // Dapatkan seluruh brand yang dimiliki atau diikuti pengguna dalam tim
+    const userBrands = await BrandService.getBrands(userId);
+    const accessibleBrandIds = new Set(userBrands.map((b) => b.id));
+
+    // Jika pengguna tidak memiliki brand sama sekali, postingan pasti kosong!
+    if (accessibleBrandIds.size === 0) {
+      return [];
+    }
+
+    const stored = getStoredPosts().filter((p) => p.brand_id && accessibleBrandIds.has(p.brand_id));
 
     if (supabase) {
       try {
         let query = supabase.from('posts' as any).select('*').order('created_at', { ascending: false });
 
-        if (filters.brandId && filters.brandId !== 'all' && isUuid(filters.brandId)) {
-          query = query.eq('brand_id', filters.brandId);
+        if (filters.brandId && filters.brandId !== 'all') {
+          if (!accessibleBrandIds.has(filters.brandId)) {
+            // Brand yang diminta tidak berada dalam kepemilikan/tim pengguna, tolak akses!
+            return [];
+          }
+          if (isUuid(filters.brandId)) {
+            query = query.eq('brand_id', filters.brandId);
+          }
+        } else {
+          // Hanya ambil postingan dari brand-brand milik pengguna atau timnya
+          const uuidBrandIds = Array.from(accessibleBrandIds).filter((id) => isUuid(id));
+          if (uuidBrandIds.length > 0) {
+            query = query.in('brand_id', uuidBrandIds);
+          } else {
+            // Pengguna hanya memiliki brand lokal, gunakan stored
+            return this.filterPostsLocally(stored, filters);
+          }
         }
+
         if (filters.pillarId && filters.pillarId !== 'all' && isUuid(filters.pillarId)) {
           query = query.eq('pillar_id', filters.pillarId);
         }
@@ -54,31 +83,36 @@ export class PostService {
 
         const { data, error } = await query;
         if (!error && data && data.length > 0) {
-          const dbPosts: DummyPost[] = data.map((p: any) => ({
-            id: p.id,
-            brand_id: p.brand_id,
-            title: p.title || 'Untitled Post',
-            caption: p.caption || '',
-            hashtags: p.hashtags || '',
-            platforms: p.platforms || ['instagram'],
-            content_type: p.content_type || 'feed',
-            status: p.status || 'draft',
-            scheduled_at: p.scheduled_at || null,
-            pillar_id: p.pillar_id || null,
-            assignee_id: p.assignee_id || null,
-            notes: p.notes || null,
-            posted_at: p.posted_at || null,
-            posted_url: p.posted_url || null,
-            media_url: p.media_url || 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600',
-            aspect_ratio: '1:1',
-            comments_count: 0,
-          }));
+          const dbPosts: DummyPost[] = data
+            .filter((p: any) => accessibleBrandIds.has(p.brand_id))
+            .map((p: any) => {
+              const { notes: cleanNotes, mediaUrl } = this.extractMediaAndNotes(p.notes);
+              return {
+                id: p.id,
+                brand_id: p.brand_id,
+                title: p.title || 'Untitled Post',
+                caption: p.caption || '',
+                hashtags: p.hashtags || '',
+                platforms: p.platforms || ['instagram'],
+                content_type: p.content_type || 'feed',
+                status: p.status || 'draft',
+                scheduled_at: p.scheduled_at || null,
+                pillar_id: p.pillar_id || null,
+                assignee_id: p.assignee_id || null,
+                notes: cleanNotes || null,
+                posted_at: p.posted_at || null,
+                posted_url: p.posted_url || null,
+                media_url: mediaUrl || p.media_url || '',
+                aspect_ratio: '1:1',
+                comments_count: 0,
+              };
+            });
 
           const dbIds = new Set(dbPosts.map((p) => p.id));
           const combined = [
             ...dbPosts,
             ...stored.filter((st) => !dbIds.has(st.id)),
-            ...localPosts.filter((lp) => !dbIds.has(lp.id) && !stored.some((st) => st.id === lp.id)),
+            ...localPosts.filter((lp) => accessibleBrandIds.has(lp.brand_id) && !dbIds.has(lp.id) && !stored.some((st) => st.id === lp.id)),
           ];
 
           return this.filterPostsLocally(combined, filters);
@@ -89,22 +123,29 @@ export class PostService {
     }
 
     const storedIds = new Set(stored.map((s) => s.id));
-    const combined = [...stored, ...localPosts.filter((lp) => !storedIds.has(lp.id))];
+    const combined = [
+      ...stored,
+      ...localPosts.filter((lp) => accessibleBrandIds.has(lp.brand_id) && !storedIds.has(lp.id)),
+    ];
     return this.filterPostsLocally(combined, filters);
   }
 
   /**
    * Mengambil jadwal postingan KHUSUS hari ini (tanggal hari ini di zona waktu lokal/WIB)
    */
-  static async getTodayPosts(filters: Omit<PostFilterOptions, 'startDate' | 'endDate'> = {}): Promise<DummyPost[]> {
-    return this.getPostsForDate(new Date(), filters);
+  static async getTodayPosts(filters: Omit<PostFilterOptions, 'startDate' | 'endDate'> = {}, userId?: string): Promise<DummyPost[]> {
+    return this.getPostsForDate(new Date(), filters, userId);
   }
 
   /**
    * Mengambil jadwal postingan untuk tanggal tertentu secara presisi
    */
-  static async getPostsForDate(targetDate: Date, filters: Omit<PostFilterOptions, 'startDate' | 'endDate'> = {}): Promise<DummyPost[]> {
-    const all = await this.getPosts(filters);
+  static async getPostsForDate(
+    targetDate: Date,
+    filters: Omit<PostFilterOptions, 'startDate' | 'endDate'> = {},
+    userId?: string
+  ): Promise<DummyPost[]> {
+    const all = await this.getPosts(filters, userId);
     const targetDateStr = targetDate.toDateString();
     return all.filter((p) => {
       if (!p.scheduled_at) return false;
@@ -140,14 +181,36 @@ export class PostService {
     return results;
   }
 
-  static async getPostById(id: string): Promise<DummyPost | null> {
+  static extractMediaAndNotes(rawNotes: string | null): { notes: string; mediaUrl?: string } {
+    if (!rawNotes) return { notes: '' };
+    const match = rawNotes.match(/<!--MEDIA_URL:([\s\S]*?)-->/);
+    if (match) {
+      const mediaUrl = match[1].trim();
+      const notes = rawNotes.replace(/<!--MEDIA_URL:[\s\S]*?-->/, '').trim();
+      return { notes, mediaUrl };
+    }
+    return { notes: rawNotes };
+  }
+
+  static embedMediaInNotes(notes?: string | null, mediaUrl?: string | null): string | null {
+    let cleanNotes = (notes || '').replace(/<!--MEDIA_URL:[\s\S]*?-->/, '').trim();
+    if (mediaUrl && mediaUrl.trim()) {
+      return `${cleanNotes}\n\n<!--MEDIA_URL:${mediaUrl.trim()}-->`.trim();
+    }
+    return cleanNotes || null;
+  }
+
+  static async getPostById(id: string, userId?: string): Promise<DummyPost | null> {
     const supabase = createClient();
+    let foundPost: DummyPost | null = null;
+
     if (supabase && isUuid(id)) {
       try {
         const { data, error } = await supabase.from('posts' as any).select('*').eq('id', id).maybeSingle();
         if (!error && data) {
           const d = data as any;
-          return {
+          const { notes, mediaUrl } = this.extractMediaAndNotes(d.notes);
+          foundPost = {
             id: d.id,
             brand_id: d.brand_id,
             title: d.title || 'Untitled Post',
@@ -159,10 +222,10 @@ export class PostService {
             scheduled_at: d.scheduled_at || null,
             pillar_id: d.pillar_id || null,
             assignee_id: d.assignee_id || null,
-            notes: d.notes || null,
+            notes: notes,
             posted_at: d.posted_at || null,
             posted_url: d.posted_url || null,
-            media_url: d.media_url || 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600',
+            media_url: mediaUrl || '',
             aspect_ratio: '1:1',
             comments_count: 0,
           };
@@ -172,11 +235,21 @@ export class PostService {
       }
     }
 
-    const stored = getStoredPosts();
-    const found = stored.find((p) => p.id === id);
-    if (found) return found;
+    if (!foundPost) {
+      const stored = getStoredPosts();
+      const localFound = stored.find((p) => p.id === id) || localPosts.find((p) => p.id === id);
+      if (localFound) foundPost = localFound;
+    }
 
-    return localPosts.find((p) => p.id === id) || null;
+    if (!foundPost) return null;
+
+    // Verifikasi izin akses: Pengguna harus Owner atau Anggota Tim pada brand postingan ini!
+    const role = await BrandService.getUserBrandRole(foundPost.brand_id, userId);
+    if (!role) {
+      return null; // Akses Ditolak: postingan milik brand orang lain
+    }
+
+    return foundPost;
   }
 
   static async createPost(payload: Partial<DummyPost> & { brand_id: string; title: string; user_id?: string; assigned_to?: string }): Promise<DummyPost> {
@@ -194,13 +267,13 @@ export class PostService {
       } catch {}
     }
 
-    // Resolusikan brand_id ke UUID riil Supabase
+    // Resolusikan brand_id ke UUID riil Supabase jika ada
     const realBrandId = await BrandService.getRealBrandId(payload.brand_id, effectiveUserId);
 
     const fallbackId = `post-${Date.now()}`;
     const newPost: DummyPost = {
       id: fallbackId,
-      brand_id: realBrandId || payload.brand_id,
+      brand_id: payload.brand_id || realBrandId,
       title: payload.title,
       caption: payload.caption || '',
       hashtags: formattedHashtags,
@@ -213,15 +286,25 @@ export class PostService {
       notes: payload.notes || null,
       posted_at: payload.posted_at || null,
       posted_url: payload.posted_url || null,
-      media_url: payload.media_url || 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600',
+      media_url: payload.media_url || '',
       aspect_ratio: payload.aspect_ratio || '1:1',
       comments_count: 0,
     };
 
+    // Verifikasi izin pembuatan: harus Owner, Editor, atau Reviewer (Viewer dilarang!)
+    const targetBrandId = payload.brand_id || realBrandId;
+    const role = await BrandService.getUserBrandRole(targetBrandId, effectiveUserId);
+    if (!role) {
+      throw new Error('Akses Ditolak: Anda tidak terdaftar sebagai pemilik atau anggota tim brand ini.');
+    }
+    if (role === 'viewer') {
+      throw new Error('Akses Ditolak: Peran Viewer hanya memiliki hak baca dan tidak dapat membuat postingan baru.');
+    }
+
     if (supabase) {
       try {
+        const finalNotes = this.embedMediaInNotes(payload.notes, payload.media_url);
         const insertPayload: any = {
-          brand_id: realBrandId,
           title: payload.title,
           caption: payload.caption || '',
           hashtags: formattedHashtags,
@@ -230,8 +313,12 @@ export class PostService {
           status: payload.status || 'draft',
           scheduled_at: payload.scheduled_at || null,
           pillar_id: isUuid(payload.pillar_id || '') ? payload.pillar_id : null,
-          notes: payload.notes || null,
+          notes: finalNotes,
         };
+
+        if (realBrandId && isUuid(realBrandId)) {
+          insertPayload.brand_id = realBrandId;
+        }
 
         if (effectiveUserId && isUuid(effectiveUserId)) {
           insertPayload.created_by = effectiveUserId;
@@ -240,30 +327,63 @@ export class PostService {
         const { data, error } = await (supabase.from('posts' as any) as any).insert(insertPayload).select().single();
         if (!error && data) {
           const d = data as any;
+          const { notes: cleanNotes, mediaUrl } = this.extractMediaAndNotes(d.notes);
           const created: DummyPost = {
             ...newPost,
             id: d.id,
-            brand_id: d.brand_id,
+            brand_id: d.brand_id || newPost.brand_id,
+            notes: cleanNotes || newPost.notes,
+            media_url: payload.media_url || mediaUrl || newPost.media_url,
           };
           localPosts.unshift(created);
           const currentStored = getStoredPosts();
           saveStoredPosts([created, ...currentStored.filter((p) => p.id !== created.id)]);
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('uda_post_created', { detail: created }));
+            window.dispatchEvent(new CustomEvent('uda_post_updated', { detail: created }));
+            window.dispatchEvent(new Event('storage'));
+          }
+
           return created;
         } else if (error) {
-          console.error('PostService.createPost Supabase insert error:', error.message, error.details);
+          console.warn('PostService.createPost Supabase insert notice:', error.message);
         }
       } catch (err) {
-        console.warn('PostService.createPost db error, using local:', err);
+        console.warn('PostService.createPost db error, using local fallback:', err);
       }
     }
 
     localPosts.unshift(newPost);
     const currentStored = getStoredPosts();
     saveStoredPosts([newPost, ...currentStored.filter((p) => p.id !== newPost.id)]);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('uda_post_created', { detail: newPost }));
+      window.dispatchEvent(new CustomEvent('uda_post_updated', { detail: newPost }));
+      window.dispatchEvent(new Event('storage'));
+    }
+
     return newPost;
   }
 
-  static async updatePost(id: string, updates: Partial<DummyPost>): Promise<DummyPost | null> {
+  static async updatePost(id: string, updates: Partial<DummyPost>, userId?: string): Promise<DummyPost> {
+    const currentStored = getStoredPosts();
+    const existingInStored = currentStored.find((p) => p.id === id);
+    const existingInLocal = localPosts.find((p) => p.id === id);
+    const basePost = existingInStored || existingInLocal;
+
+    const targetBrandId = updates.brand_id || basePost?.brand_id;
+    if (targetBrandId) {
+      const role = await BrandService.getUserBrandRole(targetBrandId, userId);
+      if (!role) {
+        throw new Error('Akses Ditolak: Anda tidak memiliki akses ke brand postingan ini.');
+      }
+      if (role === 'viewer') {
+        throw new Error('Akses Ditolak: Peran Viewer hanya memiliki hak baca dan tidak dapat mengubah isi postingan.');
+      }
+    }
+
     const supabase = createClient();
     if (supabase && isUuid(id)) {
       try {
@@ -277,35 +397,99 @@ export class PostService {
         if (updates.content_type !== undefined) dbUpdates.content_type = updates.content_type;
         if (updates.status !== undefined) dbUpdates.status = updates.status;
         if (updates.scheduled_at !== undefined) dbUpdates.scheduled_at = updates.scheduled_at;
+        if (updates.brand_id !== undefined && isUuid(updates.brand_id)) {
+          dbUpdates.brand_id = updates.brand_id;
+        }
         if (updates.pillar_id !== undefined) {
           dbUpdates.pillar_id = isUuid(updates.pillar_id || '') ? updates.pillar_id : null;
         }
-        if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+        if (updates.notes !== undefined || updates.media_url !== undefined) {
+          const notesText = updates.notes !== undefined ? updates.notes : '';
+          const media = updates.media_url !== undefined ? updates.media_url : '';
+          dbUpdates.notes = this.embedMediaInNotes(notesText, media);
+        }
         if (updates.posted_at !== undefined) dbUpdates.posted_at = updates.posted_at;
         if (updates.posted_url !== undefined) dbUpdates.posted_url = updates.posted_url;
         dbUpdates.updated_at = new Date().toISOString();
 
-        await (supabase.from('posts' as any) as any)
+        const { error } = await (supabase.from('posts' as any) as any)
           .update(dbUpdates)
           .eq('id', id);
+
+        if (error) {
+          console.warn('PostService.updatePost Supabase update notice:', error.message);
+        }
       } catch (err) {
         console.warn('PostService.updatePost db error:', err);
       }
     }
 
-    const currentStored = getStoredPosts();
-    const updatedStored = currentStored.map((p) => (p.id === id ? { ...p, ...updates } : p));
+    const resolvedBase = basePost || {
+      id,
+      brand_id: updates.brand_id || 'brand-1',
+      title: updates.title || 'Untitled Post',
+      caption: updates.caption || '',
+      hashtags: updates.hashtags || '',
+      platforms: updates.platforms || ['instagram'],
+      content_type: updates.content_type || 'feed',
+      status: updates.status || 'draft',
+      scheduled_at: updates.scheduled_at || null,
+      pillar_id: updates.pillar_id || null,
+      assignee_id: updates.assignee_id || null,
+      notes: updates.notes || null,
+      posted_at: updates.posted_at || null,
+      posted_url: updates.posted_url || null,
+      media_url: updates.media_url || '',
+      aspect_ratio: '1:1',
+      comments_count: 0,
+    };
+
+    const mergedPost: DummyPost = {
+      ...resolvedBase,
+      ...updates,
+      id, // Preserve ID
+    };
+
+    // Pastikan tersimpan ke localStorage (uda_custom_posts) baik postingan dummy maupun uuid
+    const existingIdx = currentStored.findIndex((p) => p.id === id);
+    let updatedStored: DummyPost[];
+    if (existingIdx !== -1) {
+      updatedStored = currentStored.map((p) => (p.id === id ? mergedPost : p));
+    } else {
+      updatedStored = [mergedPost, ...currentStored];
+    }
     saveStoredPosts(updatedStored);
 
+    // Update in-memory localPosts
     const index = localPosts.findIndex((p) => p.id === id);
     if (index !== -1) {
-      localPosts[index] = { ...localPosts[index], ...updates };
-      return localPosts[index];
+      localPosts[index] = mergedPost;
+    } else {
+      localPosts.unshift(mergedPost);
     }
-    return null;
+
+    // Broadcast event real-time ke semua halaman (Papan Kanban, Kalender, Daftar Postingan, Beranda)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('uda_post_updated', { detail: mergedPost }));
+      window.dispatchEvent(new Event('storage'));
+    }
+
+    return mergedPost;
   }
 
-  static async deletePost(id: string): Promise<boolean> {
+  static async deletePost(id: string, userId?: string): Promise<boolean> {
+    const currentStored = getStoredPosts();
+    const existing = currentStored.find((p) => p.id === id) || localPosts.find((p) => p.id === id);
+    if (existing?.brand_id) {
+      const role = await BrandService.getUserBrandRole(existing.brand_id, userId);
+      if (!role) {
+        throw new Error('Akses Ditolak: Anda tidak memiliki akses ke postingan ini.');
+      }
+      if (role === 'viewer' || role === 'editor') {
+        throw new Error('Akses Ditolak: Hanya Owner atau Reviewer yang dapat menghapus postingan.');
+      }
+    }
+
     const supabase = createClient();
     if (supabase && isUuid(id)) {
       try {
@@ -315,9 +499,14 @@ export class PostService {
       }
     }
 
-    const currentStored = getStoredPosts();
     saveStoredPosts(currentStored.filter((p) => p.id !== id));
     localPosts = localPosts.filter((p) => p.id !== id);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('uda_post_deleted', { detail: { id } }));
+      window.dispatchEvent(new Event('storage'));
+    }
+
     return true;
   }
 }

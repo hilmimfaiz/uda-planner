@@ -20,6 +20,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { AdminService, AdminPaymentItem } from '@/services/admin.service';
+import { resolvePaymentDuration } from '@/services/plan.service';
 import { useModal } from '@/contexts/modal-context';
 
 type PaymentItem = AdminPaymentItem;
@@ -66,9 +67,24 @@ export default function AdminPembayaranPage() {
   };
 
   React.useEffect(() => {
-    AdminService.getPayments().then((data) => {
-      if (data && data.length > 0) setPayments(data);
-    });
+    const fetchPayments = () => {
+      AdminService.getPayments().then((data) => {
+        if (data && data.length > 0) setPayments(data);
+      });
+    };
+
+    fetchPayments();
+
+    const handleSync = () => {
+      fetchPayments();
+    };
+
+    window.addEventListener('uda_payment_submitted', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('uda_payment_submitted', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
   }, []);
 
   const showToast = (msg: string) => {
@@ -78,14 +94,26 @@ export default function AdminPembayaranPage() {
 
   const handleApprove = async (id: string) => {
     const target = payments.find((p) => p.id === id);
-    await AdminService.approvePayment(id, target?.userId, target?.plan || 'pro');
+    const targetPlan = target?.plan || 'pro';
+    const dur = resolvePaymentDuration(
+      target?.durationDays,
+      target?.durationLabel,
+      target?.amount,
+      targetPlan
+    );
+    await AdminService.approvePayment(id, target?.userId, targetPlan, {
+      email: target?.email,
+      durationDays: dur.days,
+    });
     setPayments((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: 'approved' } : p))
+      prev.map((p) =>
+        p.id === id ? { ...p, status: 'approved', durationDays: dur.days, durationLabel: dur.label } : p
+      )
     );
     setSelectedProof(null);
     showSuccess(
       'Pembayaran Berhasil Disetujui!',
-      `Bukti transfer dari ${target?.user} telah diverifikasi. Akun pengguna otomatis ditingkatkan ke paket ${target?.plan.toUpperCase()}.`
+      `Bukti transfer dari ${target?.user} telah diverifikasi. Akun pengguna otomatis ditingkatkan ke paket ${targetPlan.toUpperCase()} (${dur.label} / ${dur.days} Hari).`
     );
   };
 
@@ -214,19 +242,24 @@ export default function AdminPembayaranPage() {
                       <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{p.email}</div>
                     </td>
                     <td style={{ padding: '14px 18px' }}>
-                      <span
-                        style={{
-                          fontWeight: 800,
-                          fontSize: '0.75rem',
-                          textTransform: 'uppercase',
-                          padding: '3px 8px',
-                          borderRadius: 6,
-                          background: p.plan === 'pro' ? '#f0fdf4' : '#f5f3ff',
-                          color: p.plan === 'pro' ? '#16a34a' : '#7c3aed',
-                        }}
-                      >
-                        Paket {p.plan}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                        <span
+                          style={{
+                            fontWeight: 800,
+                            fontSize: '0.75rem',
+                            textTransform: 'uppercase',
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            background: p.plan === 'pro' ? '#f0fdf4' : '#f5f3ff',
+                            color: p.plan === 'pro' ? '#16a34a' : '#7c3aed',
+                          }}
+                        >
+                          Paket {p.plan}
+                        </span>
+                        <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700 }}>
+                          {p.durationLabel || `${p.durationDays || 30} Hari`}
+                        </span>
+                      </div>
                     </td>
                     <td style={{ padding: '14px 18px', fontWeight: 800, color: '#0f172a' }}>
                       Rp {p.amount.toLocaleString('id-ID')}

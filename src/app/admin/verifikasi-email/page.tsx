@@ -73,6 +73,16 @@ export default function AdminVerifikasiEmailPage() {
 
   useEffect(() => {
     loadData();
+
+    window.addEventListener('uda_user_registered', loadData);
+    window.addEventListener('uda_user_verified', loadData);
+    window.addEventListener('storage', loadData);
+
+    return () => {
+      window.removeEventListener('uda_user_registered', loadData);
+      window.removeEventListener('uda_user_verified', loadData);
+      window.removeEventListener('storage', loadData);
+    };
   }, []);
 
   const handleManualVerifyConfirm = async () => {

@@ -40,3 +40,4 @@ ehthumbs.db
 # Vercel & TypeScript cache
 .vercel
 *.tsbuildinfo
+.server_invitations.json

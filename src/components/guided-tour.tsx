@@ -90,6 +90,18 @@ export function GuidedTour({
     }
   }, [tourKey, autoStart, user]);
 
+  // Listener untuk membuka panduan interaktif saat tombol header ditekan
+  useEffect(() => {
+    const handleTriggerTour = (e: any) => {
+      if (!e?.detail?.tourKey || e.detail.tourKey === tourKey) {
+        setCurrentStepIndex(0);
+        setIsOpen(true);
+      }
+    };
+    window.addEventListener('uda_start_guided_tour', handleTriggerTour);
+    return () => window.removeEventListener('uda_start_guided_tour', handleTriggerTour);
+  }, [tourKey]);
+
   // Update target rect saat langkah berubah, window resize, atau scroll
   const updateTargetPosition = () => {
     if (!isOpen || currentStepIndex >= steps.length) return;
@@ -296,34 +308,6 @@ export function GuidedTour({
 
   return (
     <>
-      {/* Floating Button "Panduan Halaman" */}
-      {!isOpen && (
-        <button
-          onClick={handleRestart}
-          className="guided-tour-floating-trigger btn-uda"
-          title="Buka Panduan Langkah Halaman Ini"
-          style={{
-            position: 'fixed',
-            zIndex: 900,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            backgroundColor: '#fef08a',
-            color: '#0f172a',
-            border: '2px solid #0f172a',
-            boxShadow: '3px 3px 0px #0f172a',
-            padding: '8px 14px',
-            borderRadius: 8,
-            fontSize: '0.82rem',
-            fontWeight: 800,
-            cursor: 'pointer',
-          }}
-        >
-          <BookOpen size={16} style={{ color: '#16a34a' }} />
-          <span>Panduan Halaman</span>
-        </button>
-      )}
-
       {/* OVERLAY & SPOTLIGHT PANDUAN INTERAKTIF */}
       {isOpen && (
         <div
@@ -502,22 +486,26 @@ export function GuidedTour({
 
             {/* Tombol Kontrol Panduan: Kembali, Lewati, Selanjutnya / Selesai */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-              <button
-                onClick={handleSkip}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#64748b',
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  padding: '6px 8px',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = '#0f172a')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
-              >
-                Lewati Panduan
-              </button>
+              {currentStepIndex < steps.length - 1 ? (
+                <button
+                  onClick={handleSkip}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#64748b',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: '6px 8px',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = '#0f172a')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
+                >
+                  Lewati Panduan
+                </button>
+              ) : (
+                <div />
+              )}
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {currentStepIndex > 0 && (

@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
     const startDate = searchParams.get('startDate') || undefined;
     const endDate = searchParams.get('endDate') || undefined;
     const search = searchParams.get('search') || undefined;
+    const userId = searchParams.get('userId') || undefined;
 
     const posts = await PostService.getPosts({
       brandId,
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
       startDate,
       endDate,
       search,
-    });
+    }, userId);
 
     return NextResponse.json({ success: true, count: posts.length, data: posts });
   } catch (error: any) {
@@ -50,6 +51,8 @@ export async function POST(req: NextRequest) {
       scheduled_at: body.scheduled_at,
       status: body.status || 'draft',
       user_id: body.user_id,
+      media_url: body.media_url,
+      notes: body.notes,
     });
 
     return NextResponse.json({ success: true, data: post }, { status: 201 });

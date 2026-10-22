@@ -18,6 +18,7 @@ import { POST_STATUSES } from '@/lib/platforms';
 import { PostService } from '@/services/post.service';
 import { BrandService } from '@/services/brand.service';
 import { useModal } from '@/contexts/modal-context';
+import { useAuth } from '@/contexts/auth-context';
 import { GuidedTour, TourStep } from '@/components/guided-tour';
 
 function generatePaginationPages(current: number, total: number): (number | '...')[] {
@@ -56,6 +57,7 @@ const daftarTourSteps: TourStep[] = [
 
 export default function DaftarPostinganPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const { confirmDelete, showSuccess } = useModal();
   const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
   const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
@@ -70,13 +72,31 @@ export default function DaftarPostinganPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   React.useEffect(() => {
-    PostService.getPosts().then((data) => {
-      if (data && data.length > 0) setPosts(data);
+    const loadPosts = () => {
+      PostService.getPosts({}, user?.id).then((data) => {
+        if (data) setPosts(data);
+      });
+    };
+
+    loadPosts();
+    BrandService.getBrands(user?.id).then((data) => {
+      setBrands(data || []);
     });
-    BrandService.getBrands().then((data) => {
-      if (data && data.length > 0) setBrands(data);
-    });
-  }, []);
+
+    window.addEventListener('uda_post_updated', loadPosts);
+    window.addEventListener('uda_post_created', loadPosts);
+    window.addEventListener('uda_post_deleted', loadPosts);
+    window.addEventListener('storage', loadPosts);
+    window.addEventListener('focus', loadPosts);
+
+    return () => {
+      window.removeEventListener('uda_post_updated', loadPosts);
+      window.removeEventListener('uda_post_created', loadPosts);
+      window.removeEventListener('uda_post_deleted', loadPosts);
+      window.removeEventListener('storage', loadPosts);
+      window.removeEventListener('focus', loadPosts);
+    };
+  }, [user?.id]);
 
   // Filter & Search Logic
   const filtered = posts
@@ -113,7 +133,7 @@ export default function DaftarPostinganPage() {
   const handleExportCSV = () => {
     const headers = ['ID', 'Judul', 'Brand', 'Status', 'Platform', 'Jadwal', 'Caption'];
     const rows = filtered.map((p) => {
-      const brand = DUMMY_BRANDS.find((b) => b.id === p.brand_id);
+      const brand = brands.find((b) => b.id === p.brand_id);
       return [
         p.id,
         `"${p.title.replace(/"/g, '""')}"`,
@@ -269,7 +289,7 @@ export default function DaftarPostinganPage() {
                 </tr>
               ) : (
                 paginatedPosts.map((post, postIdx) => {
-                  const brand = DUMMY_BRANDS.find((b) => b.id === post.brand_id);
+                  const brand = brands.find((b) => b.id === post.brand_id);
                   const statusMeta = POST_STATUSES[post.status];
                   return (
                     <tr
@@ -340,9 +360,13 @@ export default function DaftarPostinganPage() {
                                 title: 'Hapus Postingan Ini?',
                                 message: `Apakah Anda yakin ingin menghapus "${post.title}"?`,
                                 onConfirm: async () => {
-                                  await PostService.deletePost(post.id);
-                                  setPosts((prev) => prev.filter((p) => p.id !== post.id));
-                                  showSuccess('Postingan Berhasil Dihapus', `Postingan "${post.title}" telah dihapus.`);
+                                  try {
+                                    await PostService.deletePost(post.id, user?.id);
+                                    setPosts((prev) => prev.filter((p) => p.id !== post.id));
+                                    showSuccess('Postingan Berhasil Dihapus', `Postingan "${post.title}" telah dihapus.`);
+                                  } catch (err: any) {
+                                    alert(err.message || 'Gagal menghapus postingan');
+                                  }
                                 },
                               });
                             }}

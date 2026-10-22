@@ -48,7 +48,7 @@ const brandTourSteps: TourStep[] = [
 
 export default function DaftarBrandPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, account } = useAuth();
   const { showSuccess, showError } = useModal();
   const supabase = createClient();
   const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
@@ -57,7 +57,7 @@ export default function DaftarBrandPage() {
 
   React.useEffect(() => {
     BrandService.getBrands(user?.id).then((data) => {
-      if (data && data.length > 0) setBrands(data);
+      setBrands(data || []);
     });
   }, [user?.id]);
 
@@ -69,6 +69,9 @@ export default function DaftarBrandPage() {
     'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150'
   );
   const [isUploadingNewAvatar, setIsUploadingNewAvatar] = useState(false);
+  const [brandPlatforms, setBrandPlatforms] = useState<string[]>(['instagram', 'tiktok']);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['instagram', 'tiktok']);
+  const [platformInput, setPlatformInput] = useState('');
 
   // Quick Photo Change for Existing Brand
   const [updatingBrandId, setUpdatingBrandId] = useState<string | null>(null);
@@ -76,7 +79,12 @@ export default function DaftarBrandPage() {
   const activeBrandForUpload = useRef<string | null>(null);
   const newBrandFileInputRef = useRef<HTMLInputElement>(null);
 
-  const maxBrands = 5; // Kuota Paket Pro
+  // Kuota Brand Berdasarkan Paket Langganan:
+  // - Paket Gratis: Maksimal 1 Brand
+  // - Paket Pro: Maksimal 5 Brand
+  // - Paket Tim: Maksimal 20 Brand
+  const planCode = account?.plan_code || 'free';
+  const maxBrands = planCode === 'team' ? 20 : planCode === 'pro' ? 5 : 1;
   const isQuotaFull = brands.length >= maxBrands;
 
   const showToast = (msg: string) => {
@@ -172,24 +180,51 @@ export default function DaftarBrandPage() {
       {/* Header */}
       <div id="tour-brand-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Manajemen Akun Brand</h1>
-          <p style={{ color: '#64748b', fontSize: '0.88rem' }}>
-            Kelola brand media sosial yang Anda naungi, undang anggota tim, dan atur pilar konten.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Manajemen Akun Brand</h1>
+            <span
+              style={{
+                fontSize: '0.74rem',
+                fontWeight: 800,
+                padding: '3px 10px',
+                borderRadius: 999,
+                background: isQuotaFull ? '#fef2f2' : '#f0fdf4',
+                color: isQuotaFull ? '#dc2626' : '#16a34a',
+                border: `1.5px solid ${isQuotaFull ? '#fca5a5' : '#86efac'}`,
+              }}
+            >
+              {brands.length} / {maxBrands} Brand (Paket {planCode.toUpperCase()})
+            </span>
+          </div>
+          <p style={{ color: '#64748b', fontSize: '0.88rem', marginTop: 2 }}>
+            {planCode === 'free'
+              ? 'Paket Gratis dibatasi maksimal 1 Akun Brand. Upgrade ke Pro (5 Brand) atau Tim (20 Brand) untuk ekspansi brand.'
+              : planCode === 'pro'
+              ? 'Paket Pro mendukung hingga 5 Brand Media Sosial. Upgrade ke Tim untuk mengelola hingga 20 brand.'
+              : 'Paket Tim Agensi mendukung hingga 20 Brand Media Sosial dengan kolaborasi tim penuh.'}
           </p>
         </div>
 
         <button
-          className="btn-uda btn-uda-primary btn-uda-sm"
+          className={`btn-uda ${isQuotaFull ? 'btn-uda-secondary' : 'btn-uda-primary'} btn-uda-sm`}
           onClick={() => {
             if (isQuotaFull) {
-              alert('Kuota brand penuh! Upgrade ke paket Tim untuk menambah hingga 20 brand.');
+              const upgradeMsg =
+                planCode === 'free'
+                  ? 'Batas 1 Akun Brand untuk Paket Gratis telah tercapai. Tingkatkan ke Paket Pro (5 Brand) atau Paket Tim (20 Brand) untuk menambah akun brand baru.'
+                  : planCode === 'pro'
+                  ? 'Batas 5 Akun Brand untuk Paket Pro telah tercapai. Tingkatkan ke Paket Tim (20 Brand) untuk mengelola brand baru.'
+                  : 'Anda telah mencapai batas maksimal 20 Akun Brand pada Paket Tim.';
+
+              showError('Kuota Brand Maksimal Tercapai', upgradeMsg);
             } else {
               setShowAddBrandModal(true);
             }
           }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
         >
-          {isQuotaFull ? <Lock size={15} /> : <Plus size={15} />}
-          <span>{isQuotaFull ? 'Tambah Brand (Penuh)' : '+ Tambah Brand'}</span>
+          {isQuotaFull ? <Lock size={15} style={{ color: '#dc2626' }} /> : <Plus size={15} />}
+          <span>{isQuotaFull ? `Kuota Penuh (${brands.length}/${maxBrands})` : '+ Tambah Brand'}</span>
         </button>
       </div>
 
@@ -322,6 +357,50 @@ export default function DaftarBrandPage() {
             </div>
           );
         })}
+
+        {brands.length === 0 && (
+          <div
+            className="uda-card"
+            style={{
+              gridColumn: '1 / -1',
+              textAlign: 'center',
+              padding: '48px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <div
+              style={{
+                width: 60,
+                height: 60,
+                borderRadius: '50%',
+                background: '#f1f5f9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#64748b',
+              }}
+            >
+              <Building size={28} />
+            </div>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              Belum Ada Brand
+            </h3>
+            <p style={{ color: '#64748b', fontSize: '0.88rem', maxWidth: 420, margin: 0 }}>
+              Mulai kelola konten dengan menambahkan akun brand media sosial pertama Anda secara manual.
+            </p>
+            <button
+              onClick={() => setShowAddBrandModal(true)}
+              className="btn-uda btn-uda-primary"
+              style={{ marginTop: 8 }}
+            >
+              <Plus size={16} />
+              <span>Tambah Brand Pertama</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Modal Tambah Brand */}
@@ -354,18 +433,23 @@ export default function DaftarBrandPage() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 try {
+                  const finalPlatforms = selectedPlatforms.length > 0 ? selectedPlatforms : ['instagram'];
                   const created = await BrandService.createBrand({
                     ownerId: user?.id,
                     name: newName,
                     handle: newHandle.replace('@', ''),
                     color: newColor,
                     avatarUrl: newAvatarUrl,
+                    platforms: finalPlatforms,
                   });
                   setBrands((prev) => [created, ...prev.filter((b) => b.id !== created.id)]);
                   setShowAddBrandModal(false);
                   setNewName('');
                   setNewHandle('');
                   setNewAvatarUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150');
+                  setBrandPlatforms(['instagram', 'tiktok']);
+                  setSelectedPlatforms(['instagram', 'tiktok']);
+                  setPlatformInput('');
                   showSuccess(
                     'Brand Berhasil Dibuat!',
                     `Brand "${created.name}" (@${created.handle}) telah berhasil disimpan ke database dan siap digunakan.`
@@ -481,6 +565,136 @@ export default function DaftarBrandPage() {
                     fontSize: '0.9rem',
                   }}
                 />
+              </div>
+
+              {/* Kolom Platform: Input dengan Enter menjadi Checkbox */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
+                    Platform Media Sosial
+                  </label>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                    Tekan <strong>Enter</strong> untuk menambah
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Instagram, TikTok, LinkedIn, Twitter..."
+                    value={platformInput}
+                    onChange={(e) => setPlatformInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const val = platformInput.trim().toLowerCase().replace(/\s+/g, '-');
+                        if (val) {
+                          if (!brandPlatforms.includes(val)) {
+                            setBrandPlatforms((prev) => [...prev, val]);
+                          }
+                          if (!selectedPlatforms.includes(val)) {
+                            setSelectedPlatforms((prev) => [...prev, val]);
+                          }
+                          setPlatformInput('');
+                        }
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 8,
+                      outline: 'none',
+                      fontSize: '0.88rem',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-uda btn-uda-secondary btn-uda-sm"
+                    onClick={() => {
+                      const val = platformInput.trim().toLowerCase().replace(/\s+/g, '-');
+                      if (val) {
+                        if (!brandPlatforms.includes(val)) {
+                          setBrandPlatforms((prev) => [...prev, val]);
+                        }
+                        if (!selectedPlatforms.includes(val)) {
+                          setSelectedPlatforms((prev) => [...prev, val]);
+                        }
+                        setPlatformInput('');
+                      }
+                    }}
+                    style={{ padding: '0 12px' }}
+                  >
+                    + Tambah
+                  </button>
+                </div>
+
+                {/* List Checkbox Platform */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                  {brandPlatforms.map((plt) => {
+                    const isChecked = selectedPlatforms.includes(plt);
+                    return (
+                      <label
+                        key={plt}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '5px 10px',
+                          borderRadius: 8,
+                          border: `1.5px solid ${isChecked ? '#16a34a' : '#cbd5e1'}`,
+                          backgroundColor: isChecked ? '#f0fdf4' : '#ffffff',
+                          cursor: 'pointer',
+                          fontSize: '0.82rem',
+                          fontWeight: 600,
+                          color: isChecked ? '#15803d' : '#475569',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPlatforms((prev) => [...prev, plt]);
+                            } else {
+                              setSelectedPlatforms((prev) => prev.filter((p) => p !== plt));
+                            }
+                          }}
+                          style={{ accentColor: '#16a34a', cursor: 'pointer' }}
+                        />
+                        <span style={{ textTransform: 'capitalize' }}>{plt}</span>
+                        {/* Hapus platform custom */}
+                        {!['instagram', 'tiktok'].includes(plt) && (
+                          <span
+                            role="button"
+                            title="Hapus platform ini"
+                            onClick={(ev) => {
+                              ev.preventDefault();
+                              ev.stopPropagation();
+                              setBrandPlatforms((prev) => prev.filter((p) => p !== plt));
+                              setSelectedPlatforms((prev) => prev.filter((p) => p !== plt));
+                            }}
+                            style={{
+                              marginLeft: 4,
+                              color: '#94a3b8',
+                              fontWeight: 800,
+                              fontSize: '0.9rem',
+                              lineHeight: 1,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            ×
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                  Platform yang dicentang akan otomatis muncul sebagai pilihan di <strong>Form Konten</strong>.
+                </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
