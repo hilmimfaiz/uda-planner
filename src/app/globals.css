@@ -3,30 +3,30 @@
    Warna Utama: Hijau UdaCoding #16A34A
    Latar: Putih & Abu Sangat Terang #F8FAFC | Teks: #0F172A & #64748B
    ============================================================================== */
-
 /* Font didefinisikan dengan preconnect di layout untuk loading instan tanpa render-blocking */
-
 :root {
-  --font-sans: var(--font-sans), 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: var(--font-mono), 'JetBrains Mono', monospace;
+  --dashboard-hero: linear-gradient(135deg, #ffffff, #f0fdf4);
+  --dashboard-surface: #ffffff;
+  --dashboard-soft: #f8fafc;
+  --dashboard-border: #dce5df;
+  --dashboard-green-text: #15803d;
+  --dashboard-green-soft: #dcfce7;
+  --dashboard-shadow: 0 4px 18px rgb(15 23 42 / 5%);
 
   /* Brand Colors - Hijau UdaCoding Tetap Dipertahankan */
   --primary: #16a34a;
   --primary-hover: #15803d;
   --primary-light: #f0fdf4;
   --primary-border: #0f172a;
-
   /* Neo-Brutalism Retro Surfaces & Borders */
   --bg-app: #fcfbf9;
   --bg-content: #f8f6f0;
   --bg-card: #ffffff;
   --border-color: #0f172a;
   --border-subtle: #0f172a;
-
   --text-main: #0f172a;
   --text-secondary: #475569;
   --text-muted: #64748b;
-
   /* Status Colors Sesuai PRD */
   --status-ide: #64748b;
   --status-draft: #2563eb;
@@ -34,25 +34,31 @@
   --status-siap: #16a34a;
   --status-terposting: #334155;
   --status-terlewat: #dc2626;
-
   /* Neo-Brutalism Hard Offset Shadows (0 Blur) */
   --shadow-sm: 2px 2px 0px #0f172a;
   --shadow-md: 4px 4px 0px #0f172a;
   --shadow-lg: 6px 6px 0px #0f172a;
   --shadow-green: 4px 4px 0px #16a34a;
-
   /* Retro Radii */
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-
   /* Responsive Spacing Tokens */
   --page-padding-x: 28px;
   --page-padding-y: 28px;
   --card-padding: 24px;
+--header-h: 64px;
+  --line-strong: #0f172a;
+  --soft-border: #e2e8f0;
+  --blue: #0284c7;
+  --amber: #b45309;
+  --tint-blue: #e0f2fe;
+  --tint-amber: #fef3c7;
+  --tint-red: #fef2f2;
+  --tint-red-border: #fecaca;
+  --red-text: #991b1b;
 }
-
 @media (max-width: 1024px) {
   :root {
     --page-padding-x: 20px;
@@ -60,7 +66,6 @@
     --card-padding: 20px;
   }
 }
-
 @media (max-width: 640px) {
   :root {
     --page-padding-x: 14px;
@@ -68,26 +73,22 @@
     --card-padding: 16px;
   }
 }
-
 html {
   scroll-behavior: smooth;
 }
-
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
-
 body {
-  font-family: var(--font-sans), 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans, 'Plus Jakarta Sans'), 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--bg-content);
   color: var(--text-main);
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
-
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
@@ -103,13 +104,11 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
-
 /* Base App Layout */
 .app-layout {
   display: flex;
   min-height: 100vh;
 }
-
 /* Sidebar Desktop */
 .app-sidebar {
   width: 250px;
@@ -124,17 +123,14 @@ body {
   transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   overflow-x: hidden;
 }
-
 .app-sidebar.collapsed {
   width: 72px;
 }
-
 .sidebar-admin {
   background: #0f172a !important;
   color: #f8fafc !important;
   border-right: 2.5px solid #000000 !important;
 }
-
 .sidebar-brand-header {
   padding: 18px 16px;
   border-bottom: 2.5px solid var(--border-color);
@@ -145,7 +141,6 @@ body {
   min-height: 72px;
   box-sizing: border-box;
 }
-
 .sidebar-brand-info {
   display: flex;
   align-items: center;
@@ -153,25 +148,21 @@ body {
   overflow: hidden;
   min-width: 0;
 }
-
 .sidebar-brand-text {
   display: flex;
   flex-direction: column;
   white-space: nowrap;
   overflow: hidden;
 }
-
 .app-sidebar.collapsed .sidebar-brand-header {
   padding: 16px 8px;
   justify-content: center;
   align-items: center;
   min-height: 72px;
 }
-
 .app-sidebar.collapsed .sidebar-brand-text {
   display: none !important;
 }
-
 .sidebar-toggle-btn {
   display: inline-flex;
   align-items: center;
@@ -187,25 +178,21 @@ body {
   transition: all 0.12s ease;
   flex-shrink: 0;
 }
-
 .sidebar-toggle-btn:hover {
   background: #f1f5f9;
   transform: translate(-1px, -1px);
   box-shadow: 2px 2px 0px var(--border-color);
 }
-
 .sidebar-admin .sidebar-toggle-btn {
   background: #1e293b;
   border-color: #4ade80;
   color: #4ade80;
   box-shadow: 1.5px 1.5px 0px #16a34a;
 }
-
 .sidebar-admin .sidebar-toggle-btn:hover {
   background: #334155;
   color: #f8fafc;
 }
-
 .logo-symbol {
   width: 36px;
   height: 36px;
@@ -220,28 +207,23 @@ body {
   border: 2px solid var(--border-color);
   box-shadow: 2px 2px 0px var(--border-color);
 }
-
 .logo-text-title {
   font-weight: 800;
   font-size: 1.15rem;
   color: var(--text-main);
   letter-spacing: -0.02em;
 }
-
 .sidebar-admin .logo-text-title {
   color: #f8fafc;
 }
-
 .logo-text-sub {
   font-size: 0.72rem;
   color: var(--text-secondary);
   font-weight: 500;
 }
-
 .sidebar-admin .logo-text-sub {
   color: #94a3b8;
 }
-
 .sidebar-nav {
   padding: 16px 12px;
   flex: 1;
@@ -250,7 +232,6 @@ body {
   gap: 4px;
   overflow-y: auto;
 }
-
 .nav-item-btn {
   display: flex;
   align-items: center;
@@ -268,7 +249,6 @@ body {
   width: 100%;
   text-align: left;
 }
-
 .nav-item-btn:hover {
   background: #f1f5f9;
   color: var(--text-main);
@@ -276,7 +256,6 @@ body {
   transform: translate(-1px, -1px);
   box-shadow: 2px 2px 0px var(--border-color);
 }
-
 .nav-item-btn.active {
   background: #dcfce7;
   color: #15803d;
@@ -284,26 +263,22 @@ body {
   box-shadow: 3px 3px 0px var(--border-color);
   transform: translate(-1px, -1px);
 }
-
 .sidebar-admin .nav-item-btn {
   color: #94a3b8;
   border: 2px solid transparent;
 }
-
 .sidebar-admin .nav-item-btn:hover {
   background: #1e293b;
   color: #f8fafc;
   border-color: #4ade80;
   box-shadow: 2px 2px 0px #16a34a;
 }
-
 .sidebar-admin .nav-item-btn.active {
   background: #16a34a;
   color: #ffffff;
   border: 2px solid #ffffff;
   box-shadow: 3px 3px 0px #ffffff;
 }
-
 .nav-badge-count {
   margin-left: auto;
   font-size: 0.72rem;
@@ -313,12 +288,10 @@ body {
   color: #475569;
   font-weight: 700;
 }
-
 .nav-item-btn.active .nav-badge-count {
   background: var(--primary);
   color: white;
 }
-
 .sidebar-admin-bottom {
   padding: 14px 12px;
   border-top: 1px solid var(--border-color);
@@ -326,11 +299,9 @@ body {
   flex-direction: column;
   gap: 4px;
 }
-
 .sidebar-admin .sidebar-admin-bottom {
   border-top-color: #1e293b;
 }
-
 .sidebar-collapse-row-btn {
   display: flex;
   align-items: center;
@@ -347,30 +318,25 @@ body {
   width: 100%;
   margin-top: 4px;
 }
-
 .sidebar-collapse-row-btn:hover {
   background: #f1f5f9;
   color: var(--text-main);
   border-color: #cbd5e1;
 }
-
 .sidebar-admin .sidebar-collapse-row-btn {
   color: #94a3b8;
   border-color: #334155;
 }
-
 .sidebar-admin .sidebar-collapse-row-btn:hover {
   background: #1e293b;
   color: #f8fafc;
   border-color: #475569;
 }
-
 /* Collapsed Navigation Item overrides */
 .app-sidebar.collapsed .sidebar-nav {
   padding: 16px 8px;
   align-items: center;
 }
-
 .app-sidebar.collapsed .nav-item-btn {
   justify-content: center;
   padding: 10px 0;
@@ -379,20 +345,16 @@ body {
   border-radius: var(--radius-md);
   margin: 0 auto;
 }
-
 .app-sidebar.collapsed .nav-item-btn span {
   display: none !important;
 }
-
 .app-sidebar.collapsed .nav-item-btn .nav-badge-count {
   display: none !important;
 }
-
 .app-sidebar.collapsed .sidebar-admin-bottom {
   padding: 14px 8px;
   align-items: center;
 }
-
 .app-sidebar.collapsed .sidebar-admin-bottom .nav-item-btn {
   justify-content: center;
   padding: 10px 0;
@@ -400,11 +362,9 @@ body {
   height: 44px;
   margin: 0 auto;
 }
-
 .app-sidebar.collapsed .sidebar-admin-bottom .nav-item-btn span {
   display: none !important;
 }
-
 .app-sidebar.collapsed .sidebar-collapse-row-btn {
   justify-content: center;
   padding: 8px 0;
@@ -412,11 +372,9 @@ body {
   height: 44px;
   margin: 4px auto 0;
 }
-
 .app-sidebar.collapsed .sidebar-collapse-row-btn span {
   display: none !important;
 }
-
 /* Topbar */
 .app-topbar {
   height: 64px;
@@ -430,13 +388,11 @@ body {
   top: 0;
   z-index: 30;
 }
-
 .topbar-left {
   display: flex;
   align-items: center;
   gap: 16px;
 }
-
 .brand-dropdown-select {
   display: flex;
   align-items: center;
@@ -452,18 +408,15 @@ body {
   cursor: pointer;
   transition: all 0.12s ease;
 }
-
 .brand-dropdown-select:hover {
   transform: translate(-1px, -1px);
   box-shadow: 3px 3px 0px var(--border-color);
 }
-
 .topbar-right {
   display: flex;
   align-items: center;
   gap: 14px;
 }
-
 /* Neo-Brutalism Retro Tactile Buttons */
 .btn-uda {
   display: inline-flex;
@@ -481,58 +434,46 @@ body {
   font-family: inherit;
   text-decoration: none;
 }
-
 .btn-uda:hover {
   transform: translate(-1px, -1px);
   box-shadow: 4px 4px 0px var(--border-color);
 }
-
 .btn-uda:active {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0px var(--border-color);
 }
-
 .btn-uda-primary {
   background-color: var(--primary) !important;
   color: #ffffff !important;
 }
-
 .btn-uda-primary:hover {
   background-color: var(--primary-hover) !important;
 }
-
 .btn-uda-secondary {
   background-color: #ffffff !important;
   color: var(--text-main) !important;
 }
-
 .btn-uda-secondary:hover {
   background-color: #f8fafc !important;
 }
-
 .btn-uda-danger {
   background-color: #fee2e2 !important;
   color: #dc2626 !important;
 }
-
 .btn-uda-danger:hover {
   background-color: #fecaca !important;
 }
-
 .btn-uda-sm {
   padding: 5px 12px;
   font-size: 0.8rem;
   box-shadow: 2px 2px 0px var(--border-color);
 }
-
 .btn-uda-sm:hover {
   box-shadow: 3px 3px 0px var(--border-color);
 }
-
 .btn-uda-sm:active {
   box-shadow: 0px 0px 0px var(--border-color);
 }
-
 /* Neo-Brutalism Retro Card */
 .uda-card {
   background: #ffffff;
@@ -545,18 +486,15 @@ body {
   max-width: 100%;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-
 .uda-card:hover {
   transform: translate(-2px, -2px);
   box-shadow: 6px 6px 0px var(--border-color) !important;
 }
-
 @media (max-width: 640px) {
   .uda-card {
     border-radius: var(--radius-md);
   }
 }
-
 /* Status Chips & Badges */
 .status-pill {
   display: inline-flex;
@@ -571,14 +509,12 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-
 .status-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   border: 1px solid var(--border-color);
 }
-
 /* Notification bell */
 .notif-bell-btn {
   position: relative;
@@ -595,12 +531,10 @@ body {
   color: var(--text-main);
   transition: all 0.12s ease;
 }
-
 .notif-bell-btn:hover {
   transform: translate(-1px, -1px);
   box-shadow: 3px 3px 0px var(--border-color);
 }
-
 .notif-unread-badge {
   position: absolute;
   top: -5px;
@@ -618,7 +552,6 @@ body {
   border: 2px solid var(--border-color);
   box-shadow: 1px 1px 0px var(--border-color);
 }
-
 /* Mobile Bottom Navigation (Visible on screen < 768px) */
 .mobile-bottom-nav {
   display: none;
@@ -634,7 +567,6 @@ body {
   justify-content: space-around;
   align-items: center;
 }
-
 .mobile-nav-item {
   display: flex;
   flex-direction: column;
@@ -650,12 +582,10 @@ body {
   text-decoration: none;
   transition: all 0.12s ease;
 }
-
 .mobile-nav-item.active {
   color: var(--primary);
   font-weight: 900;
 }
-
 .mobile-nav-center-plus {
   width: 46px;
   height: 46px;
@@ -672,12 +602,10 @@ body {
   text-decoration: none;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
-
 .mobile-nav-center-plus:active {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0px var(--border-color);
 }
-
 /* Neo-Brutalism Retro Form Inputs */
 input[type="text"],
 input[type="email"],
@@ -697,7 +625,6 @@ select {
   font-weight: 600;
   transition: all 0.12s ease;
 }
-
 input:focus,
 textarea:focus,
 select:focus {
@@ -705,7 +632,6 @@ select:focus {
   border-color: var(--primary) !important;
   box-shadow: 3px 3px 0px var(--primary) !important;
 }
-
 /* Neo-Brutalism Retro Table */
 table {
   width: 100%;
@@ -717,7 +643,6 @@ table {
   overflow: hidden;
   box-shadow: 3px 3px 0px var(--border-color);
 }
-
 th {
   background: #f1f5f9;
   border-bottom: 2px solid var(--border-color);
@@ -728,18 +653,15 @@ th {
   text-transform: uppercase;
   padding: 12px 14px;
 }
-
 td {
   padding: 12px 14px;
   border-bottom: 1.5px solid #e2e8f0;
   color: var(--text-main);
   font-size: 0.88rem;
 }
-
 tr:last-child td {
   border-bottom: none;
 }
-
 /* Content Body Responsif */
 .app-content-body,
 .admin-content-body {
@@ -751,7 +673,6 @@ tr:last-child td {
   box-sizing: border-box;
   min-width: 0;
 }
-
 /* Table Responsive Wrapper */
 .table-responsive-wrapper {
   width: 100%;
@@ -759,7 +680,6 @@ tr:last-child td {
   -webkit-overflow-scrolling: touch;
   margin-bottom: 8px;
 }
-
 /* Kanban Board Responsif */
 .kanban-board-wrapper {
   display: flex;
@@ -770,13 +690,11 @@ tr:last-child td {
   width: 100%;
   box-sizing: border-box;
 }
-
 .kanban-board-column {
   min-width: 270px;
   max-width: 320px;
   flex: 1 0 auto;
 }
-
 @media (min-width: 1280px) {
   .kanban-board-wrapper {
     display: grid;
@@ -788,7 +706,6 @@ tr:last-child td {
     max-width: none;
   }
 }
-
 /* Calendar Responsif */
 .calendar-layout {
   display: grid;
@@ -797,32 +714,27 @@ tr:last-child td {
   width: 100%;
   align-items: start;
 }
-
 @media (max-width: 1024px) {
   .calendar-layout {
     grid-template-columns: 1fr !important;
   }
 }
-
 .calendar-scroll-container {
   width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
-
 .calendar-month-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
   width: 100%;
 }
-
 @media (max-width: 768px) {
   .calendar-month-grid {
     min-width: 520px;
   }
 }
-
 /* Admin Mobile Navigation */
 .admin-mobile-nav {
   display: none;
@@ -834,7 +746,6 @@ tr:last-child td {
   gap: 6px;
   -webkit-overflow-scrolling: touch;
 }
-
 .admin-mobile-nav-btn {
   display: inline-flex;
   align-items: center;
@@ -851,12 +762,10 @@ tr:last-child td {
   text-decoration: none;
   flex-shrink: 0;
 }
-
 .admin-mobile-nav-btn.active {
   background: #16a34a25;
   color: #4ade80;
 }
-
 /* Responsive Rules */
 @media (max-width: 768px) {
   .app-sidebar {
@@ -882,15 +791,11 @@ tr:last-child td {
     padding-bottom: 60px !important;
   }
 }
-
-
 /* Landing Page - Professional UI */
-
 .landing-page {
   overflow: hidden;
   background: #ffffff;
 }
-
 .landing-navbar {
   position: sticky;
   top: 0;
@@ -905,7 +810,6 @@ tr:last-child td {
   border-bottom: 1px solid #e2e8f0;
   backdrop-filter: blur(16px);
 }
-
 .landing-logo {
   display: flex;
   align-items: center;
@@ -916,7 +820,6 @@ tr:last-child td {
   letter-spacing: -0.04em;
   text-decoration: none;
 }
-
 .landing-logo-mark {
   display: grid;
   width: 40px;
@@ -927,22 +830,17 @@ tr:last-child td {
   color: #ffffff;
   box-shadow: 0 5px 12px rgba(22, 163, 74, 0.2);
 }
-
 .landing-nav-actions {
   display: flex;
   align-items: center;
   gap: 12px;
 }
-
-
 .landing-hero {
   max-width: 1180px;
   margin: 0 auto;
   padding: 60px 24px 48px;
   text-align: center;
 }
-
-
 .landing-eyebrow {
   display: inline-flex;
   align-items: center;
@@ -957,7 +855,6 @@ tr:last-child td {
   font-size: 0.84rem;
   font-weight: 700;
 }
-
 .landing-hero-title {
   max-width: 900px;
   margin: 0 auto 22px;
@@ -968,11 +865,9 @@ tr:last-child td {
   letter-spacing: -0.055em;
   text-wrap: balance;
 }
-
 .landing-hero-highlight {
   color: #16a34a;
 }
-
 .landing-hero-description {
   max-width: 690px;
   margin: 0 auto 32px;
@@ -980,7 +875,6 @@ tr:last-child td {
   font-size: clamp(1rem, 2vw, 1.12rem);
   line-height: 1.8;
 }
-
 .landing-hero-actions {
   display: flex;
   align-items: center;
@@ -988,92 +882,73 @@ tr:last-child td {
   flex-wrap: wrap;
   gap: 12px;
 }
-
 .landing-hero-actions .btn-uda {
   min-height: 48px;
   padding: 12px 22px;
   font-size: 0.95rem;
 }
-
 .landing-hero-actions .btn-uda-primary {
   box-shadow: 0 6px 16px rgba(22, 163, 74, 0.2);
 }
-
 .landing-hero-actions .btn-uda-primary:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 22px rgba(22, 163, 74, 0.24);
 }
-
 @media (max-width: 640px) {
   .landing-navbar {
     min-height: 64px;
     padding: 10px 16px;
     gap: 10px;
   }
-
   .landing-logo {
     gap: 8px;
     font-size: 1.05rem;
   }
-
   .landing-logo-mark {
     width: 34px;
     height: 34px;
     border-radius: 10px;
   }
-
   .landing-nav-actions {
     gap: 8px;
   }
-
   .landing-nav-actions .btn-uda {
     padding: 7px 10px;
     font-size: 0.78rem;
   }
-
 .landing-hero {
   padding: 44px 18px 36px;
 }
-
   .landing-eyebrow {
     max-width: 100%;
     font-size: 0.72rem;
     line-height: 1.5;
   }
-
   .landing-hero-title {
     font-size: clamp(2rem, 9vw, 3rem);
     letter-spacing: -0.045em;
   }
-
   .landing-hero-description {
     font-size: 0.95rem;
     line-height: 1.7;
   }
-
   .landing-hero-actions {
     flex-direction: column;
     align-items: stretch;
   }
-
   .landing-hero-actions .btn-uda {
     width: 100%;
   }
 }
-
 @media (prefers-reduced-motion: reduce) {
   .landing-hero-actions .btn-uda-primary {
     transition: none;
   }
-
   .landing-hero-actions .btn-uda-primary:hover {
     transform: none;
   }
 }
-
-
 /* UdaPlanner - Kalender Demo Landing Page */
-
 .landing-calendar {
   width: 100%;
   max-width: 680px;
@@ -1090,9 +965,6 @@ tr:last-child td {
     transform 0.25s ease,
     box-shadow 0.25s ease;
 }
-
-
-
 .landing-calendar-header {
   display: flex;
   align-items: center;
@@ -1101,27 +973,23 @@ tr:last-child td {
   gap: 12px;
   margin-bottom: 22px;
 }
-
 .landing-calendar-title {
   color: #0f172a;
   font-size: 1rem;
   font-weight: 750;
 }
-
 .landing-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
   text-align: center;
 }
-
 .landing-calendar-day {
   padding: 10px 2px;
   color: #64748b;
   font-size: 0.8rem;
   font-weight: 700;
 }
-
 .landing-calendar-date {
   min-height: 76px;
   padding: 10px 4px;
@@ -1132,36 +1000,29 @@ tr:last-child td {
   font-size: 0.9rem;
   transition: background 0.2s ease, border-color 0.2s ease;
 }
-
 .landing-calendar-date:hover {
   border-color: #86efac;
   background: #f0fdf4;
 }
-
 @media (max-width: 640px) {
   .landing-calendar {
     margin-top: 32px;
     padding: 12px;
     border-radius: 14px;
   }
-
   .landing-calendar-header {
     align-items: flex-start;
   }
-
   .landing-calendar-title {
     font-size: 0.85rem;
   }
-
   .landing-calendar-grid {
     gap: 3px;
   }
-
   .landing-calendar-day {
     padding: 8px 0;
     font-size: 0.68rem;
   }
-
   .landing-calendar-date {
     min-height: 48px;
     padding: 6px 1px;
@@ -1169,10 +1030,7 @@ tr:last-child td {
     font-size: 0.75rem;
   }
 }
-
-
 /* ===== UdaPlanner: Polesan Preview Kalender ===== */
-
 .landing-calendar {
   width: 100%;
   max-width: 560px;
@@ -1188,33 +1046,28 @@ tr:last-child td {
     transform 0.25s ease,
     box-shadow 0.25s ease;
 }
-
 .landing-calendar:hover {
   transform: translateY(-3px);
   box-shadow:
     0 26px 60px rgba(15, 23, 42, 0.12),
     0 6px 16px rgba(15, 23, 42, 0.05);
 }
-
 .landing-calendar-header {
   padding: 20px;
   border-bottom: 1px solid #f1f5f9;
 }
-
 .landing-calendar-title {
   color: #0f172a;
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.4px;
 }
-
 .landing-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
   padding: 16px;
 }
-
 .landing-calendar-day {
   min-width: 0;
   color: #64748b;
@@ -1222,7 +1075,6 @@ tr:last-child td {
   font-weight: 600;
   text-align: center;
 }
-
 .landing-calendar-date {
   min-width: 0;
   min-height: 40px;
@@ -1236,34 +1088,27 @@ tr:last-child td {
     background-color 0.2s ease,
     color 0.2s ease;
 }
-
 .landing-calendar-date:hover {
   background: #eff6ff;
   color: #2563eb;
 }
-
 @media (max-width: 480px) {
   .landing-calendar {
     border-radius: 16px;
   }
-
   .landing-calendar-header {
     padding: 16px;
   }
-
   .landing-calendar-grid {
     gap: 3px;
     padding: 12px;
   }
-
   .landing-calendar-date {
     min-height: 34px;
     border-radius: 8px;
     font-size: 12px;
   }
 }
-
-
 /* Efek hover kartu fitur UdaPlanner */
 .uda-card {
   transition:
@@ -1271,7 +1116,6 @@ tr:last-child td {
     box-shadow 0.2s ease,
     border-color 0.2s ease;
 }
-
 @media (hover: hover) {
   .uda-card:hover {
     transform: translateY(-5px);
@@ -1279,56 +1123,43 @@ tr:last-child td {
     box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08) !important;
   }
 }
-
 @media (prefers-reduced-motion: reduce) {
   .uda-card {
     transition: none;
   }
-
   .uda-card:hover {
     transform: none;
   }
 }
-
-
 /* Efek fokus input halaman login UdaPlanner */
 .login-input:focus {
   border-color: #16a34a !important;
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
 }
-
 .login-input::placeholder {
   color: #94a3b8;
 }
-
-
 /* Efek hover tombol Masuk */
 .login-submit:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 20px rgba(22, 163, 74, 0.25) !important;
 }
-
 .login-submit:active {
   transform: translateY(0);
 }
-
 .login-submit:focus-visible {
   outline: 3px solid rgba(22, 163, 74, 0.35);
   outline-offset: 3px;
 }
-
 @media (prefers-reduced-motion: reduce) {
   .login-submit {
     transition: none !important;
   }
-
   .login-submit:hover,
   .login-submit:active {
     transform: none;
   }
 }
-
-
 @media (max-width: 640px) {
   .landing-navbar {
     padding: 10px 14px !important;
@@ -1337,7 +1168,6 @@ tr:last-child td {
     padding: 36px 14px 28px !important;
   }
 }
-
 @keyframes pulseGlow {
   0%, 100% {
     box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.72), 0 0 0 3px #16a34a, 0 10px 30px rgba(22, 163, 74, 0.35);
@@ -1346,7 +1176,6 @@ tr:last-child td {
     box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.72), 0 0 0 4px #22c55e, 0 14px 40px rgba(34, 197, 94, 0.55);
   }
 }
-
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -1357,19 +1186,16 @@ tr:last-child td {
     transform: translateY(0) scale(1);
   }
 }
-
 /* Guided Tour Floating Trigger Responsive (Di Atas Ikon WhatsApp) */
 .guided-tour-floating-trigger {
   bottom: 80px;
   right: 24px;
 }
-
 /* WhatsApp Floating Consultation Trigger */
 .whatsapp-floating-container {
   bottom: 24px;
   right: 24px;
 }
-
 @media (max-width: 768px) {
   .guided-tour-floating-trigger {
     bottom: 128px !important;
@@ -1381,7 +1207,6 @@ tr:last-child td {
     right: 14px !important;
   }
 }
-
 @media (max-width: 480px) {
   .whatsapp-floating-btn {
     padding: 10px !important;
@@ -1395,7 +1220,6 @@ tr:last-child td {
     font-size: 0.78rem !important;
   }
 }
-
 /* ==============================================================================
    Auth Sliding & Split Layouts (Animasi Masuk & Split Card Desktop Retro)
    ============================================================================== */
@@ -1409,7 +1233,6 @@ tr:last-child td {
     transform: translateY(0) scale(1);
   }
 }
-
 .auth-slider-root {
   max-width: 1040px;
   width: 100%;
@@ -1423,7 +1246,6 @@ tr:last-child td {
   z-index: 1;
   animation: authCardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-
 /* Split Card for Lupa Password, Kode Verifikasi, and Ubah Password */
 .auth-split-card {
   max-width: 1040px;
@@ -1439,7 +1261,6 @@ tr:last-child td {
   display: flex;
   animation: authCardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-
 .auth-split-banner {
   width: 48%;
   background: linear-gradient(145deg, #064e3b 0%, #043d2e 60%, #022c22 100%);
@@ -1451,7 +1272,6 @@ tr:last-child td {
   position: relative;
   overflow: hidden;
 }
-
 .auth-split-form-pane {
   width: 52%;
   padding: 36px 44px;
@@ -1460,7 +1280,6 @@ tr:last-child td {
   justify-content: center;
   overflow-y: auto;
 }
-
 @media (max-width: 1023px) {
   .auth-split-card {
     max-width: 480px;
@@ -1470,17 +1289,14 @@ tr:last-child td {
     padding: clamp(24px, 5vw, 36px) clamp(16px, 4vw, 24px);
     overflow: visible;
   }
-
   .auth-split-banner {
     display: none !important;
   }
-
   .auth-split-form-pane {
     width: 100% !important;
     padding: 0 !important;
   }
 }
-
 /* Sliding Banner on Desktop */
 .auth-sliding-banner {
   position: absolute;
@@ -1501,17 +1317,14 @@ tr:last-child td {
   transition: transform 0.65s cubic-bezier(0.65, 0, 0.35, 1);
   will-change: transform;
 }
-
 /* Di Register, Banner bergeser ke kanan */
 .auth-slider-root.mode-register .auth-sliding-banner {
   transform: translateX(calc(100% + 12px));
 }
-
 /* Di Login, Banner berada di kiri */
 .auth-slider-root.mode-login .auth-sliding-banner {
   transform: translateX(0);
 }
-
 /* Form Panes on Desktop */
 .auth-sliding-form-pane {
   position: absolute;
@@ -1527,19 +1340,15 @@ tr:last-child td {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-
 .auth-sliding-form-pane::-webkit-scrollbar {
   display: none;
 }
-
 .auth-pane-login {
   right: 14px;
 }
-
 .auth-pane-register {
   left: 14px;
 }
-
 /* State Visibility on Desktop */
 .auth-slider-root.mode-login .auth-pane-login {
   opacity: 1;
@@ -1548,7 +1357,6 @@ tr:last-child td {
   visibility: visible;
   z-index: 5;
 }
-
 .auth-slider-root.mode-login .auth-pane-register {
   opacity: 0;
   pointer-events: none;
@@ -1556,7 +1364,6 @@ tr:last-child td {
   visibility: hidden;
   z-index: 1;
 }
-
 .auth-slider-root.mode-register .auth-pane-register {
   opacity: 1;
   pointer-events: auto;
@@ -1564,7 +1371,6 @@ tr:last-child td {
   visibility: visible;
   z-index: 5;
 }
-
 .auth-slider-root.mode-register .auth-pane-login {
   opacity: 0;
   pointer-events: none;
@@ -1572,7 +1378,6 @@ tr:last-child td {
   visibility: hidden;
   z-index: 1;
 }
-
 /* Mode Mobile & Tablet (< 1024px): Sembunyikan banner gambar, tampilkan form aktif secara ringkas */
 @media (max-width: 1023px) {
   .auth-slider-root {
@@ -1582,11 +1387,9 @@ tr:last-child td {
     border-radius: 18px;
     overflow: visible;
   }
-
   .auth-sliding-banner {
     display: none !important;
   }
-
   .auth-sliding-form-pane {
     position: static !important;
     width: 100% !important;
@@ -1594,30 +1397,25 @@ tr:last-child td {
     transform: none !important;
     overflow-y: visible !important;
   }
-
   .auth-slider-root.mode-login .auth-pane-login {
     display: flex !important;
     opacity: 1 !important;
     pointer-events: auto !important;
     visibility: visible !important;
   }
-
   .auth-slider-root.mode-login .auth-pane-register {
     display: none !important;
   }
-
   .auth-slider-root.mode-register .auth-pane-register {
     display: flex !important;
     opacity: 1 !important;
     pointer-events: auto !important;
     visibility: visible !important;
   }
-
   .auth-slider-root.mode-register .auth-pane-login {
     display: none !important;
   }
 }
-
 /* ==============================================================================
    Landing Page: Camply Reference Layout (Neo-Brutalism Retro)
    ============================================================================== */
@@ -1628,31 +1426,26 @@ tr:last-child td {
   align-items: center;
   text-align: left;
 }
-
 @media (max-width: 1024px) {
   .camply-hero-grid {
     grid-template-columns: 1fr;
     gap: 44px;
     text-align: center;
   }
-
   .camply-hero-left {
     display: flex;
     flex-direction: column;
     align-items: center;
   }
 }
-
 .desktop-menu {
   display: none;
 }
-
 @media (min-width: 860px) {
   .desktop-menu {
     display: flex !important;
   }
 }
-
 .desktop-menu a {
   position: relative;
   text-decoration: none;
@@ -1663,12 +1456,10 @@ tr:last-child td {
   border-radius: 6px;
   transition: all 0.15s ease;
 }
-
 .desktop-menu a:hover {
   color: #0f172a;
   background-color: #f1f5f9;
 }
-
 /* Neo-Brutalist Pill Buttons (Camply Style) */
 .btn-camply-dark {
   background-color: #0f172a;
@@ -1687,17 +1478,14 @@ tr:last-child td {
   box-shadow: 3.5px 3.5px 0px #16a34a;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-
 .btn-camply-dark:hover {
   transform: translate(-2px, -2px);
   box-shadow: 5.5px 5.5px 0px #16a34a;
 }
-
 .btn-camply-dark:active {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0px #16a34a;
 }
-
 .btn-camply-outline {
   background-color: #ffffff;
   color: #0f172a !important;
@@ -1715,18 +1503,15 @@ tr:last-child td {
   box-shadow: 3.5px 3.5px 0px #0f172a;
   transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
-
 .btn-camply-outline:hover {
   background-color: #f8fafc;
   transform: translate(-2px, -2px);
   box-shadow: 5.5px 5.5px 0px #0f172a;
 }
-
 .btn-camply-outline:active {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0px #0f172a;
 }
-
 .btn-camply-forest {
   background-color: #064e3b;
   color: #ffffff !important;
@@ -1744,18 +1529,15 @@ tr:last-child td {
   box-shadow: 4px 4px 0px #0f172a;
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
-
 .btn-camply-forest:hover:not(:disabled) {
   background-color: #043d2e;
   transform: translate(-2px, -2px);
   box-shadow: 6px 6px 0px #0f172a;
 }
-
 .btn-camply-forest:active:not(:disabled) {
   transform: translate(2px, 2px);
   box-shadow: 2px 2px 0px #0f172a;
 }
-
 /* ==============================================================================
    Footer: Camply Multi-Column Dark Green Retro Design
    ============================================================================== */
@@ -1765,7 +1547,6 @@ tr:last-child td {
   border-top: 3.5px solid #0f172a;
   padding: 68px 24px 32px;
 }
-
 .camply-footer-grid {
   display: grid;
   grid-template-columns: 1.6fr 1fr 1fr 1fr 1.2fr;
@@ -1773,28 +1554,24 @@ tr:last-child td {
   max-width: 1200px;
   margin: 0 auto 48px;
 }
-
 @media (max-width: 1024px) {
   .camply-footer-grid {
     grid-template-columns: 1.4fr 1fr 1fr;
     gap: 32px;
   }
 }
-
 @media (max-width: 768px) {
   .camply-footer-grid {
     grid-template-columns: 1fr 1fr;
     gap: 28px;
   }
 }
-
 @media (max-width: 520px) {
   .camply-footer-grid {
     grid-template-columns: 1fr;
     gap: 28px;
   }
 }
-
 .footer-nav-link {
   color: #d1fae5;
   text-decoration: none;
@@ -1804,12 +1581,10 @@ tr:last-child td {
   transition: all 0.15s ease;
   margin-bottom: 10px;
 }
-
 .footer-nav-link:hover {
   color: #ffffff;
   transform: translateX(3px);
 }
-
 .footer-social-btn {
   width: 38px;
   height: 38px;
@@ -1824,14 +1599,12 @@ tr:last-child td {
   transition: all 0.15s ease;
   text-decoration: none;
 }
-
 .footer-social-btn:hover {
   transform: translate(-2px, -2px);
   box-shadow: 4px 4px 0px #0f172a;
   background-color: #dcfce7;
   color: #065f46;
 }
-
 /* ==============================================================================
    Camply Layouts for Dashboard Simulation, Features, Workflow & FAQ
    ============================================================================== */
@@ -1842,7 +1615,6 @@ tr:last-child td {
   border-bottom: 3.5px solid #0f172a;
   padding: 34px 24px;
 }
-
 .camply-stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1850,12 +1622,10 @@ tr:last-child td {
   margin: 0 auto;
   gap: 20px;
 }
-
 .camply-stat-item {
   text-align: center;
   position: relative;
 }
-
 .camply-stat-item:not(:last-child)::after {
   content: "";
   position: absolute;
@@ -1865,7 +1635,6 @@ tr:last-child td {
   width: 1px;
   background-color: rgba(255, 255, 255, 0.2);
 }
-
 @media (max-width: 768px) {
   .camply-stats-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -1875,35 +1644,30 @@ tr:last-child td {
     display: none;
   }
 }
-
 .camply-simulasi-grid {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
   gap: 48px;
   align-items: center;
 }
-
 @media (max-width: 1024px) {
   .camply-simulasi-grid {
     grid-template-columns: 1fr;
     gap: 40px;
   }
 }
-
 .camply-faq-grid {
   display: grid;
   grid-template-columns: 1fr 1.3fr;
   gap: 52px;
   align-items: flex-start;
 }
-
 @media (max-width: 1024px) {
   .camply-faq-grid {
     grid-template-columns: 1fr;
     gap: 36px;
   }
 }
-
 .camply-capsule-input {
   display: flex;
   align-items: center;
@@ -1915,11 +1679,9 @@ tr:last-child td {
   max-width: 440px;
   transition: box-shadow 0.15s ease;
 }
-
 .camply-capsule-input:focus-within {
   box-shadow: 5px 5px 0px #16a34a;
 }
-
 .camply-capsule-input input {
   border: none;
   outline: none;
@@ -1929,7 +1691,6 @@ tr:last-child td {
   width: 100%;
   background: transparent;
 }
-
 .camply-dock-pill {
   background: #ffffff;
   border: 2.5px solid #0f172a;
@@ -1942,7 +1703,6 @@ tr:last-child td {
   flex-wrap: nowrap;
   white-space: nowrap;
 }
-
 /* ========================================================
    Landing Page Scroll Reveal Animations
    ======================================================== */
@@ -1953,30 +1713,24 @@ tr:last-child td {
               transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: opacity, transform;
 }
-
 .scroll-reveal.revealed {
   opacity: 1;
   transform: translateY(0) scale(1) translateX(0) !important;
 }
-
 .scroll-reveal.reveal-left {
   transform: translateX(-40px);
 }
-
 .scroll-reveal.reveal-right {
   transform: translateX(40px);
 }
-
 .scroll-reveal.reveal-scale {
   transform: scale(0.92) translateY(24px);
 }
-
 .scroll-reveal.reveal-pop {
   transform: scale(0.85);
   transition: opacity 0.65s cubic-bezier(0.34, 1.56, 0.64, 1),
               transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-
 /* Stagger Delays */
 .delay-100 { transition-delay: 100ms; }
 .delay-150 { transition-delay: 150ms; }
@@ -1988,7 +1742,6 @@ tr:last-child td {
 .delay-450 { transition-delay: 450ms; }
 .delay-500 { transition-delay: 500ms; }
 .delay-600 { transition-delay: 600ms; }
-
 @media (prefers-reduced-motion: reduce) {
   .scroll-reveal {
     opacity: 1 !important;
@@ -1996,8 +1749,394 @@ tr:last-child td {
     transition: none !important;
   }
 }
+/* ==============================================================================
+   Dark Mode (aktif lewat atribut data-theme="dark" di <html>)
+   ============================================================================== */
+/* Variabel tambahan (mode terang) */
 
+/* Samakan tinggi header sidebar dan topbar supaya garisnya menyambung */
+.app-topbar,
+.sidebar-brand-header {
+  height: var(--header-h) !important;
+  min-height: var(--header-h) !important;
+  max-height: var(--header-h) !important;
+  box-sizing: border-box !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+/* Variabel mode gelap */
+:root[data-theme="dark"] {
+  --dashboard-hero: linear-gradient(135deg, #172b21, #123025);
+  --dashboard-surface: #16271e;
+  --dashboard-soft: #21382b;
+  --dashboard-border: #355240;
+  --dashboard-green-text: #86efac;
+  --dashboard-green-soft: #214832;
+  --dashboard-shadow: 0 4px 18px rgb(0 0 0 / 16%);
 
+  color-scheme: dark;
+  --primary-hover: #22c55e;
+  --primary-light: #173324;
+  --primary-border: #245a37;
+  --bg-app: #0e1a14;
+  --bg-content: #0e1a14;
+  --bg-card: #15241b;
+  --border-color: #2f4a39;
+  --border-subtle: #1c3125;
+  --text-main: #f1f5f3;
+  --text-secondary: #b8cabe;
+  --text-muted: #a3baab;
+  --status-ide: #7f9486;
+  --status-terposting: #9db3a3;
+  --line-strong: #3b5a47;
+  --soft-border: #2f4a39;
+  --blue: #38bdf8;
+  --amber: #fbbf24;
+  --tint-blue: #12303f;
+  --tint-amber: #3b2f10;
+  --tint-red: #3a1f1f;
+  --tint-red-border: #5c2b2b;
+  --red-text: #fca5a5;
+}
+/* Permukaan utama */
+[data-theme="dark"] .app-sidebar,
+[data-theme="dark"] .app-topbar,
+[data-theme="dark"] .mobile-bottom-nav {
+  background: #12211a;
+}
+[data-theme="dark"] .uda-card,
+[data-theme="dark"] table {
+  background: var(--bg-card) !important;
+}
+[data-theme="dark"] th {
+  background: #1c3125;
+}
+[data-theme="dark"] td {
+  border-bottom-color: var(--border-subtle);
+}
+/* Input, dropdown, dan kolom tanggal */
+[data-theme="dark"] input[type="text"],
+[data-theme="dark"] input[type="email"],
+[data-theme="dark"] input[type="password"],
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="time"],
+[data-theme="dark"] input[type="number"],
+[data-theme="dark"] input[type="search"],
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+  background-color: var(--bg-content);
+  color: var(--text-main);
+}
+/* Tombol dan kontrol */
+[data-theme="dark"] .btn-uda-secondary,
+[data-theme="dark"] .brand-dropdown-select,
+[data-theme="dark"] .sidebar-toggle-btn,
+[data-theme="dark"] .notif-bell-btn {
+  background: var(--bg-card) !important;
+  color: var(--text-main) !important;
+}
+[data-theme="dark"] .btn-uda-secondary:hover,
+[data-theme="dark"] .notif-bell-btn:hover,
+[data-theme="dark"] .sidebar-toggle-btn:hover,
+[data-theme="dark"] .sidebar-collapse-row-btn:hover {
+  background: #1c3125 !important;
+}
+[data-theme="dark"] .btn-uda-danger {
+  background: #3a1f1f !important;
+  color: #f87171 !important;
+}
+/* Menu sidebar */
+[data-theme="dark"] .nav-item-btn:hover {
+  background: #1c3125;
+  color: var(--text-main);
+}
+[data-theme="dark"] .nav-item-btn.active {
+  background: #173324;
+  color: #4ade80;
+}
+[data-theme="dark"] .nav-badge-count {
+  background: #1c3125;
+  color: var(--text-secondary);
+}
+[data-theme="dark"] .nav-item-btn.active .nav-badge-count {
+  background: #245a37;
+  color: #bbf7d0;
+}
+/* Scrollbar */
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: #12211a;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #2f4a39;
+}
 
+/* Dashboard: one consolidated section, scoped to existing tour IDs. */
+:is(#tour-welcome, #tour-nav, #tour-summary > .uda-card, #tour-today-schedule) {
+  background: var(--dashboard-surface) !important;
+  border: 1px solid var(--dashboard-border) !important;
+  box-shadow: var(--dashboard-shadow) !important;
+}
+#tour-welcome { background: var(--dashboard-hero) !important; }
+#tour-summary > .uda-card:hover, #tour-today-schedule:hover {
+  transform: none;
+}
+:is(#tour-welcome, #tour-today-schedule) .btn-uda {
+  border: 1px solid var(--dashboard-border) !important;
+  box-shadow: none !important;
+}
+:is(#tour-welcome, #tour-today-schedule) .btn-uda:hover {
+  transform: translateY(-1px);
+}
+:is(#tour-welcome, #tour-today-schedule) .btn-uda:active {
+  transform: none;
+}
+:is(#tour-welcome, #tour-today-schedule) .btn-uda-secondary {
+  background: var(--dashboard-surface) !important;
+  color: var(--text-main) !important;
+}
+:is(#tour-welcome, #tour-today-schedule) .btn-uda-secondary:hover {
+  background: var(--dashboard-soft) !important;
+}
+#tour-nav input, #tour-nav select {
+  background: var(--dashboard-soft) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--dashboard-border) !important;
+  box-shadow: none;
+}
+:is(#tour-welcome, #tour-nav, #tour-today-schedule)
+:is(button, input, select):focus-visible {
+  outline: 2px solid var(--dashboard-green-text) !important;
+  outline-offset: 3px;
+}
+#tour-today-schedule .status-pill {
+  box-shadow: none;
+  border-color: var(--dashboard-border);
+}
+#tour-actions { flex-wrap: wrap; }
+[data-theme="dark"] #tour-nav { color-scheme: dark; }
+[data-theme="dark"] #tour-summary > div > div:first-child,
+[data-theme="dark"] #tour-summary > div > div:last-child {
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] #tour-summary > div > div:nth-child(2) {
+  color: var(--text-main) !important;
+}
+[data-theme="dark"] #tour-summary > div:nth-child(2) > div:nth-child(2) {
+  color: #7dd3fc !important;
+}
+[data-theme="dark"] #tour-summary > div:nth-child(3) > div:nth-child(2) {
+  color: #fbbf24 !important;
+}
+[data-theme="dark"] :is(#tour-welcome, #tour-today-schedule) :is(h1,h2,h3,h4) {
+  color: var(--text-main) !important;
+}
+/* Compatibility with the current page's inline styles.
+   Match both server-rendered hex values and browser-serialized RGB values. */
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: #ffffff"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: rgb(255, 255, 255)"] ,
+/* Compatibility with the current page's inline styles.
+   Match both server-rendered hex values and browser-serialized RGB values. */
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: #ffffff"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: rgb(255, 255, 255)"] {
+  background-color: var(--dashboard-surface) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: #f8fafc"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: rgb(248, 250, 252)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: #f1f5f9"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: rgb(241, 245, 249)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: #e2e8f0"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: rgb(226, 232, 240)"] ,
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: #f8fafc"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: rgb(248, 250, 252)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: #f1f5f9"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: rgb(241, 245, 249)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: #e2e8f0"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: rgb(226, 232, 240)"] {
+  background-color: var(--dashboard-soft) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: #dcfce7"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: rgb(220, 252, 231)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: #f0fdf4"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: rgb(240, 253, 244)"] ,
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: #dcfce7"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: rgb(220, 252, 231)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: #f0fdf4"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: rgb(240, 253, 244)"] {
+  background-color: var(--dashboard-green-soft) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: #e0f2fe"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: rgb(224, 242, 254)"] ,
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: #e0f2fe"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: rgb(224, 242, 254)"] {
+  background-color: var(--tint-blue) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: #fef3c7"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: rgb(254, 243, 199)"] ,
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: #fef3c7"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: rgb(254, 243, 199)"] {
+  background-color: var(--tint-amber) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: #fef2f2"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background-color: rgb(254, 242, 242)"] ,
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: #fef2f2"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="background: rgb(254, 242, 242)"] {
+  background-color: var(--tint-red) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: #0f172a"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: rgb(15, 23, 42)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: #334155"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: rgb(51, 65, 85)"] {
+  color: var(--text-main) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: #475569"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: rgb(71, 85, 105)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: #64748b"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: rgb(100, 116, 139)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: #94a3b8"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: rgb(148, 163, 184)"] {
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: #15803d"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: rgb(21, 128, 61)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: #16a34a"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: rgb(22, 163, 74)"] {
+  color: var(--dashboard-green-text) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: #0284c7"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: rgb(2, 132, 199)"] {
+  color: var(--blue) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: #b45309"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: rgb(180, 83, 9)"] {
+  color: var(--amber) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: #991b1b"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: rgb(153, 27, 27)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: #dc2626"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="color: rgb(220, 38, 38)"] {
+  color: var(--red-text) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 1px solid #e2e8f0"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 2.5px solid #e2e8f0"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 1px solid rgb(226, 232, 240)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 2.5px solid rgb(226, 232, 240)"] { border-color: var(--dashboard-border) !important; }
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 1px solid #cbd5e1"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 2.5px solid #cbd5e1"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 1px solid rgb(203, 213, 225)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 2.5px solid rgb(203, 213, 225)"] { border-color: var(--dashboard-border) !important; }
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 1px solid #bbf7d0"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 2.5px solid #bbf7d0"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 1px solid rgb(187, 247, 208)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 2.5px solid rgb(187, 247, 208)"] { border-color: var(--dashboard-border) !important; }
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 1px solid #0f172a"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 2.5px solid #0f172a"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 1px solid rgb(15, 23, 42)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main, #tour-welcome, #tour-nav, #tour-today-schedule) [style*="border: 2.5px solid rgb(15, 23, 42)"] { border-color: var(--dashboard-border) !important; }
 
+@media (max-width: 640px) {
+  #tour-welcome, #tour-nav, #tour-today-schedule { padding: 18px !important; }
+  #tour-nav > div { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+  #tour-nav select { max-width: 100%; }
+  #tour-today-schedule > div:first-child { flex-wrap: wrap; gap: 12px; }
+}
 
+/* Shared content surfaces: calendar, board, list and content bank. */
+[data-theme="dark"] :is(.app-content-body, .app-layout main) :is(h1,h2,h3,h4,h5,h6) {
+  color: var(--text-main) !important;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main) .uda-card {
+  background: var(--dashboard-surface) !important;
+  border-color: var(--dashboard-border) !important;
+}
+[data-theme="dark"] .kanban-board-column {
+  background-color: var(--dashboard-soft) !important;
+  color: var(--text-main);
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main) :is(input,select,textarea) {
+  background-color: var(--dashboard-soft) !important;
+  color: var(--text-main) !important;
+  border-color: var(--dashboard-border) !important;
+  color-scheme: dark;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main) ::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: white"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: #fff"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: #FFFFFF"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: rgb(255, 255, 255)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: #ffffff"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: rgb(255, 255, 255)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: #f9fafb"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: rgb(249, 250, 251)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: #F8FAFC"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: rgb(248, 250, 252)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: #f3f4f6"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: rgb(243, 244, 246)"] { background: var(--dashboard-soft) !important; }
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: #eff6ff"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: rgb(239, 246, 255)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: #dbeafe"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: rgb(219, 234, 254)"] { background: var(--tint-blue) !important; }
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: #fffbeb"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: rgb(255, 251, 235)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: #fef9c3"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background: rgb(254, 249, 195)"] { background: var(--tint-amber) !important; }
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: white"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: #fff"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: #FFFFFF"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: rgb(255, 255, 255)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: #ffffff"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: rgb(255, 255, 255)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: #f9fafb"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: rgb(249, 250, 251)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: #F8FAFC"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: rgb(248, 250, 252)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: #f3f4f6"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: rgb(243, 244, 246)"] { background-color: var(--dashboard-soft) !important; }
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: #eff6ff"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: rgb(239, 246, 255)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: #dbeafe"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: rgb(219, 234, 254)"] { background-color: var(--tint-blue) !important; }
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: #fffbeb"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: rgb(255, 251, 235)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: #fef9c3"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="background-color: rgb(254, 249, 195)"] { background-color: var(--tint-amber) !important; }
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: #111827"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: rgb(17, 24, 39)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: #1e293b"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: rgb(30, 41, 59)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: #1f2937"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: rgb(31, 41, 55)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: #0F172A"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: rgb(15, 23, 42)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: #374151"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: rgb(55, 65, 81)"] { color: var(--text-main) !important; }
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: #6b7280"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: rgb(107, 114, 128)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: #64748B"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="color: rgb(100, 116, 139)"] { color: var(--text-secondary) !important; }
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border: 1px solid #e2e8f0"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-bottom: 1px solid #e2e8f0"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-top: 1px solid #e2e8f0"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border: 1px solid rgb(226, 232, 240)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-bottom: 1px solid rgb(226, 232, 240)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-top: 1px solid rgb(226, 232, 240)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border: 1px solid #f1f5f9"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-bottom: 1px solid #f1f5f9"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-top: 1px solid #f1f5f9"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border: 1px solid rgb(241, 245, 249)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-bottom: 1px solid rgb(241, 245, 249)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-top: 1px solid rgb(241, 245, 249)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border: 1px solid #e5e7eb"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-bottom: 1px solid #e5e7eb"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-top: 1px solid #e5e7eb"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border: 1px solid rgb(229, 231, 235)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-bottom: 1px solid rgb(229, 231, 235)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-top: 1px solid rgb(229, 231, 235)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border: 1px solid #cbd5e1"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-bottom: 1px solid #cbd5e1"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-top: 1px solid #cbd5e1"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border: 1px solid rgb(203, 213, 225)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-bottom: 1px solid rgb(203, 213, 225)"],
+[data-theme="dark"] :is(.app-content-body, .app-layout main) [style*="border-top: 1px solid rgb(203, 213, 225)"] { border-color: var(--dashboard-border) !important; }
