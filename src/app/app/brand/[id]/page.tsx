@@ -574,14 +574,21 @@ export default function PengaturanBrandDetailPage() {
             inviterEmail,
           }),
         });
-        if (res.ok) {
-          const resData = await res.json();
-          if (resData.success && resData.invitation) {
-            serverInvite = resData.invitation;
-          }
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          showError('Gagal Mengirim Undangan', resData.error || 'Tidak dapat mengirim undangan ke pengguna ini.');
+          playErrorSound();
+          setIsSendingInvite(false);
+          return;
         }
-      } catch (apiErr) {
-        console.warn('API send invite notice:', apiErr);
+        if (resData.success && resData.invitation) {
+          serverInvite = resData.invitation;
+        }
+      } catch (apiErr: any) {
+        showError('Gagal Mengirim Undangan', apiErr.message || 'Terjadi kesalahan koneksi.');
+        playErrorSound();
+        setIsSendingInvite(false);
+        return;
       }
 
       const newInvite = serverInvite || {

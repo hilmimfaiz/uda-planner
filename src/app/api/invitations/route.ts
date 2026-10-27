@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     // 1. Cek dari Supabase jika tersedia
     if (admin) {
       try {
-        let query = admin.from('invitations' as any).select('*');
+        let query: any = (admin.from('invitations' as any) as any).select('*, brands(id, name, avatar_url, owner_id)');
         if (brandId) {
           query = query.eq('brand_id', brandId);
         } else if (email) {
@@ -43,7 +43,22 @@ export async function GET(req: NextRequest) {
 
         const { data, error } = await query;
         if (!error && data) {
-          invites = data;
+          invites = data.map((inv: any) => ({
+            id: inv.id,
+            brand_id: inv.brand_id,
+            brand_name: inv.brands?.name || 'Brand',
+            brand_avatar: inv.brands?.avatar_url || null,
+            owner_id: inv.brands?.owner_id || null,
+            email: (inv.email || '').toLowerCase(),
+            target_email: (inv.email || '').toLowerCase(),
+            target_user_id: inv.target_user_id || null,
+            role: inv.role || 'editor',
+            token: inv.token,
+            invited_by: inv.invited_by,
+            status: inv.status || 'pending',
+            created_at: inv.created_at,
+            expires_at: inv.expires_at,
+          }));
         }
       } catch (err) {
         console.warn('Supabase get invitations error:', err);
@@ -61,7 +76,20 @@ export async function GET(req: NextRequest) {
       const matchUser = (email && bEmail === email) || (userId && bUserId === userId);
 
       if (matchBrand && (brandId ? true : matchUser)) {
-        if (!invites.some((inv) => inv.id === b.id || (inv.brand_id === b.brand_id && inv.email === bEmail))) {
+        const existingIdx = invites.findIndex(
+          (inv) => inv.id === b.id || (inv.brand_id === b.brand_id && (inv.email === bEmail || inv.target_email === bEmail))
+        );
+        if (existingIdx >= 0) {
+          invites[existingIdx] = {
+            ...b,
+            ...invites[existingIdx],
+            brand_name: invites[existingIdx].brand_name || b.brand_name || 'Brand',
+            brand_avatar: invites[existingIdx].brand_avatar || b.brand_avatar,
+            owner_id: invites[existingIdx].owner_id || b.owner_id,
+            inviter_name: b.inviter_name || invites[existingIdx].inviter_name || 'Owner',
+            inviter_email: b.inviter_email || invites[existingIdx].inviter_email,
+          };
+        } else {
           invites.push(b);
         }
       }
@@ -95,6 +123,77 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Email tujuan dan brand ID diperlukan.' }, { status: 400 });
     }
 
+    const admin = createAdminClient();
+
+    // 1. Tentukan Owner dari Brand yang sedang mengundang
+    let currentBrandOwnerId = inviterId || '';
+    if (admin && brandId) {
+      try {
+        const { data: bData }: any = await (admin.from('brands' as any) as any).select('owner_id, name, avatar_url').eq('id', brandId).maybeSingle();
+        if (bData?.owner_id) {
+          currentBrandOwnerId = bData.owner_id;
+        }
+      } catch (e) {}
+    }
+
+    // 2. Resolve target user ID jika belum ada
+    let resolvedTargetId = targetUserId || null;
+    let resolvedTargetName = targetName || cleanEmail.split('@')[0];
+    let resolvedTargetAvatar = targetAvatar || null;
+
+    if (admin && (!resolvedTargetId || !resolvedTargetId.includes('-'))) {
+      try {
+        const { data: pData }: any = await (admin.from('profiles' as any) as any).select('id, full_name, avatar_url').ilike('email', cleanEmail).maybeSingle();
+        if (pData?.id) {
+          resolvedTargetId = pData.id;
+          if (pData.full_name) resolvedTargetName = pData.full_name;
+          if (pData.avatar_url) resolvedTargetAvatar = pData.avatar_url;
+        }
+      } catch (e) {}
+    }
+
+    // 3. ATURAN 1-OWNER:
+    // "Pengguna yang di undang oleh owner bisa diundang lagi lebih dari 1 brand oleh owner.
+    // namun, ownernya hanya 1 saja dari paket langganannya tidak bisa owner yang berbeda jika masuk ke brand yang lain."
+    if (admin && resolvedTargetId) {
+      try {
+        const { data: existingMemberships }: any = await (admin.from('brand_members' as any) as any)
+          .select('brand_id, brands(id, name, owner_id)')
+          .eq('user_id', resolvedTargetId);
+
+        if (existingMemberships && existingMemberships.length > 0) {
+          for (const m of existingMemberships as any[]) {
+            const existingOwner = m.brands?.owner_id;
+            // Jika user sudah menjadi anggota di brand milik Owner yang BERBEDA
+            if (existingOwner && existingOwner !== currentBrandOwnerId && existingOwner !== resolvedTargetId) {
+              return NextResponse.json({
+                success: false,
+                error: `Pengguna ini sudah terdaftar dalam tim dari Owner lain. Paket Langganan Tim hanya mengizinkan pengguna bergabung dengan 1 Owner.`,
+              }, { status: 400 });
+            }
+          }
+        }
+      } catch (checkErr) {
+        console.warn('Check 1-owner rule warning:', checkErr);
+      }
+    }
+
+    // Cek juga dari database backup undangan yang sudah diterima
+    const backupInvites = loadBackupInvites();
+    const alreadyAcceptedAnotherOwner = backupInvites.some((inv: any) => {
+      const isSameUser = (inv.target_email || inv.email)?.toLowerCase() === cleanEmail || (resolvedTargetId && inv.target_user_id === resolvedTargetId);
+      const isAccepted = inv.status === 'accepted';
+      const isDifferentOwner = inv.owner_id && currentBrandOwnerId && inv.owner_id !== currentBrandOwnerId;
+      return isSameUser && isAccepted && isDifferentOwner;
+    });
+
+    if (alreadyAcceptedAnotherOwner) {
+      return NextResponse.json({
+        success: false,
+        error: `Pengguna ini sudah terdaftar dalam tim dari Owner lain. Paket Langganan Tim hanya mengizinkan pengguna bergabung dengan 1 Owner.`,
+      }, { status: 400 });
+    }
+
     const inviteId = `inv-${Date.now()}`;
     const token = Math.random().toString(36).substring(2, 12);
     const createdAt = new Date().toISOString();
@@ -104,11 +203,12 @@ export async function POST(req: NextRequest) {
       brand_id: brandId,
       brand_name: brandName || 'Brand',
       brand_avatar: brandAvatar || null,
+      owner_id: currentBrandOwnerId,
       email: cleanEmail,
       target_email: cleanEmail,
-      target_user_id: targetUserId || null,
-      target_name: targetName || cleanEmail.split('@')[0],
-      target_avatar: targetAvatar || null,
+      target_user_id: resolvedTargetId,
+      target_name: resolvedTargetName,
+      target_avatar: resolvedTargetAvatar,
       role,
       token,
       invited_by: inviterId || null,
@@ -119,8 +219,7 @@ export async function POST(req: NextRequest) {
       expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
     };
 
-    // 1. Simpan di Supabase database via admin client
-    const admin = createAdminClient();
+    // 4. Simpan di Supabase database via admin client
     if (admin) {
       try {
         await admin.from('invitations' as any).insert({
@@ -131,10 +230,10 @@ export async function POST(req: NextRequest) {
           status: 'pending',
         } as any);
 
-        // Jika targetUserId terdaftar di auth.users, simpan ke tabel notifications
-        if (targetUserId) {
+        // Jika user terdaftar, masukkan ke tabel notifications Supabase
+        if (resolvedTargetId) {
           await admin.from('notifications' as any).insert({
-            user_id: targetUserId,
+            user_id: resolvedTargetId,
             type: 'team_invite',
             message: `${inviterName || 'Owner'} mengundang Anda bergabung ke brand "${brandName}" sebagai ${role.toUpperCase()}.`,
             link: '/app/notifikasi',
@@ -146,7 +245,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Simpan di backup file server agar realtime antar browser
+    // 5. Simpan di backup file server agar realtime antar browser
     const all = loadBackupInvites();
     const filtered = all.filter((i) => !(i.brand_id === brandId && (i.target_email || i.email)?.toLowerCase() === cleanEmail));
     filtered.unshift(newInviteRecord);
@@ -176,22 +275,39 @@ export async function PUT(req: NextRequest) {
         } catch {}
       }
 
-      // 2. Tambah ke brand_members di Supabase
+      // 2. Tambah ke brand_members di Supabase & jadikan langganan TIM
       if (admin && brandId && userId) {
         try {
-          await admin
+          // Cek apakah sudah terdaftar sebagai anggota
+          const { data: existingMember } = await admin
             .from('brand_members' as any)
-            .insert({
-              brand_id: brandId,
-              user_id: userId,
-              role: role || 'editor',
-            } as any);
+            .select('id')
+            .eq('brand_id', brandId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          if (!existingMember) {
+            await admin
+              .from('brand_members' as any)
+              .insert({
+                brand_id: brandId,
+                user_id: userId,
+                role: role || 'editor',
+              } as any);
+          }
 
           // Update plan akun target menjadi team
           await admin
             .from('accounts' as any)
             .update({ plan_code: 'team', role: 'user', updated_at: new Date().toISOString() })
-            .eq('user_id', userId);
+            .or(`user_id.eq.${userId},id.eq.${userId}`);
+
+          // Update user metadata di Auth
+          try {
+            await admin.auth.admin.updateUserById(userId, {
+              user_metadata: { plan_code: 'team' },
+            });
+          } catch (mErr) {}
         } catch (memberErr) {
           console.warn('Supabase add member from invite error:', memberErr);
         }

@@ -41,3 +41,4 @@ ehthumbs.db
 .vercel
 *.tsbuildinfo
 .server_invitations.json
+.server_payments.json

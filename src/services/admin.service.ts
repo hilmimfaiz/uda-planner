@@ -205,7 +205,26 @@ export class AdminService {
   // ==========================================
   static async getPayments(): Promise<AdminPaymentItem[]> {
     const stored = getAdminStorage<AdminPaymentItem[]>('uda_admin_payments', []);
+    let apiPayments: AdminPaymentItem[] = [];
+
+    // 1. Ambil dari server API route (/api/payments?all=true) untuk sinkronisasi lintas-perangkat
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/payments?all=true');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data)) {
+            apiPayments = json.data;
+          }
+        }
+      } catch (apiErr) {
+        console.warn('AdminService.getPayments fetch /api/payments warning:', apiErr);
+      }
+    }
+
     const supabase = createClient();
+    let dbPayments: AdminPaymentItem[] = [];
+
     if (supabase) {
       try {
         const [payRes, profRes] = await Promise.all([
@@ -215,7 +234,7 @@ export class AdminService {
 
         if (!payRes.error && payRes.data && payRes.data.length > 0) {
           const profMap = new Map((profRes.data || []).map((pr: any) => [pr.id, pr]));
-          const dbPayments: AdminPaymentItem[] = payRes.data.map((p: any) => {
+          dbPayments = payRes.data.map((p: any) => {
             const prof: any = profMap.get(p.user_id) || {};
             const resolved = resolvePaymentDuration(p.duration_days, p.duration_label, p.amount, p.plan_code);
             return {
@@ -234,33 +253,26 @@ export class AdminService {
               reason: p.admin_note,
             };
           });
-
-          const dbIds = new Set(dbPayments.map((p) => p.id));
-          const combined = [
-            ...dbPayments,
-            ...stored.filter((st) => !dbIds.has(st.id)).map((st) => {
-              const res = resolvePaymentDuration(st.durationDays, st.durationLabel, st.amount, st.plan);
-              return { ...st, durationDays: res.days, durationLabel: res.label };
-            }),
-            ...localPayments.filter((lp) => !dbIds.has(lp.id) && !stored.some((st) => st.id === lp.id)),
-          ];
-          setAdminStorage('uda_admin_payments', combined);
-          return combined;
         }
       } catch (err) {
         console.warn('AdminService.getPayments db fallback:', err);
       }
     }
 
-    if (stored.length > 0) {
-      const storedIds = new Set(stored.map((p) => p.id));
-      const normalized = stored.map((st) => {
+    const baseList = apiPayments.length > 0 ? apiPayments : dbPayments;
+    const baseIds = new Set(baseList.map((p) => p.id));
+    const combined = [
+      ...baseList,
+      ...dbPayments.filter((p) => !baseIds.has(p.id)),
+      ...stored.filter((st) => !baseIds.has(st.id)).map((st) => {
         const res = resolvePaymentDuration(st.durationDays, st.durationLabel, st.amount, st.plan);
         return { ...st, durationDays: res.days, durationLabel: res.label };
-      });
-      return [...normalized, ...localPayments.filter((lp) => !storedIds.has(lp.id))];
-    }
-    return [...localPayments];
+      }),
+      ...localPayments.filter((lp) => !baseIds.has(lp.id) && !stored.some((st) => st.id === lp.id)),
+    ];
+
+    setAdminStorage('uda_admin_payments', combined);
+    return combined;
   }
 
   static async approvePayment(

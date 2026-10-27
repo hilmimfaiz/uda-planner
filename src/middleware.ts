@@ -53,10 +53,10 @@ export async function middleware(request: NextRequest) {
       return supabaseResponse;
     }
 
-    // 2. Periksa cookie auth Supabase
+    // 2. Periksa cookie auth Supabase & UdaPlanner
     const allCookies = request.cookies.getAll();
     const hasAuthCookie = allCookies.some(
-      (c) => c.name.includes('-auth-token')
+      (c) => c.name.includes('-auth-token') || c.name === 'uda_auth_token'
     );
 
     // Jika menuju area aplikasi tapi sama sekali tidak ada cookie auth, redirect instan
@@ -79,6 +79,10 @@ export async function middleware(request: NextRequest) {
     const user = data?.user ?? null;
 
     if (!user && isProtectedArea) {
+      // Jika cookie auth ada, jangan langsung redirect ke /masuk di middleware agar client-side auth guard yang memverifikasi
+      if (hasAuthCookie) {
+        return supabaseResponse;
+      }
       const url = request.nextUrl.clone();
       url.pathname = '/masuk';
       url.searchParams.set('redirect', pathname);

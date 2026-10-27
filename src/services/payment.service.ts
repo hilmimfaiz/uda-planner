@@ -49,6 +49,37 @@ export class PaymentService {
       }
     }
 
+    // Sinkronkan juga dari server API /api/payments
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams();
+        if (accountId) params.set('accountId', accountId);
+        if (email) params.set('email', email);
+        const res = await fetch(`/api/payments?${params.toString()}`);
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && Array.isArray(resData.data)) {
+            const serverItems = resData.data.map((it: any) => ({
+              id: it.id,
+              user_id: it.userId || accountId,
+              plan_code: it.plan || 'pro',
+              amount: it.amount,
+              duration_days: it.durationDays,
+              duration_label: it.durationLabel,
+              sender_name: it.user,
+              sender_bank: it.bank?.split(' — ')[0] || 'Transfer Bank',
+              proof_path: it.proof,
+              status: it.status || 'pending',
+              admin_note: it.reason,
+              created_at: it.created_at || new Date().toISOString(),
+            }));
+            const dbIds = new Set(dbPayments.map((p) => p.id));
+            dbPayments = [...dbPayments, ...serverItems.filter((s: any) => !dbIds.has(s.id))];
+          }
+        }
+      } catch (e) {}
+    }
+
     // Sinkronkan juga data pengajuan pembayaran dari localStorage (agar instan muncul tanpa jeda)
     if (typeof window !== 'undefined') {
       try {
@@ -135,10 +166,10 @@ export class PaymentService {
       }
     }
 
-    // Panggil juga API route server untuk persistensi ganda
+    // Panggil juga API route server untuk persistensi ganda & bypass RLS
     if (typeof window !== 'undefined') {
       try {
-        fetch('/api/payments', {
+        const res = await fetch('/api/payments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -156,8 +187,16 @@ export class PaymentService {
             targetAccountNumber: payload.targetAccountNumber,
             targetAccountName: payload.targetAccountName,
           }),
-        }).catch(() => {});
-      } catch (apiErr) {}
+        });
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && resData.data) {
+            createdRecord = { ...createdRecord, ...resData.data };
+          }
+        }
+      } catch (apiErr) {
+        console.warn('API /api/payments error:', apiErr);
+      }
     }
 
     const finalRecord = createdRecord || {

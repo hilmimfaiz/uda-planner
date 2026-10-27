@@ -43,11 +43,35 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [account, setAccount] = useState<UserAccount | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('uda_auth_user');
+        if (cached) return JSON.parse(cached);
+      } catch (e) {}
+    }
+    return null;
+  });
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('uda_auth_profile');
+        if (cached) return JSON.parse(cached);
+      } catch (e) {}
+    }
+    return null;
+  });
+  const [account, setAccount] = useState<UserAccount | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('uda_auth_account');
+        if (cached) return JSON.parse(cached);
+      } catch (e) {}
+    }
+    return null;
+  });
   const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   const supabase = createClient();
   const loadedUserIdRef = React.useRef<string | null>(null);
@@ -339,6 +363,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(initialSession.user);
         try {
           localStorage.setItem('uda_auth_user', JSON.stringify(initialSession.user));
+          if (typeof document !== 'undefined') {
+            document.cookie = 'uda_auth_token=true; path=/; max-age=2592000; SameSite=Lax';
+          }
         } catch (e) {}
         if (loadedUserIdRef.current !== initialSession.user.id) {
           loadedUserIdRef.current = initialSession.user.id;
@@ -362,6 +389,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         if (currentUser) {
           localStorage.setItem('uda_auth_user', JSON.stringify(currentUser));
+          if (typeof document !== 'undefined') {
+            document.cookie = 'uda_auth_token=true; path=/; max-age=2592000; SameSite=Lax';
+          }
         } else {
           localStorage.removeItem('uda_auth_user');
         }
@@ -663,6 +693,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('uda_auth_user');
       localStorage.removeItem('uda_auth_profile');
       localStorage.removeItem('uda_auth_account');
+      if (typeof document !== 'undefined') {
+        document.cookie = 'uda_auth_token=; path=/; max-age=0; SameSite=Lax';
+      }
     } catch (e) {}
 
     if (supabase) {

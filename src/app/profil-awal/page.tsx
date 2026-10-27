@@ -382,14 +382,11 @@ export default function ProfilAwalPage() {
 
       await refreshUserData();
 
-      if (typeof window !== 'undefined') {
-        window.location.replace('/app');
-      } else {
-        router.replace('/app');
-      }
+      // Alihkan langsung ke halaman /app/langganan sesuai instruksi
+      router.replace('/app/langganan');
     } catch (err) {
       console.warn('Free plan selection error:', err);
-      window.location.replace('/app');
+      router.replace('/app/langganan');
     }
   };
 
@@ -449,14 +446,10 @@ export default function ProfilAwalPage() {
       const durParam = curDur?.id ? `&dur=${curDur.id}` : '';
 
       // Alihkan otomatis masuk ke halaman Paket Langganan & Upgrade Akun
-      if (typeof window !== 'undefined') {
-        window.location.replace(`/app/langganan?plan=${planCode}${durParam}`);
-      } else {
-        router.replace(`/app/langganan?plan=${planCode}${durParam}`);
-      }
+      router.replace(`/app/langganan?plan=${planCode}${durParam}`);
     } catch (err) {
       console.warn('Paid plan selection error:', err);
-      window.location.replace(`/app/langganan?plan=${planCode}`);
+      router.replace(`/app/langganan?plan=${planCode}`);
     }
   };
 
