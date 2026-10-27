@@ -137,11 +137,43 @@ export default function LanggananPage() {
       }
 
       if (myPayments) {
-        setUserPayments(myPayments);
-        userPaymentsRef.current = myPayments;
+        const activePlan = account?.plan_code || 'free';
+        const hasPaidPlan = activePlan === 'pro' || activePlan === 'team';
+
+        const normalizedPayments = myPayments.map((p: any) => {
+          if (hasPaidPlan && p.status === 'pending' && (p.plan_code === activePlan || activePlan === 'team')) {
+            return { ...p, status: 'approved' };
+          }
+          return p;
+        });
+
+        setUserPayments(normalizedPayments);
+        userPaymentsRef.current = normalizedPayments;
+
+        // Bersihkan status pending di localStorage jika akun sudah aktif di paket tersebut
+        if (hasPaidPlan && typeof window !== 'undefined') {
+          try {
+            const rawAdmin = localStorage.getItem('uda_admin_payments');
+            if (rawAdmin) {
+              const list = JSON.parse(rawAdmin);
+              let changed = false;
+              const updatedList = list.map((item: any) => {
+                const matchUser = (user?.id && item.userId === user.id) || (user?.email && item.email?.toLowerCase() === user.email.toLowerCase());
+                if (matchUser && item.status === 'pending' && (item.plan === activePlan || activePlan === 'team')) {
+                  changed = true;
+                  return { ...item, status: 'approved' };
+                }
+                return item;
+              });
+              if (changed) {
+                localStorage.setItem('uda_admin_payments', JSON.stringify(updatedList));
+              }
+            }
+          } catch (e) {}
+        }
 
         // Tandai pembayaran yang sudah approved sebelumnya agar tidak pernah memicu notifikasi ulang
-        myPayments.forEach((p: any) => {
+        normalizedPayments.forEach((p: any) => {
           if (p.status === 'approved') {
             notifiedPaymentsRef.current.add(p.id);
             try {
@@ -472,7 +504,19 @@ export default function LanggananPage() {
   };
 
   // Cek apakah ada pembayaran yang sedang pending
-  const pendingPayment = userPayments.find((p) => p.status === 'pending');
+  // JIKA akun pengguna sudah aktif di paket berbayar (Pro atau Team),
+  // jangan pernah menampilkan banner "Menunggu Verifikasi Admin" lagi!
+  const currentActivePlan = account?.plan_code || 'free';
+  const hasActivePaidPlan = currentActivePlan === 'pro' || currentActivePlan === 'team';
+
+  const pendingPayment = userPayments.find((p) => {
+    if (p.status !== 'pending') return false;
+    if (hasActivePaidPlan) {
+      if (currentActivePlan === 'team') return false; // Sudah level tertinggi (TEAM), tidak ada lagi pending
+      if (currentActivePlan === p.plan_code) return false;
+    }
+    return true;
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 1040, margin: '0 auto', width: '100%' }}>

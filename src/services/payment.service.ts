@@ -114,7 +114,53 @@ export class PaymentService {
                 };
               });
 
-            return [...dbPayments, ...formattedLocal];
+            const allList = [...dbPayments, ...formattedLocal];
+
+            // Jika akun pengguna saat ini sudah aktif di paket berbayar (Pro atau Team),
+            // pastikan pembayaran yang sesuai otomatis berstatus 'approved' dan bersihkan status 'pending'
+            let activeUserPlan: string | null = null;
+            try {
+              const rawAcc = localStorage.getItem('uda_auth_account');
+              if (rawAcc) {
+                const parsed = JSON.parse(rawAcc);
+                if (parsed.plan_code && parsed.plan_code !== 'free') {
+                  activeUserPlan = parsed.plan_code;
+                }
+              }
+            } catch (e) {}
+
+            if (activeUserPlan) {
+              const normalized = allList.map((p: any) => {
+                if (p.status === 'pending' && (p.plan_code === activeUserPlan || activeUserPlan === 'team')) {
+                  return { ...p, status: 'approved' };
+                }
+                return p;
+              });
+
+              // Sinkronkan ke uda_admin_payments agar tidak ada yang tertinggal berstatus pending
+              try {
+                const rawAdmin = localStorage.getItem('uda_admin_payments');
+                if (rawAdmin) {
+                  const adminItems = JSON.parse(rawAdmin);
+                  let hasUpdate = false;
+                  const updatedAdminItems = adminItems.map((ai: any) => {
+                    const matchUser = (accountId && ai.userId === accountId) || (email && ai.email?.toLowerCase() === email.toLowerCase());
+                    if (matchUser && ai.status === 'pending' && (ai.plan === activeUserPlan || activeUserPlan === 'team')) {
+                      hasUpdate = true;
+                      return { ...ai, status: 'approved' };
+                    }
+                    return ai;
+                  });
+                  if (hasUpdate) {
+                    localStorage.setItem('uda_admin_payments', JSON.stringify(updatedAdminItems));
+                  }
+                }
+              } catch (e) {}
+
+              return normalized;
+            }
+
+            return allList;
           }
         }
       } catch (e) {}
