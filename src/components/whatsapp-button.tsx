@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
-import { AdminService } from '@/services/admin.service';
+import React, { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { AdminService } from "@/services/admin.service";
 
 interface WhatsAppButtonProps {
   customMessage?: string;
@@ -14,9 +14,9 @@ export function WhatsAppHelpButton({
   phoneNumber,
 }: WhatsAppButtonProps) {
   const pathname = usePathname();
-  const isAdminPage = pathname?.startsWith('/admin');
+  const isAdminPage = pathname?.startsWith("/admin");
 
-  const [adminPhone, setAdminPhone] = useState(phoneNumber || '6281234567890');
+  const [adminPhone, setAdminPhone] = useState(phoneNumber || "6281234567890");
   const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
@@ -29,11 +29,11 @@ export function WhatsAppHelpButton({
     }
   }, [phoneNumber]);
 
-  const cleanPhone = adminPhone.replace(/[^0-9]/g, '');
-  const tooltipLabel = isAdminPage ? 'Hubungi Developer' : 'Hubungi Admin';
+  const cleanPhone = adminPhone.replace(/[^0-9]/g, "");
+  const tooltipLabel = isAdminPage ? "Hubungi Developer" : "Hubungi Admin";
   const defaultMessage = isAdminPage
-    ? 'Halo Developer UdaPlanner, saya Admin UdaPlanner ingin berkonsultasi mengenai teknis / pengembangan sistem UdaPlanner.'
-    : 'Halo Admin UdaPlanner, saya ingin konsultasi mengenai fitur, paket langganan, dan layanan UdaPlanner.';
+    ? "Halo Developer UdaPlanner, saya Admin UdaPlanner ingin berkonsultasi mengenai teknis / pengembangan sistem UdaPlanner."
+    : "Halo Admin UdaPlanner, saya ingin konsultasi mengenai fitur, paket langganan, dan layanan UdaPlanner.";
   const messageText = customMessage || defaultMessage;
   const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`;
 
@@ -41,10 +41,15 @@ export function WhatsAppHelpButton({
     <div
       className="whatsapp-floating-container"
       style={{
-        position: 'fixed',
+        position: "fixed",
+        right: isAdminPage ? 24 : undefined,
+        bottom: isAdminPage
+          ? "calc(24px + env(safe-area-inset-bottom, 0px))"
+          : undefined,
         zIndex: 900,
-        display: 'flex',
-        alignItems: 'center',
+        display: "flex",
+        alignItems: "center",
+        pointerEvents: "none",
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -54,38 +59,39 @@ export function WhatsAppHelpButton({
         className="whatsapp-tooltip"
         style={{
           marginRight: 12,
-          backgroundColor: '#0f172a',
-          color: '#ffffff',
-          fontSize: '0.84rem',
+          backgroundColor: "#0f172a",
+          color: "#ffffff",
+          fontSize: "0.84rem",
           fontWeight: 700,
-          padding: '7px 13px',
+          padding: "7px 13px",
           borderRadius: 8,
-          border: '2px solid #0f172a',
-          boxShadow: '3px 3px 0px rgba(15, 23, 42, 0.4)',
-          whiteSpace: 'nowrap',
-          pointerEvents: 'none',
-          position: 'relative',
+          border: "2px solid #0f172a",
+          boxShadow: "3px 3px 0px rgba(15, 23, 42, 0.4)",
+          whiteSpace: "nowrap",
+          pointerEvents: "none",
+          position: "relative",
           opacity: isHovered ? 1 : 0,
-          visibility: isHovered ? 'visible' : 'hidden',
-          transform: isHovered ? 'translateX(0)' : 'translateX(8px)',
-          transition: 'opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.2s',
-          display: 'flex',
-          alignItems: 'center',
+          visibility: isHovered ? "visible" : "hidden",
+          transform: isHovered ? "translateX(0)" : "translateX(8px)",
+          transition:
+            "opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.2s",
+          display: "flex",
+          alignItems: "center",
         }}
       >
         <span>{tooltipLabel}</span>
         {/* Segitiga penunjuk ke arah icon WhatsApp */}
         <div
           style={{
-            position: 'absolute',
+            position: "absolute",
             right: -6,
-            top: '50%',
-            transform: 'translateY(-50%)',
+            top: "50%",
+            transform: "translateY(-50%)",
             width: 0,
             height: 0,
-            borderTop: '5px solid transparent',
-            borderBottom: '5px solid transparent',
-            borderLeft: '6px solid #0f172a',
+            borderTop: "5px solid transparent",
+            borderBottom: "5px solid transparent",
+            borderLeft: "6px solid #0f172a",
           }}
         />
       </div>
@@ -97,25 +103,27 @@ export function WhatsAppHelpButton({
         aria-label={`${tooltipLabel} via WhatsApp`}
         className="whatsapp-floating-btn"
         style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
           width: 52,
           height: 52,
-          backgroundColor: '#25D366',
-          color: '#ffffff',
-          textDecoration: 'none',
+          backgroundColor: "#25D366",
+          color: "#ffffff",
+          textDecoration: "none",
           padding: 0,
-          borderRadius: '50%',
-          border: '2.5px solid #0f172a',
+          borderRadius: "50%",
+          border: "2.5px solid #0f172a",
           boxShadow: isHovered
-            ? '5px 5px 0px #0f172a'
-            : '3.5px 3.5px 0px #0f172a',
-          transform: isHovered ? 'translate(-2px, -2px) scale(1.05)' : 'translate(0, 0) scale(1)',
-          transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
-          cursor: 'pointer',
+            ? "5px 5px 0px #0f172a"
+            : "3.5px 3.5px 0px #0f172a",
+          transform: isHovered
+            ? "translate(-2px, -2px) scale(1.05)"
+            : "translate(0, 0) scale(1)",
+          transition: "all 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
+          cursor: "pointer",
+          pointerEvents: "auto",
         }}
-        title={tooltipLabel}
       >
         {/* WhatsApp Official SVG Icon */}
         <svg

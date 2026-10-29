@@ -386,7 +386,14 @@ export default function AdminLayout({
         </nav>
 
         {/* Content Body Responsif */}
-        <main className="admin-content-body">{children}</main>
+        <main
+          className="admin-content-body"
+          style={{
+            paddingBottom: "calc(112px + env(safe-area-inset-bottom, 0px))",
+          }}
+        >
+          {children}
+        </main>
       </div>
 
       {/* Modal Pop-up Konfirmasi Logout Admin */}
