@@ -74,7 +74,9 @@ export async function GET(req: NextRequest) {
     const combined = [
       ...dbPayments,
       ...backupList.filter((bp: any) => !dbIds.has(bp.id)),
-    ];
+    ].filter(
+      (p: any) => !p.id?.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
+    );
 
     if (!all) {
       const filtered = combined.filter((p: any) => {

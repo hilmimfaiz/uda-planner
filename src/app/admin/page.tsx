@@ -66,8 +66,11 @@ export default function AdminDashboardPage() {
         AdminService.getAdminUsers(),
       ]);
       if (paymentsData) {
-        setAllPayments(paymentsData);
-        setPendingPayments(paymentsData.filter((p) => p.status === 'pending'));
+        const cleanPayments = paymentsData.filter(
+          (p) => !p.id?.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
+        );
+        setAllPayments(cleanPayments);
+        setPendingPayments(cleanPayments.filter((p) => p.status === 'pending'));
       }
       if (usersData) {
         setAdminUsers(usersData);
@@ -80,6 +83,19 @@ export default function AdminDashboardPage() {
   }, []);
 
   React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('uda_admin_payments');
+        if (raw) {
+          const list = JSON.parse(raw);
+          const cleaned = list.filter(
+            (p: any) => !p.id?.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
+          );
+          localStorage.setItem('uda_admin_payments', JSON.stringify(cleaned));
+        }
+      } catch (e) {}
+    }
+
     fetchDashboardStats();
 
     const handleSync = () => {

@@ -64,41 +64,7 @@ export interface AppSettingsData {
 }
 
 // Initial fallback mock data
-let localPayments: AdminPaymentItem[] = [
-  {
-    id: 'pay-1',
-    user: 'Budi Santoso',
-    email: 'budi@gmail.com',
-    plan: 'pro',
-    amount: 49137,
-    bank: 'BCA — 8839210928 A/N Budi Santoso',
-    proof: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-    status: 'pending',
-    date: '14 Okt 2026, 09.15 WIB',
-  },
-  {
-    id: 'pay-2',
-    user: 'PT Muda Kreatif Indonesia',
-    email: 'admin@muda.id',
-    plan: 'team',
-    amount: 149452,
-    bank: 'Bank Mandiri — 1280019283 A/N PT Muda Kreatif',
-    proof: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-    status: 'pending',
-    date: '14 Okt 2026, 08.40 WIB',
-  },
-  {
-    id: 'pay-3',
-    user: 'Sarah Rahmawati',
-    email: 'sarah@udaplanner.id',
-    plan: 'pro',
-    amount: 49721,
-    bank: 'BCA — 5271928311 A/N Sarah Rahmawati',
-    proof: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
-    status: 'approved',
-    date: '12 Okt 2026, 14.10 WIB',
-  },
-];
+let localPayments: AdminPaymentItem[] = [];
 
 let localUsers: AdminUserItem[] = [];
 
@@ -205,7 +171,10 @@ export class AdminService {
   // PEMBAYARAN / PAYMENTS
   // ==========================================
   static async getPayments(): Promise<AdminPaymentItem[]> {
-    const stored = getAdminStorage<AdminPaymentItem[]>('uda_admin_payments', []);
+    const rawStored = getAdminStorage<AdminPaymentItem[]>('uda_admin_payments', []);
+    const stored = rawStored.filter(
+      (p) => !p.id.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
+    );
     let apiPayments: AdminPaymentItem[] = [];
 
     // 1. Ambil dari server API route (/api/payments?all=true) untuk sinkronisasi lintas-perangkat
@@ -269,8 +238,9 @@ export class AdminService {
         const res = resolvePaymentDuration(st.durationDays, st.durationLabel, st.amount, st.plan);
         return { ...st, durationDays: res.days, durationLabel: res.label };
       }),
-      ...localPayments.filter((lp) => !baseIds.has(lp.id) && !stored.some((st) => st.id === lp.id)),
-    ];
+    ].filter(
+      (p) => !p.id.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
+    );
 
     setAdminStorage('uda_admin_payments', combined);
     return combined;
@@ -282,8 +252,8 @@ export class AdminService {
     planCode: string = 'pro',
     options?: { email?: string; durationDays?: number }
   ): Promise<boolean> {
-    const currentStored = getAdminStorage<AdminPaymentItem[]>('uda_admin_payments', localPayments);
-    const targetPayment = currentStored.find((p) => p.id === paymentId) || localPayments.find((p) => p.id === paymentId);
+    const currentStored = getAdminStorage<AdminPaymentItem[]>('uda_admin_payments', []);
+    const targetPayment = currentStored.find((p) => p.id === paymentId);
     const targetUserId = userId || targetPayment?.userId;
     const targetEmail = options?.email || targetPayment?.email;
     const targetPlan = (planCode || targetPayment?.plan || 'pro') as 'pro' | 'team';
@@ -495,7 +465,7 @@ export class AdminService {
     }
 
     localPayments = localPayments.map((p) => (p.id === paymentId ? { ...p, status: 'rejected', reason } : p));
-    const currentStored = getAdminStorage<AdminPaymentItem[]>('uda_admin_payments', localPayments);
+    const currentStored = getAdminStorage<AdminPaymentItem[]>('uda_admin_payments', []);
     const updated = currentStored.map((p) => (p.id === paymentId ? { ...p, status: 'rejected', reason } : p));
     setAdminStorage('uda_admin_payments', updated);
 

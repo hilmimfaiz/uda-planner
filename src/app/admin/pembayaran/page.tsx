@@ -71,9 +71,27 @@ export default function AdminPembayaranPage() {
 
   React.useEffect(() => {
     const fetchPayments = () => {
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('uda_admin_payments');
+          if (raw) {
+            const list = JSON.parse(raw);
+            const cleaned = list.filter(
+              (p: any) => !p.id?.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
+            );
+            localStorage.setItem('uda_admin_payments', JSON.stringify(cleaned));
+          }
+        } catch (e) {}
+      }
+
       AdminService.getPayments()
         .then((data) => {
-          if (data && data.length > 0) setPayments(data);
+          if (data) {
+            const cleanPayments = data.filter(
+              (p) => !p.id?.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
+            );
+            setPayments(cleanPayments);
+          }
         })
         .finally(() => {
           setIsLoading(false);
