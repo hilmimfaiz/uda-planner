@@ -464,30 +464,38 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {/* Top Action Bar */}
-      <div id="tour-editor-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <button className="btn-uda btn-uda-secondary btn-uda-sm" onClick={() => router.back()}>
-          <ArrowLeft size={16} />
-          <span>Kembali</span>
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {userRole && (
-            <span
-              style={{
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                padding: '3px 9px',
-                borderRadius: 999,
-                background: userRole === 'owner' ? '#dcfce7' : userRole === 'reviewer' ? '#e0e7ff' : userRole === 'editor' ? '#fef3c7' : '#f1f5f9',
-                color: userRole === 'owner' ? '#15803d' : userRole === 'reviewer' ? '#4338ca' : userRole === 'editor' ? '#92400e' : '#475569',
-                border: '1px solid currentColor',
-                textTransform: 'uppercase',
-              }}
-            >
-              Peran: {userRole}
-            </span>
-          )}
+      {/* Top Action Bar Responsif */}
+      <div id="tour-editor-header" className="post-editor-top-bar">
+        <div className="post-editor-top-left">
+          <button className="btn-uda btn-uda-secondary btn-uda-sm" onClick={() => router.back()}>
+            <ArrowLeft size={16} />
+            <span>Kembali</span>
+          </button>
+          <div className="post-editor-meta-pills">
+            {userRole && (
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  padding: '3px 9px',
+                  borderRadius: 999,
+                  background: userRole === 'owner' ? '#dcfce7' : userRole === 'reviewer' ? '#e0e7ff' : userRole === 'editor' ? '#fef3c7' : '#f1f5f9',
+                  color: userRole === 'owner' ? '#15803d' : userRole === 'reviewer' ? '#4338ca' : userRole === 'editor' ? '#92400e' : '#475569',
+                  border: '1px solid currentColor',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Peran: {userRole}
+              </span>
+            )}
 
+            <span className="status-pill" style={{ background: statusMeta.bg, color: statusMeta.text }}>
+              Status: {statusMeta.label}
+            </span>
+          </div>
+        </div>
+
+        <div className="post-editor-top-actions">
           {!isNew && (userRole === 'owner' || userRole === 'reviewer') && (
             <button className="btn-uda btn-uda-danger btn-uda-sm" onClick={handleDeletePost} title="Hapus Postingan">
               <Trash2 size={15} />
@@ -495,13 +503,9 @@ END:VCALENDAR`;
             </button>
           )}
 
-          <span className="status-pill" style={{ background: statusMeta.bg, color: statusMeta.text }}>
-            Status: {statusMeta.label}
-          </span>
-
           {!isReadOnly && (
             <button
-              className="btn-uda btn-uda-primary btn-uda-sm"
+              className="btn-uda btn-uda-primary btn-uda-sm post-editor-btn-submit"
               onClick={handleSavePost}
               disabled={isSaving}
             >
@@ -514,7 +518,7 @@ END:VCALENDAR`;
       {/* 2-Kolom Layout Responsif (Desktop 2-Kolom, Mobile/Tablet 1-Kolom) */}
       <div className="post-editor-layout-grid">
         {/* KOLOM KIRI: FORM EDITOR */}
-        <div id="tour-editor-form" className="uda-card" style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%', boxSizing: 'border-box' }}>
+        <div id="tour-editor-form" className="uda-card post-editor-card" style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%', boxSizing: 'border-box' }}>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>Form Editor Konten</h2>
 
           {/* Judul Internal */}
@@ -538,7 +542,7 @@ END:VCALENDAR`;
           </div>
 
           {/* Brand & Jenis Konten */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div className="post-editor-grid-2col">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Brand</label>
               <select
@@ -606,27 +610,19 @@ END:VCALENDAR`;
                 {post.platforms.length} platform dipilih
               </span>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div className="post-editor-platform-list">
               {(brand.platforms && brand.platforms.length > 0 ? brand.platforms : ['instagram', 'tiktok']).map((plt) => {
                 const isChecked = post.platforms.includes(plt);
                 const platformMeta = PLATFORMS[plt];
                 return (
                   <label
                     key={plt}
+                    className="post-editor-platform-item"
                     style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 7,
-                      padding: '6px 12px',
-                      borderRadius: 8,
                       border: `1.5px solid ${isChecked ? '#16a34a' : '#cbd5e1'}`,
                       backgroundColor: isChecked ? '#f0fdf4' : '#ffffff',
                       cursor: isReadOnly ? 'not-allowed' : 'pointer',
-                      fontSize: '0.84rem',
-                      fontWeight: 600,
                       color: isChecked ? '#15803d' : '#475569',
-                      transition: 'all 0.15s ease',
-                      userSelect: 'none',
                       opacity: isReadOnly ? 0.75 : 1,
                     }}
                   >
@@ -711,42 +707,23 @@ END:VCALENDAR`;
             />
 
             {post.media_url ? (
-              <div
-                style={{
-                  border: '2px solid #0f172a',
-                  borderRadius: 10,
-                  boxShadow: '3px 3px 0px #0f172a',
-                  padding: 10,
-                  background: '#f8fafc',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                }}
-              >
-                <div
-                  style={{
-                    width: 60,
-                    height: 60,
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                    border: '1.5px solid #0f172a',
-                    flexShrink: 0,
-                    backgroundColor: '#e2e8f0',
-                  }}
-                >
-                  <img
-                    src={post.media_url}
-                    alt="Foto Konten"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
-                    Foto Konten Terpasang
+              <div className="post-editor-media-preview-card">
+                <div className="post-editor-media-preview-left">
+                  <div className="post-editor-media-thumb">
+                    <img
+                      src={post.media_url}
+                      alt="Foto Konten"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                    <CheckCircle2 size={13} />
-                    <span>Tersinkron langsung ke Pratinjau Feed</span>
+                  <div className="post-editor-media-info">
+                    <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
+                      Foto Konten Terpasang
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                      <CheckCircle2 size={13} />
+                      <span>Tersinkron langsung ke Pratinjau Feed</span>
+                    </div>
                   </div>
                 </div>
                 {!isReadOnly && (
@@ -754,7 +731,7 @@ END:VCALENDAR`;
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploadingImage}
-                    className="btn-uda btn-uda-secondary btn-uda-sm"
+                    className="btn-uda btn-uda-secondary btn-uda-sm post-editor-media-btn"
                     style={{ flexShrink: 0 }}
                   >
                     <UploadCloud size={14} />
@@ -827,8 +804,8 @@ END:VCALENDAR`;
 
           {/* Caption dengan Tombol Sisipkan dari Bank & Penghitung Karakter */}
           <div id="tour-editor-caption" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="post-editor-caption-header">
+              <div className="post-editor-caption-title-wrap">
                 <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Caption Postingan</label>
                 {!isReadOnly && (
                   <button
@@ -838,7 +815,7 @@ END:VCALENDAR`;
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', fontSize: '0.78rem' }}
                   >
                     <Sparkles size={13} style={{ color: '#16a34a' }} />
-                    <span>Sisipkan dari Bank Konten</span>
+                    <span>Bank Konten</span>
                   </button>
                 )}
               </div>
@@ -902,7 +879,7 @@ END:VCALENDAR`;
         {/* KOLOM KANAN: PRATINJAU SOSMED & KARTU AKSI */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Pratinjau Sosmed (Feed Mockup) */}
-          <div id="tour-editor-preview" className="uda-card" style={{ padding: 18 }}>
+          <div id="tour-editor-preview" className="uda-card post-editor-card" style={{ padding: 18 }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: 12, color: '#0f172a' }}>
               Pratinjau Feed Media Sosial
             </h3>
@@ -923,13 +900,9 @@ END:VCALENDAR`;
 
               {/* Gambar Feed Tersinkron */}
               <div
+                className="post-editor-feed-img-wrap"
                 style={{
                   aspectRatio: post.content_type === 'reels' || post.content_type === 'story' ? '9 / 16' : '1 / 1',
-                  background: '#f8fafc',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
                 }}
               >
                 {post.media_url ? (
@@ -972,7 +945,7 @@ END:VCALENDAR`;
           </div>
 
           {/* Kartu Status & Alur Persetujuan (Workflow) */}
-          <div className="uda-card" style={{ padding: 18 }}>
+          <div className="uda-card post-editor-card" style={{ padding: 18 }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: 12, color: '#0f172a' }}>
               Alur Status & Persetujuan
             </h3>
@@ -984,7 +957,7 @@ END:VCALENDAR`;
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {brand.require_approval && (
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div className="post-editor-workflow-buttons">
                     <button
                       className="btn-uda btn-uda-secondary btn-uda-sm"
                       style={{ flex: 1 }}
@@ -1031,7 +1004,7 @@ END:VCALENDAR`;
 
                 <button
                   className="btn-uda btn-uda-primary"
-                  style={{ width: '100%', marginTop: 4 }}
+                  style={{ width: '100%', marginTop: 4, justifyContent: 'center' }}
                   disabled={userRole === 'editor' && brand.require_approval && post.status !== 'siap'}
                   title={userRole === 'editor' && brand.require_approval && post.status !== 'siap' ? 'Postingan harus disetujui Reviewer/Owner terlebih dahulu' : 'Tandai postingan sudah tayang'}
                   onClick={() => {
@@ -1052,15 +1025,14 @@ END:VCALENDAR`;
           </div>
 
           {/* Kartu "Saat Posting" Sesuai PRD Bab 8 */}
-          <div id="tour-editor-actions" className="uda-card" style={{ padding: 18 }}>
+          <div id="tour-editor-actions" className="uda-card post-editor-card" style={{ padding: 18 }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: 12, color: '#0f172a' }}>
               Aksi Cepat "Saat Posting"
             </h3>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="post-editor-actions-list">
               <button
                 className="btn-uda btn-uda-primary"
-                style={{ width: '100%', justifyContent: 'flex-start' }}
                 onClick={handleCopyCaptionAndHashtags}
               >
                 <Copy size={16} />
@@ -1069,7 +1041,6 @@ END:VCALENDAR`;
 
               <button
                 className="btn-uda btn-uda-secondary"
-                style={{ width: '100%', justifyContent: 'flex-start' }}
                 onClick={handleAddToGoogleCalendar}
               >
                 <CalendarIcon size={16} />
@@ -1078,7 +1049,6 @@ END:VCALENDAR`;
 
               <button
                 className="btn-uda btn-uda-secondary"
-                style={{ width: '100%', justifyContent: 'flex-start' }}
                 onClick={handleDownloadICS}
               >
                 <Download size={16} />
@@ -1087,7 +1057,6 @@ END:VCALENDAR`;
 
               <button
                 className="btn-uda btn-uda-secondary"
-                style={{ width: '100%', justifyContent: 'flex-start' }}
                 onClick={handleShareToWhatsApp}
               >
                 <Share2 size={16} />
@@ -1097,6 +1066,20 @@ END:VCALENDAR`;
           </div>
         </div>
       </div>
+
+      {/* Tombol Simpan/Buat Cepat untuk Mobile agar mudah dijangkau satu tangan */}
+      {!isReadOnly && (
+        <div className="post-editor-mobile-bottom-submit">
+          <button
+            className="btn-uda btn-uda-primary"
+            onClick={handleSavePost}
+            disabled={isSaving}
+            style={{ width: '100%', padding: '12px 18px', fontSize: '0.95rem', justifyContent: 'center' }}
+          >
+            {isSaving ? 'Menyimpan...' : isNew ? '🚀 Buat Postingan Sekarang' : '💾 Simpan Perubahan'}
+          </button>
+        </div>
+      )}
 
       {/* MODAL: MINTA REVISI */}
       {showRevisionModal && (
@@ -1112,7 +1095,7 @@ END:VCALENDAR`;
             padding: 20,
           }}
         >
-          <div className="uda-card" style={{ maxWidth: 440, width: '100%', padding: 24 }}>
+          <div className="uda-card post-editor-modal-card" style={{ maxWidth: 440, width: '100%', padding: 24, boxSizing: 'border-box' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: 8, color: '#0f172a' }}>
               Catatan Minta Revisi
             </h3>
@@ -1134,6 +1117,7 @@ END:VCALENDAR`;
                 fontSize: '0.88rem',
                 outline: 'none',
                 marginBottom: 16,
+                boxSizing: 'border-box',
               }}
             />
 
@@ -1167,10 +1151,10 @@ END:VCALENDAR`;
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 100,
-            padding: 20,
+            padding: 16,
           }}
         >
-          <div className="uda-card" style={{ maxWidth: 540, width: '100%', maxHeight: '85vh', overflowY: 'auto' }}>
+          <div className="uda-card post-editor-modal-card" style={{ maxWidth: 540, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Sparkles size={18} style={{ color: '#16a34a' }} />
@@ -1185,7 +1169,7 @@ END:VCALENDAR`;
             </div>
 
             {/* Filter Tabs: Semua, Template Caption, Kumpulan Hashtag */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 16, borderBottom: '1px solid #e2e8f0', paddingBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 16, borderBottom: '1px solid #e2e8f0', paddingBottom: 10, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <button
                 type="button"
                 onClick={() => setSnippetTab('all')}

@@ -551,18 +551,10 @@ export default function BerandaPage() {
         </div>
       </div>
 
-      {/* Summary Metrics (ID: tour-summary) */}
-      <div
-        id="tour-summary"
-        style={{
-          display: "grid",
-          gridTemplateColumns:
-            "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
-          gap: 16,
-        }}
-      >
+      {/* Summary Metrics (ID: tour-summary) - 4 Kolom di Desktop, 2 Atas 2 Bawah di Mobile */}
+      <div id="tour-summary" className="dashboard-summary-grid">
         <div
-          className="uda-card"
+          className="uda-card dashboard-summary-card"
           style={{ padding: "16px 20px", borderLeft: "4px solid #16a34a" }}
         >
           <div
@@ -571,6 +563,7 @@ export default function BerandaPage() {
             Total Jadwal Hari Ini
           </div>
           <div
+            className="metric-number"
             style={{
               fontSize: "1.6rem",
               fontWeight: 900,
@@ -590,7 +583,7 @@ export default function BerandaPage() {
         </div>
 
         <div
-          className="uda-card"
+          className="uda-card dashboard-summary-card"
           style={{ padding: "16px 20px", borderLeft: "4px solid #0284c7" }}
         >
           <div
@@ -599,6 +592,7 @@ export default function BerandaPage() {
             Siap Tayang
           </div>
           <div
+            className="metric-number"
             style={{
               fontSize: "1.6rem",
               fontWeight: 900,
@@ -618,7 +612,7 @@ export default function BerandaPage() {
         </div>
 
         <div
-          className="uda-card"
+          className="uda-card dashboard-summary-card"
           style={{ padding: "16px 20px", borderLeft: "4px solid #f59e0b" }}
         >
           <div
@@ -627,6 +621,7 @@ export default function BerandaPage() {
             Menunggu Review / Draft
           </div>
           <div
+            className="metric-number"
             style={{
               fontSize: "1.6rem",
               fontWeight: 900,
@@ -648,7 +643,7 @@ export default function BerandaPage() {
         </div>
 
         <div
-          className="uda-card"
+          className="uda-card dashboard-summary-card"
           style={{ padding: "16px 20px", borderLeft: "4px solid #475569" }}
         >
           <div
@@ -657,6 +652,7 @@ export default function BerandaPage() {
             Sudah Terposting
           </div>
           <div
+            className="metric-number"
             style={{
               fontSize: "1.6rem",
               fontWeight: 900,

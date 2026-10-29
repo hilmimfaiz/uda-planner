@@ -297,7 +297,8 @@ export default function PapanKanbanPage() {
             pointerEvents: "none",
           }}
         />
-        {columns.map((col) => {
+        {columns.map((col, idx) => {
+          const isRow1 = idx < 3; // 0 (ide), 1 (draft), 2 (review) -> Baris Atas 3 Kolom
           const colPosts = posts.filter((p) => p.status === col.id);
           const totalPages = Math.max(1, Math.ceil(colPosts.length / itemsPerPage));
           const currentPage = pageByColumn[col.id] || 1;
@@ -310,7 +311,7 @@ export default function PapanKanbanPage() {
           return (
             <div
               key={col.id}
-              className="kanban-board-column"
+              className={`kanban-board-column ${isRow1 ? "kanban-col-row1" : "kanban-col-row2"}`}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
@@ -354,11 +355,13 @@ export default function PapanKanbanPage() {
                       height: 8,
                       borderRadius: "50%",
                       backgroundColor: col.color,
+                      flexShrink: 0,
                     }}
                   />
-                  <span>{col.title}</span>
+                  <span className="kanban-col-header-title">{col.title}</span>
                 </div>
                 <span
+                  className="kanban-col-header-badge"
                   style={{
                     fontSize: "0.72rem",
                     fontWeight: 700,
@@ -383,6 +386,7 @@ export default function PapanKanbanPage() {
               >
                 {colPosts.length === 0 ? (
                   <div
+                    className="kanban-empty-placeholder"
                     style={{
                       textAlign: "center",
                       padding: "36px 12px",
@@ -408,6 +412,7 @@ export default function PapanKanbanPage() {
                       <div
                         key={post.id}
                         id={col.id === "ide" && postIdx === 0 && safeCurrentPage === 1 ? "tour-papan-card" : undefined}
+                        className="kanban-card-item"
                         draggable
                         onDragStart={(e) =>
                           e.dataTransfer.setData("text/plain", post.id)
@@ -435,6 +440,7 @@ export default function PapanKanbanPage() {
                         >
                           {brand && (
                             <span
+                              className="kanban-card-brand-chip"
                               style={{
                                 fontSize: "0.68rem",
                                 fontWeight: 700,
@@ -459,6 +465,7 @@ export default function PapanKanbanPage() {
 
                         {/* Judul */}
                         <div
+                          className="kanban-card-title"
                           style={{
                             fontWeight: 700,
                             fontSize: "0.85rem",

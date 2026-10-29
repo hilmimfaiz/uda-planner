@@ -2,7 +2,25 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, Check, ArrowLeft, X, Shield, Building, CheckCircle2, XCircle } from 'lucide-react';
+import {
+  Bell,
+  Check,
+  ArrowLeft,
+  X,
+  Shield,
+  Building,
+  CheckCircle2,
+  XCircle,
+  Package,
+  FileText,
+  Sparkles,
+  Clock,
+  Settings,
+  Info,
+  CreditCard,
+  User,
+  ChevronRight,
+} from 'lucide-react';
 import { DUMMY_NOTIFICATIONS, DummyNotification, DummyMember } from '@/lib/dummy-data';
 import { getStoredNotifications, markAllNotificationsAsRead, updateNotificationInviteStatus, addAppNotification, syncServerInvitations } from '@/lib/notification-manager';
 import { GuidedTour, TourStep } from '@/components/guided-tour';
@@ -58,6 +76,55 @@ export default function NotifikasiPage() {
 
   const markAllRead = () => {
     setNotifications(markAllNotificationsAsRead());
+  };
+
+  const getNotifMeta = (n: DummyNotification) => {
+    if (n.type === 'team_invite') {
+      return {
+        icon: Building,
+        badgeBg: '#f3e8ff',
+        iconColor: '#7e22ce',
+        defaultTitle: `Undangan Tim: ${n.invite_data?.brand_name || 'Brand'}`,
+      };
+    }
+    if (n.type === 'approved') {
+      return {
+        icon: CheckCircle2,
+        badgeBg: '#dcfce7',
+        iconColor: '#15803d',
+        defaultTitle: 'Konten Telah Disetujui',
+      };
+    }
+    if (n.type === 'review_request') {
+      return {
+        icon: FileText,
+        badgeBg: '#dbeafe',
+        iconColor: '#1d4ed8',
+        defaultTitle: 'Permintaan Review Konten',
+      };
+    }
+    if (n.type === 'revision') {
+      return {
+        icon: XCircle,
+        badgeBg: '#fee2e2',
+        iconColor: '#b91c1c',
+        defaultTitle: 'Catatan Revisi Konten',
+      };
+    }
+    if (n.type === 'assigned') {
+      return {
+        icon: User,
+        badgeBg: '#e0f2fe',
+        iconColor: '#0284c7',
+        defaultTitle: 'Tugas Konten Baru',
+      };
+    }
+    return {
+      icon: Bell,
+      badgeBg: '#fef9c3',
+      iconColor: '#854d0e',
+      defaultTitle: 'Notifikasi Aktivitas',
+    };
   };
 
   // Terima Undangan Brand & Otomatis Ubah Status Langganan Menjadi TIM
@@ -254,7 +321,7 @@ export default function NotifikasiPage() {
         </div>
       )}
 
-      <div id="tour-notif-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div id="tour-notif-header" className="desktop-notif-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="btn-uda btn-uda-secondary btn-uda-sm" onClick={() => router.back()}>
             <ArrowLeft size={16} />
@@ -267,9 +334,10 @@ export default function NotifikasiPage() {
         </button>
       </div>
 
-      <div id="tour-notif-list" className="uda-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* List Notifikasi (Sesuai Layout Gambar Referensi 1) */}
+      <div id="tour-notif-list" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {notifications.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+          <div className="uda-card" style={{ textAlign: 'center', padding: '36px 16px', color: '#64748b' }}>
             <Bell size={28} style={{ color: '#cbd5e1', margin: '0 auto 8px' }} />
             <p style={{ margin: 0, fontWeight: 600 }}>Belum ada notifikasi saat ini.</p>
           </div>
@@ -457,34 +525,68 @@ export default function NotifikasiPage() {
               );
             }
 
-            // Regular notification
+            // Regular notification (Sesuai Referensi Gambar 1: Rounded Icon Badge + Title + Timestamp + Message)
+            const meta = getNotifMeta(n);
+            const IconComponent = meta.icon;
+
             return (
               <div
                 key={n.id}
+                className={`mobile-notif-item ${!n.is_read ? 'unread' : ''}`}
                 onClick={() => router.push(n.link)}
-                style={{
-                  padding: 14,
-                  borderRadius: 10,
-                  background: n.is_read ? '#f8fafc' : '#f0fdf4',
-                  border: `1px solid ${n.is_read ? '#e2e8f0' : '#bbf7d0'}`,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                }}
               >
-                <div>
-                  <div style={{ fontWeight: n.is_read ? 600 : 800, fontSize: '0.88rem', color: '#0f172a' }}>
-                    {n.message}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
-                    {n.time_ago}
-                  </div>
+                {/* Left: Soft rounded icon badge */}
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 12,
+                    backgroundColor: meta.badgeBg,
+                    border: '2px solid #0f172a',
+                    boxShadow: '2px 2px 0px #0f172a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    color: meta.iconColor,
+                  }}
+                >
+                  <IconComponent size={20} />
                 </div>
-                {!n.is_read && (
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#16a34a', flexShrink: 0 }} />
-                )}
+
+                {/* Right: Title, Timestamp, Description */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
+                    <div
+                      style={{
+                        fontWeight: 800,
+                        fontSize: '0.94rem',
+                        color: '#0f172a',
+                        letterSpacing: '-0.01em',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {n.title || meta.defaultTitle}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, flexShrink: 0 }}>
+                      {n.time_ago}
+                    </div>
+                  </div>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: '0.84rem',
+                      color: '#475569',
+                      lineHeight: 1.45,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {n.message}
+                  </p>
+                </div>
               </div>
             );
           })

@@ -25,6 +25,10 @@ import {
   Loader2,
   Menu,
   X,
+  ArrowLeft,
+  Settings,
+  HelpCircle,
+  Info,
 } from 'lucide-react';
 import { DUMMY_NOTIFICATIONS } from '@/lib/dummy-data';
 import { useAuth } from '@/contexts/auth-context';
@@ -42,6 +46,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  const getMobilePageTitle = () => {
+    if (pathname === '/app') return 'Beranda';
+    if (pathname === '/app/notifikasi') return 'Notifications';
+    if (pathname === '/app/akun') return 'Profile';
+    if (pathname === '/app/kalender') return 'Kalender Konten';
+    if (pathname === '/app/papan') return 'Papan Ide';
+    if (pathname === '/app/grid') return 'Instagram Grid';
+    if (pathname === '/app/brand') return 'Kelola Brand';
+    if (pathname.startsWith('/app/brand/')) return 'Detail Brand';
+    if (pathname === '/app/langganan') return 'Langganan';
+    if (pathname === '/app/bank') return 'Rekening Bank';
+    if (pathname === '/app/postingan/baru') return 'Buat Postingan';
+    if (pathname.startsWith('/app/postingan/')) return 'Edit Postingan';
+    if (pathname.startsWith('/admin')) return 'Panel Admin';
+    return 'UdaPlanner';
+  };
 
   useEffect(() => {
     setShowMobileMenu(false);
@@ -398,53 +419,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: '100vh' }}>
         {/* Topbar */}
         <header className="app-topbar">
-          <div className="topbar-left">
-            {/* Mobile / Tablet App Logo & Brand Header */}
-            <Link href="/app" className="mobile-app-header-brand" title="UdaPlanner">
-              <div className="logo-symbol" style={{ width: 34, height: 34, fontSize: '1.05rem', flexShrink: 0 }}>
-                U
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontWeight: 900, fontSize: '1.05rem', color: '#0f172a', letterSpacing: '-0.025em', lineHeight: 1.15 }}>
-                  UdaPlanner
-                </span>
-                <span style={{ fontSize: '0.64rem', color: '#16a34a', fontWeight: 800, letterSpacing: '0.04em' }}>
-                  {account?.plan_code ? `PLAN ${account.plan_code.toUpperCase()}` : 'PLAN FREE'}
-                </span>
-              </div>
-            </Link>
-
-            {/* Tombol Panduan Halaman di Header Pojok Kiri Atas */}
-            <button
-              type="button"
-              id="header-guided-tour-btn"
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('uda_start_guided_tour'));
-                }
-              }}
-              className="btn-uda"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 7,
-                backgroundColor: '#fef08a',
-                color: '#0f172a',
-                border: '1.5px solid #0f172a',
-                boxShadow: '2.5px 2.5px 0px #0f172a',
-                padding: '6px 12px',
-                borderRadius: 9,
-                fontSize: '0.82rem',
-                fontWeight: 800,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              title="Buka Panduan Langkah Halaman Ini"
-            >
-              <BookOpen size={15} style={{ color: '#16a34a' }} />
-              <span className="tour-btn-label">Panduan Halaman</span>
-            </button>
-          </div>
+          {/* Desktop Topbar Content */}
+          <div className="topbar-desktop-view">
+            <div className="topbar-left">
+              {/* Tombol Panduan Halaman di Header Pojok Kiri Atas */}
+              <button
+                type="button"
+                id="header-guided-tour-btn"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('uda_start_guided_tour'));
+                  }
+                }}
+                className="btn-uda"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  backgroundColor: '#fef08a',
+                  color: '#0f172a',
+                  border: '1.5px solid #0f172a',
+                  boxShadow: '2.5px 2.5px 0px #0f172a',
+                  padding: '6px 12px',
+                  borderRadius: 9,
+                  fontSize: '0.82rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                title="Buka Panduan Langkah Halaman Ini"
+              >
+                <BookOpen size={15} style={{ color: '#16a34a' }} />
+                <span className="tour-btn-label">Panduan Halaman</span>
+              </button>
+            </div>
 
           <div className="topbar-right">
             {/* Tombol Hijau + Postingan (Disembunyikan di HP kecil karena ada tombol bulat tengah di bottom nav) */}
@@ -580,6 +588,68 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </div>
+        </div>
+
+          {/* Mobile & Tablet App Topbar (Layout Referensi: Back Arrow, Centered Title, Right Action) */}
+          <div className="topbar-mobile-app-bar">
+            {/* Left Button */}
+            <div className="mobile-app-bar-left">
+              {pathname === '/app' ? (
+                <button
+                  type="button"
+                  onClick={() => setShowMobileMenu(true)}
+                  className="mobile-bar-icon-btn"
+                  title="Menu Aplikasi"
+                >
+                  <Menu size={19} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => router.back()}
+                  className="mobile-bar-icon-btn"
+                  title="Kembali"
+                >
+                  <ArrowLeft size={19} />
+                </button>
+              )}
+            </div>
+
+            {/* Center Title */}
+            <div className="mobile-app-bar-center">
+              <span className="mobile-app-bar-title">{getMobilePageTitle()}</span>
+            </div>
+
+            {/* Right Action */}
+            <div className="mobile-app-bar-right">
+              {pathname === '/app/notifikasi' ? (
+                <Link href="/app/akun" className="mobile-bar-icon-btn" title="Pengaturan">
+                  <Settings size={18} />
+                </Link>
+              ) : pathname === '/app/akun' ? (
+                <button
+                  type="button"
+                  onClick={() => setShowLogoutModal(true)}
+                  className="mobile-bar-icon-btn"
+                  style={{ color: '#ef4444' }}
+                  title="Keluar"
+                >
+                  <LogOut size={18} />
+                </button>
+              ) : pathname === '/app' ? (
+                <Link href="/app/notifikasi" className="mobile-bar-icon-btn" title="Notifikasi" style={{ position: 'relative' }}>
+                  <Bell size={18} />
+                  {unreadCount > 0 && <span className="notif-unread-badge">{unreadCount}</span>}
+                </Link>
+              ) : pathname === '/app/kalender' || pathname === '/app/papan' ? (
+                <Link href="/app/postingan/baru" className="mobile-bar-icon-btn" title="Buat Postingan">
+                  <Plus size={19} />
+                </Link>
+              ) : (
+                <div style={{ width: 38, height: 38 }} />
+              )}
+            </div>
+          </div>
         </header>
 
         {/* Content Body Responsif */}
@@ -618,15 +688,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Kanban size={18} />
           <span>Papan</span>
         </Link>
-        <button
-          type="button"
-          onClick={() => setShowMobileMenu(true)}
-          className={`mobile-nav-item ${showMobileMenu || (!['/app', '/app/kalender', '/app/papan'].includes(pathname) && !pathname.startsWith('/app/postingan')) ? 'active' : ''}`}
-          title="Buka Menu Aplikasi"
+        <Link
+          href="/app/akun"
+          className={`mobile-nav-item ${pathname === '/app/akun' ? 'active' : ''}`}
         >
-          <Menu size={18} />
-          <span>Menu</span>
-        </button>
+          <User size={18} />
+          <span>Profil</span>
+        </Link>
       </nav>
 
       {/* Mobile App Drawer / Menu Sheet (Akses Cepat Semua Fitur) */}

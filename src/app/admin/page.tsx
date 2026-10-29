@@ -244,15 +244,15 @@ export default function AdminDashboardPage() {
         </p>
       </div>
 
-      <div id="tour-admin-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+      <div id="tour-admin-stats" className="admin-dashboard-stats-grid">
         <div
-          className="uda-card"
+          className="uda-card admin-metrics-card"
           onClick={() => router.push('/admin/pengguna')}
           style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
           title="Klik untuk membuka Manajemen Pengguna"
         >
           <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PENGGUNA TERDAFTAR</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
             {isLoading ? '...' : totalUsersCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>
@@ -261,63 +261,63 @@ export default function AdminDashboardPage() {
         </div>
 
         <div
-          className="uda-card"
+          className="uda-card admin-metrics-card"
           onClick={() => router.push('/admin/pengguna')}
           style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
           title="Klik untuk menyaring Pengguna Pro"
         >
           <div style={{ color: '#3b82f6', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA PRO AKTIF</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#1d4ed8', marginTop: 4 }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#1d4ed8', marginTop: 4 }}>
             {isLoading ? '...' : proUsersCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Rp 49.000 / 30 hari</div>
         </div>
 
         <div
-          className="uda-card"
+          className="uda-card admin-metrics-card"
           onClick={() => router.push('/admin/pengguna')}
           style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
           title="Klik untuk menyaring Pengguna Tim"
         >
           <div style={{ color: '#8b5cf6', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA TIM AKTIF</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#6d28d9', marginTop: 4 }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#6d28d9', marginTop: 4 }}>
             {isLoading ? '...' : teamUsersCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Rp 149.000 / 30 hari</div>
         </div>
 
         <div
-          className="uda-card"
+          className="uda-card admin-metrics-card"
           onClick={() => router.push('/admin/pembayaran')}
           style={{ padding: 18, border: '1px solid #fde68a', background: '#fffbeb', cursor: 'pointer', transition: 'transform 0.15s' }}
         >
           <div style={{ color: '#b45309', fontSize: '0.78rem', fontWeight: 700 }}>MENUNGGU VERIFIKASI</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#d97706', marginTop: 4 }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#d97706', marginTop: 4 }}>
             {isLoading ? '...' : pendingPayments.length}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600, marginTop: 4 }}>Klik untuk cek transfer →</div>
         </div>
 
         <div
-          className="uda-card"
+          className="uda-card admin-metrics-card"
           onClick={() => router.push('/admin/verifikasi-email')}
           style={{ padding: 18, border: '1px solid #fed7aa', background: '#fff7ed', cursor: 'pointer', transition: 'transform 0.15s' }}
         >
           <div style={{ color: '#c2410c', fontSize: '0.78rem', fontWeight: 700 }}>EMAIL BELUM DIVERIFIKASI</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#ea580c', marginTop: 4 }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#ea580c', marginTop: 4 }}>
             {isLoading ? '...' : Math.max(0, adminUsers.filter((u) => u.isSuspended).length)}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#c2410c', fontWeight: 600, marginTop: 4 }}>Verifikasi akun manual →</div>
         </div>
 
         <div
-          className="uda-card"
+          className="uda-card admin-metrics-card"
           onClick={() => router.push('/admin/pembayaran')}
           style={{ padding: 18, background: '#f0fdf4', border: '1px solid #bbf7d0', cursor: 'pointer' }}
           title="Total Pembayaran Berhasil Disetujui"
         >
           <div style={{ color: '#15803d', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PEMASUKAN DIVERIFIKASI</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#166534', marginTop: 4 }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#166534', marginTop: 4 }}>
             {isLoading ? '...' : formattedRevenue}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>
@@ -329,7 +329,7 @@ export default function AdminDashboardPage() {
 
       {/* Tabel Verifikasi Pembayaran Sesuai PRD Bab 8 */}
       <div className="uda-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
           <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
             Verifikasi Pembayaran Masuk {isLoading ? '' : `(${pendingPayments.length} Menunggu)`}
           </h3>
@@ -337,7 +337,7 @@ export default function AdminDashboardPage() {
             className="btn-uda btn-uda-secondary btn-uda-sm"
             onClick={() => router.push('/admin/pembayaran')}
           >
-            Buka Halaman Pembayaran Lengkap →
+            Buka Halaman Lengkap →
           </button>
         </div>
 
@@ -351,47 +351,99 @@ export default function AdminDashboardPage() {
             Semua pembayaran transfer telah selesai diverifikasi.
           </p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', background: '#f8fafc' }}>
-                  <th style={{ padding: '12px 16px' }}>Tanggal</th>
-                  <th style={{ padding: '12px 16px' }}>Pengguna</th>
-                  <th style={{ padding: '12px 16px' }}>Paket</th>
-                  <th style={{ padding: '12px 16px' }}>Nominal Transfer</th>
-                  <th style={{ padding: '12px 16px' }}>Rekening Pengirim</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingPayments.map((p, pIdx) => (
-                  <tr key={p.id} id={pIdx === 0 ? 'tour-admin-payments' : undefined} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '14px 16px', color: '#64748b' }}>{p.date}</td>
-                    <td style={{ padding: '14px 16px', fontWeight: 700, color: '#0f172a' }}>{p.user}</td>
-                    <td style={{ padding: '14px 16px', textTransform: 'uppercase', fontWeight: 800, color: p.plan === 'pro' ? '#16a34a' : '#8b5cf6' }}>
-                      {p.plan}
-                    </td>
-                    <td style={{ padding: '14px 16px', fontWeight: 800 }}>
-                      Rp {p.amount.toLocaleString('id-ID')}
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>{p.bank}</td>
-                    <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                      <button
-                        className="btn-uda btn-uda-primary btn-uda-sm"
-                        onClick={() => {
-                          setSelectedProof(p);
-                          setZoomLevel(1);
-                        }}
-                      >
-                        <Eye size={13} />
-                        <span>Periksa Bukti</span>
-                      </button>
-                    </td>
+          <>
+            {/* Tampilan Desktop Table */}
+            <div className="admin-table-desktop" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', background: '#f8fafc' }}>
+                    <th style={{ padding: '12px 16px' }}>Tanggal</th>
+                    <th style={{ padding: '12px 16px' }}>Pengguna</th>
+                    <th style={{ padding: '12px 16px' }}>Paket</th>
+                    <th style={{ padding: '12px 16px' }}>Nominal Transfer</th>
+                    <th style={{ padding: '12px 16px' }}>Rekening Pengirim</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'right' }}>Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {pendingPayments.map((p, pIdx) => (
+                    <tr key={p.id} id={pIdx === 0 ? 'tour-admin-payments' : undefined} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '14px 16px', color: '#64748b' }}>{p.date}</td>
+                      <td style={{ padding: '14px 16px', fontWeight: 700, color: '#0f172a' }}>{p.user}</td>
+                      <td style={{ padding: '14px 16px', textTransform: 'uppercase', fontWeight: 800, color: p.plan === 'pro' ? '#16a34a' : '#8b5cf6' }}>
+                        {p.plan}
+                      </td>
+                      <td style={{ padding: '14px 16px', fontWeight: 800 }}>
+                        Rp {p.amount.toLocaleString('id-ID')}
+                      </td>
+                      <td style={{ padding: '14px 16px' }}>{p.bank}</td>
+                      <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                        <button
+                          className="btn-uda btn-uda-primary btn-uda-sm"
+                          onClick={() => {
+                            setSelectedProof(p);
+                            setZoomLevel(1);
+                          }}
+                        >
+                          <Eye size={13} />
+                          <span>Periksa Bukti</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Tampilan Mobile & Tablet Card List */}
+            <div className="admin-cards-mobile">
+              {pendingPayments.map((p) => (
+                <div key={p.id} className="admin-mobile-card-item">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>{p.date}</span>
+                    <span
+                      style={{
+                        fontWeight: 800,
+                        fontSize: '0.74rem',
+                        textTransform: 'uppercase',
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        background: p.plan === 'pro' ? '#f0fdf4' : '#f5f3ff',
+                        color: p.plan === 'pro' ? '#16a34a' : '#7c3aed',
+                        border: '1px solid currentColor',
+                      }}
+                    >
+                      Paket {p.plan}
+                    </span>
+                  </div>
+
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>{p.user}</div>
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>Bank: {p.bank}</div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 6, borderTop: '1px dashed #e2e8f0' }}>
+                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Nominal Transfer:</span>
+                    <span style={{ fontWeight: 900, fontSize: '1rem', color: '#16a34a' }}>
+                      Rp {p.amount.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+
+                  <button
+                    className="btn-uda btn-uda-primary btn-uda-sm"
+                    style={{ width: '100%', marginTop: 4, justifyContent: 'center', padding: '9px 12px' }}
+                    onClick={() => {
+                      setSelectedProof(p);
+                      setZoomLevel(1);
+                    }}
+                  >
+                    <Eye size={14} />
+                    <span>Periksa Bukti Transfer</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

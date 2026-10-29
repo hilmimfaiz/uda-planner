@@ -206,7 +206,7 @@ export default function AdminPembayaranPage() {
       </div>
 
       {/* Tabs Filter */}
-      <div style={{ display: 'flex', gap: 10, borderBottom: '1px solid #e2e8f0', paddingBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #e2e8f0', paddingBottom: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch', flexWrap: 'nowrap' }}>
         {[
           { id: 'pending', label: 'Menunggu Verifikasi', count: payments.filter((p) => p.status === 'pending').length },
           { id: 'approved', label: 'Disetujui', count: payments.filter((p) => p.status === 'approved').length },
@@ -217,17 +217,19 @@ export default function AdminPembayaranPage() {
             key={tab.id}
             onClick={() => setFilterTab(tab.id as any)}
             style={{
-              padding: '8px 16px',
+              padding: '8px 14px',
               borderRadius: 8,
               border: 'none',
               background: filterTab === tab.id ? '#0f172a' : '#f1f5f9',
               color: filterTab === tab.id ? '#ffffff' : '#475569',
               fontWeight: 700,
-              fontSize: '0.84rem',
+              fontSize: '0.82rem',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 8,
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             <span>{tab.label}</span>
@@ -258,95 +260,178 @@ export default function AdminPembayaranPage() {
             Tidak ada pembayaran pada kategori ini.
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.86rem' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
-                  <th style={{ padding: '14px 18px' }}>Tanggal</th>
-                  <th style={{ padding: '14px 18px' }}>Pengguna</th>
-                  <th style={{ padding: '14px 18px' }}>Paket</th>
-                  <th style={{ padding: '14px 18px' }}>Nominal (Kode Unik)</th>
-                  <th style={{ padding: '14px 18px' }}>Rekening Pengirim</th>
-                  <th style={{ padding: '14px 18px' }}>Status</th>
-                  <th style={{ padding: '14px 18px', textAlign: 'right' }}>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPayments.map((p) => (
-                  <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '14px 18px', color: '#64748b' }}>{p.date}</td>
-                    <td style={{ padding: '14px 18px' }}>
-                      <div style={{ fontWeight: 700, color: '#0f172a' }}>{p.user}</div>
-                      <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{p.email}</div>
-                    </td>
-                    <td style={{ padding: '14px 18px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-                        <span
-                          style={{
-                            fontWeight: 800,
-                            fontSize: '0.75rem',
-                            textTransform: 'uppercase',
-                            padding: '3px 8px',
-                            borderRadius: 6,
-                            background: p.plan === 'pro' ? '#f0fdf4' : '#f5f3ff',
-                            color: p.plan === 'pro' ? '#16a34a' : '#7c3aed',
+          <>
+            {/* Desktop Table */}
+            <div className="admin-table-desktop" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.86rem' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
+                    <th style={{ padding: '14px 18px' }}>Tanggal</th>
+                    <th style={{ padding: '14px 18px' }}>Pengguna</th>
+                    <th style={{ padding: '14px 18px' }}>Paket</th>
+                    <th style={{ padding: '14px 18px' }}>Nominal (Kode Unik)</th>
+                    <th style={{ padding: '14px 18px' }}>Rekening Pengirim</th>
+                    <th style={{ padding: '14px 18px' }}>Status</th>
+                    <th style={{ padding: '14px 18px', textAlign: 'right' }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPayments.map((p) => (
+                    <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '14px 18px', color: '#64748b' }}>{p.date}</td>
+                      <td style={{ padding: '14px 18px' }}>
+                        <div style={{ fontWeight: 700, color: '#0f172a' }}>{p.user}</div>
+                        <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{p.email}</div>
+                      </td>
+                      <td style={{ padding: '14px 18px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                          <span
+                            style={{
+                              fontWeight: 800,
+                              fontSize: '0.75rem',
+                              textTransform: 'uppercase',
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                              background: p.plan === 'pro' ? '#f0fdf4' : '#f5f3ff',
+                              color: p.plan === 'pro' ? '#16a34a' : '#7c3aed',
+                            }}
+                          >
+                            Paket {p.plan}
+                          </span>
+                          <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700 }}>
+                            {p.durationLabel || `${p.durationDays || 30} Hari`}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '14px 18px', fontWeight: 800, color: '#0f172a' }}>
+                        Rp {p.amount.toLocaleString('id-ID')}
+                      </td>
+                      <td style={{ padding: '14px 18px', color: '#475569', fontSize: '0.8rem' }}>{p.bank}</td>
+                      <td style={{ padding: '14px 18px' }}>
+                        {p.status === 'pending' && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fffbeb', color: '#b45309', padding: '3px 8px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 700 }}>
+                            <Clock size={12} />
+                            Menunggu
+                          </span>
+                        )}
+                        {p.status === 'approved' && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#16a34a', padding: '3px 8px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 700 }}>
+                            <CheckCircle2 size={12} />
+                            Disetujui
+                          </span>
+                        )}
+                        {p.status === 'rejected' && (
+                          <div>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fef2f2', color: '#dc2626', padding: '3px 8px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 700 }}>
+                              <XCircle size={12} />
+                              Ditolak
+                            </span>
+                            {p.reason && (
+                              <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: 2 }}>{p.reason}</div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                        <button
+                          className="btn-uda btn-uda-secondary btn-uda-sm"
+                          onClick={() => {
+                            setSelectedProof(p);
+                            setZoomLevel(1);
+                            setShowRejectInput(false);
+                            setRejectReason('');
                           }}
                         >
-                          Paket {p.plan}
-                        </span>
-                        <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700 }}>
-                          {p.durationLabel || `${p.durationDays || 30} Hari`}
-                        </span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '14px 18px', fontWeight: 800, color: '#0f172a' }}>
-                      Rp {p.amount.toLocaleString('id-ID')}
-                    </td>
-                    <td style={{ padding: '14px 18px', color: '#475569', fontSize: '0.8rem' }}>{p.bank}</td>
-                    <td style={{ padding: '14px 18px' }}>
-                      {p.status === 'pending' && (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fffbeb', color: '#b45309', padding: '3px 8px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 700 }}>
-                          <Clock size={12} />
-                          Menunggu
-                        </span>
-                      )}
-                      {p.status === 'approved' && (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#16a34a', padding: '3px 8px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 700 }}>
-                          <CheckCircle2 size={12} />
-                          Disetujui
-                        </span>
-                      )}
-                      {p.status === 'rejected' && (
-                        <div>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fef2f2', color: '#dc2626', padding: '3px 8px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 700 }}>
-                            <XCircle size={12} />
-                            Ditolak
-                          </span>
-                          {p.reason && (
-                            <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: 2 }}>{p.reason}</div>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '14px 18px', textAlign: 'right' }}>
-                      <button
-                        className="btn-uda btn-uda-secondary btn-uda-sm"
-                        onClick={() => {
-                          setSelectedProof(p);
-                          setZoomLevel(1);
-                          setShowRejectInput(false);
-                          setRejectReason('');
+                          <Eye size={13} />
+                          <span>Periksa</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile & Tablet Card List */}
+            <div className="admin-cards-mobile" style={{ padding: 12 }}>
+              {filteredPayments.map((p) => (
+                <div key={p.id} className="admin-mobile-card-item">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>{p.date}</span>
+                    {p.status === 'pending' && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fffbeb', color: '#b45309', padding: '3px 8px', borderRadius: 6, fontSize: '0.74rem', fontWeight: 700, border: '1px solid #fde68a' }}>
+                        <Clock size={12} /> Menunggu
+                      </span>
+                    )}
+                    {p.status === 'approved' && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#16a34a', padding: '3px 8px', borderRadius: 6, fontSize: '0.74rem', fontWeight: 700, border: '1px solid #bbf7d0' }}>
+                        <CheckCircle2 size={12} /> Disetujui
+                      </span>
+                    )}
+                    {p.status === 'rejected' && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fef2f2', color: '#dc2626', padding: '3px 8px', borderRadius: 6, fontSize: '0.74rem', fontWeight: 700, border: '1px solid #fecaca' }}>
+                        <XCircle size={12} /> Ditolak
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.94rem' }}>{p.user}</div>
+                    <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{p.email}</div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, paddingTop: 6, borderTop: '1px dashed #e2e8f0' }}>
+                    <div>
+                      <span
+                        style={{
+                          fontWeight: 800,
+                          fontSize: '0.72rem',
+                          textTransform: 'uppercase',
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          background: p.plan === 'pro' ? '#f0fdf4' : '#f5f3ff',
+                          color: p.plan === 'pro' ? '#16a34a' : '#7c3aed',
+                          border: '1px solid currentColor',
                         }}
                       >
-                        <Eye size={13} />
-                        <span>Periksa</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        Paket {p.plan}
+                      </span>
+                      <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600, marginLeft: 6 }}>
+                        ({p.durationLabel || `${p.durationDays || 30} Hari`})
+                      </span>
+                    </div>
+                    <div style={{ fontWeight: 900, fontSize: '1rem', color: '#16a34a' }}>
+                      Rp {p.amount.toLocaleString('id-ID')}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                    Bank Pengirim: <strong style={{ color: '#0f172a' }}>{p.bank}</strong>
+                  </div>
+
+                  {p.reason && (
+                    <div style={{ fontSize: '0.75rem', color: '#dc2626', background: '#fef2f2', padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca' }}>
+                      Alasan: {p.reason}
+                    </div>
+                  )}
+
+                  <button
+                    className="btn-uda btn-uda-secondary btn-uda-sm"
+                    style={{ width: '100%', marginTop: 4, justifyContent: 'center', padding: '9px 12px' }}
+                    onClick={() => {
+                      setSelectedProof(p);
+                      setZoomLevel(1);
+                      setShowRejectInput(false);
+                      setRejectReason('');
+                    }}
+                  >
+                    <Eye size={14} />
+                    <span>Periksa Bukti Transfer</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

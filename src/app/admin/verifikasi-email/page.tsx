@@ -218,40 +218,34 @@ export default function AdminVerifikasiEmailPage() {
       </div>
 
       {/* Ringkasan Statistik */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
-          gap: 16,
-        }}
-      >
-        <div className="uda-card" style={{ padding: '18px 20px', borderLeft: '4px solid #f59e0b' }}>
+      <div className="admin-dashboard-stats-grid">
+        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px', borderLeft: '4px solid #f59e0b' }}>
           <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Belum Terverifikasi</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#b45309', margin: '4px 0 2px' }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#b45309', margin: '4px 0 2px' }}>
             {stats.unverifiedEmailCount}
           </div>
           <div style={{ fontSize: '0.74rem', color: '#b45309' }}>Perlu penanganan admin</div>
         </div>
 
-        <div className="uda-card" style={{ padding: '18px 20px', borderLeft: '4px solid #dc2626' }}>
+        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px', borderLeft: '4px solid #dc2626' }}>
           <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Email Gagal Terkirim</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#dc2626', margin: '4px 0 2px' }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#dc2626', margin: '4px 0 2px' }}>
             {stats.failedDeliveryCount}
           </div>
           <div style={{ fontSize: '0.74rem', color: '#dc2626' }}>Terkendala kuota SMTP</div>
         </div>
 
-        <div className="uda-card" style={{ padding: '18px 20px', borderLeft: '4px solid #16a34a' }}>
+        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px', borderLeft: '4px solid #16a34a' }}>
           <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Email Terverifikasi</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#15803d', margin: '4px 0 2px' }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#15803d', margin: '4px 0 2px' }}>
             {stats.verifiedEmailCount}
           </div>
           <div style={{ fontSize: '0.74rem', color: '#16a34a' }}>Akun aktif sepenuhnya</div>
         </div>
 
-        <div className="uda-card" style={{ padding: '18px 20px', borderLeft: '4px solid #0284c7' }}>
+        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px', borderLeft: '4px solid #0284c7' }}>
           <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Verifikasi Manual Admin</div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#0284c7', margin: '4px 0 2px' }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#0284c7', margin: '4px 0 2px' }}>
             {stats.manualVerifiedCount}
           </div>
           <div style={{ fontSize: '0.74rem', color: '#0284c7' }}>Bypass berhasil tersimpan</div>
@@ -259,8 +253,8 @@ export default function AdminVerifikasiEmailPage() {
       </div>
 
       {/* Tabs Filter & Pencarian */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch', flexWrap: 'nowrap', maxWidth: '100%', paddingBottom: 4 }}>
           {[
             { id: 'unverified', label: 'Belum Terverifikasi', count: stats.unverifiedEmailCount },
             { id: 'failed', label: 'Gagal Kirim SMTP', count: stats.failedDeliveryCount },
@@ -271,17 +265,19 @@ export default function AdminVerifikasiEmailPage() {
               key={tab.id}
               onClick={() => setActiveFilter(tab.id as any)}
               style={{
-                padding: '8px 16px',
+                padding: '8px 14px',
                 borderRadius: 8,
                 border: 'none',
                 backgroundColor: activeFilter === tab.id ? '#0f172a' : '#f1f5f9',
                 color: activeFilter === tab.id ? '#ffffff' : '#475569',
                 fontWeight: 700,
-                fontSize: '0.84rem',
+                fontSize: '0.82rem',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
               }}
             >
               <span>{tab.label}</span>
@@ -301,7 +297,7 @@ export default function AdminVerifikasiEmailPage() {
         </div>
 
         {/* Search Bar */}
-        <div style={{ minWidth: 280, position: 'relative' }}>
+        <div style={{ width: '100%', maxWidth: 360, position: 'relative' }}>
           <input
             type="text"
             placeholder="Cari nama atau email pengguna..."
@@ -315,6 +311,7 @@ export default function AdminVerifikasiEmailPage() {
               fontSize: '0.86rem',
               outline: 'none',
               backgroundColor: '#ffffff',
+              boxSizing: 'border-box',
             }}
           />
           <Search size={16} style={{ position: 'absolute', left: 12, top: 11, color: '#94a3b8' }} />
@@ -333,139 +330,201 @@ export default function AdminVerifikasiEmailPage() {
             Tidak ada pengguna pada kategori ini.
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.86rem' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
-                  <th style={{ padding: '14px 18px' }}>Pengguna</th>
-                  <th style={{ padding: '14px 18px' }}>Tanggal Daftar</th>
-                  <th style={{ padding: '14px 18px' }}>Status Verifikasi Email</th>
-                  <th style={{ padding: '14px 18px' }}>Status Pengiriman SMTP</th>
-                  <th style={{ padding: '14px 18px', textAlign: 'right' }}>Aksi Admin</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((u) => {
-                  const isVerified = u.isEmailVerified;
-                  const isFailedSmtp = u.emailDeliveryStatus === 'failed';
+          <>
+            {/* Desktop Table */}
+            <div className="admin-table-desktop" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.86rem' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
+                    <th style={{ padding: '14px 18px' }}>Pengguna</th>
+                    <th style={{ padding: '14px 18px' }}>Tanggal Daftar</th>
+                    <th style={{ padding: '14px 18px' }}>Status Verifikasi Email</th>
+                    <th style={{ padding: '14px 18px' }}>Status Pengiriman SMTP</th>
+                    <th style={{ padding: '14px 18px', textAlign: 'right' }}>Aksi Admin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.map((u) => {
+                    const isVerified = u.isEmailVerified;
+                    const isFailedSmtp = u.emailDeliveryStatus === 'failed';
 
-                  return (
-                    <tr key={u.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '14px 18px' }}>
-                        <div style={{ fontWeight: 800, color: '#0f172a' }}>{u.name}</div>
-                        <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{u.email}</div>
-                      </td>
+                    return (
+                      <tr key={u.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '14px 18px' }}>
+                          <div style={{ fontWeight: 800, color: '#0f172a' }}>{u.name}</div>
+                          <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{u.email}</div>
+                        </td>
 
-                      <td style={{ padding: '14px 18px', color: '#64748b', fontSize: '0.82rem' }}>
-                        {u.registeredAt}
-                      </td>
+                        <td style={{ padding: '14px 18px', color: '#64748b', fontSize: '0.82rem' }}>
+                          {u.registeredAt}
+                        </td>
 
-                      <td style={{ padding: '14px 18px' }}>
-                        {isVerified ? (
-                          <span
-                            className="status-pill"
-                            style={{ backgroundColor: '#dcfce7', color: '#15803d', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                          >
-                            <CheckCircle2 size={13} />
-                            <span>Terverifikasi</span>
-                          </span>
-                        ) : (
-                          <span
-                            className="status-pill"
-                            style={{ backgroundColor: '#fef3c7', color: '#b45309', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                          >
-                            <Clock size={13} />
-                            <span>Belum Terverifikasi</span>
-                          </span>
-                        )}
-                        {u.emailVerifiedAt && (
-                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 4 }}>
-                            {u.emailVerifiedAt}
-                          </div>
-                        )}
-                      </td>
+                        <td style={{ padding: '14px 18px' }}>
+                          {isVerified ? (
+                            <span
+                              className="status-pill"
+                              style={{ backgroundColor: '#dcfce7', color: '#15803d', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            >
+                              <CheckCircle2 size={13} />
+                              <span>Terverifikasi</span>
+                            </span>
+                          ) : (
+                            <span
+                              className="status-pill"
+                              style={{ backgroundColor: '#fef3c7', color: '#b45309', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            >
+                              <Clock size={13} />
+                              <span>Belum Terverifikasi</span>
+                            </span>
+                          )}
+                          {u.emailVerifiedAt && (
+                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 4 }}>
+                              {u.emailVerifiedAt}
+                            </div>
+                          )}
+                        </td>
 
-                      <td style={{ padding: '14px 18px' }}>
-                        {isFailedSmtp ? (
-                          <span
-                            className="status-pill"
-                            style={{ backgroundColor: '#fee2e2', color: '#b91c1c', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                            title={u.notes || 'SMTP Rate Limit Exceeded'}
-                          >
-                            <AlertTriangle size={13} />
-                            <span>Email Gagal Dikirim (SMTP)</span>
-                          </span>
-                        ) : u.emailDeliveryStatus === 'delivered' ? (
-                          <span
-                            className="status-pill"
-                            style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }}
-                          >
-                            Terkirim Normal
-                          </span>
-                        ) : (
-                          <span
-                            className="status-pill"
-                            style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}
-                          >
-                            Menunggu Pengiriman
-                          </span>
-                        )}
-                      </td>
+                        <td style={{ padding: '14px 18px' }}>
+                          {isFailedSmtp ? (
+                            <span
+                              className="status-pill"
+                              style={{ backgroundColor: '#fee2e2', color: '#b91c1c', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              title={u.notes || 'SMTP Rate Limit Exceeded'}
+                            >
+                              <AlertTriangle size={13} />
+                              <span>Email Gagal Dikirim (SMTP)</span>
+                            </span>
+                          ) : u.emailDeliveryStatus === 'delivered' ? (
+                            <span
+                              className="status-pill"
+                              style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }}
+                            >
+                              Terkirim Normal
+                            </span>
+                          ) : (
+                            <span
+                              className="status-pill"
+                              style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}
+                            >
+                              Menunggu Pengiriman
+                            </span>
+                          )}
+                        </td>
 
-                      <td style={{ padding: '14px 18px', textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                          {/* Tombol Kirim Ulang Email */}
-                          <button
-                            onClick={() => handleResendEmail(u)}
-                            disabled={resendingUserId === u.userId}
-                            className="btn-uda btn-uda-secondary btn-uda-sm"
-                            style={{
-                              fontSize: '0.78rem',
-                              padding: '5px 10px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                            }}
-                            title="Kirim Ulang Email Konfirmasi"
-                          >
-                            {resendingUserId === u.userId ? (
-                              <Loader2 size={13} className="animate-spin" />
-                            ) : (
-                              <Send size={13} />
-                            )}
-                            <span>Kirim Ulang</span>
-                          </button>
-
-                          {/* Tombol Verifikasi Manual */}
-                          {!isVerified ? (
+                        <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                            {/* Tombol Kirim Ulang Email */}
                             <button
-                              onClick={() => setTargetUserToVerify(u)}
-                              className="btn-uda btn-uda-primary btn-uda-sm"
+                              onClick={() => handleResendEmail(u)}
+                              disabled={resendingUserId === u.userId}
+                              className="btn-uda btn-uda-secondary btn-uda-sm"
                               style={{
                                 fontSize: '0.78rem',
-                                padding: '5px 12px',
+                                padding: '5px 10px',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 4,
-                                boxShadow: '0 2px 8px rgba(22, 163, 74, 0.25)',
                               }}
+                              title="Kirim Ulang Email Konfirmasi"
                             >
-                              <ShieldCheck size={14} />
-                              <span>Verifikasi Manual</span>
+                              {resendingUserId === u.userId ? (
+                                <Loader2 size={13} className="animate-spin" />
+                              ) : (
+                                <Send size={13} />
+                              )}
+                              <span>Kirim Ulang</span>
                             </button>
-                          ) : (
-                            <span style={{ fontSize: '0.76rem', color: '#16a34a', fontWeight: 700, paddingRight: 6 }}>
-                              ✓ Selesai
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+
+                            {/* Tombol Verifikasi Manual */}
+                            {!isVerified ? (
+                              <button
+                                onClick={() => setTargetUserToVerify(u)}
+                                className="btn-uda btn-uda-primary btn-uda-sm"
+                                style={{
+                                  fontSize: '0.78rem',
+                                  padding: '5px 12px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  boxShadow: '0 2px 8px rgba(22, 163, 74, 0.25)',
+                                }}
+                              >
+                                <ShieldCheck size={14} />
+                                <span>Verifikasi Manual</span>
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '0.76rem', color: '#16a34a', fontWeight: 700, paddingRight: 6 }}>
+                                ✓ Selesai
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile & Tablet Card List */}
+            <div className="admin-cards-mobile" style={{ padding: 12 }}>
+              {filteredUsers.map((u) => {
+                const isVerified = u.isEmailVerified;
+                const isFailedSmtp = u.emailDeliveryStatus === 'failed';
+
+                return (
+                  <div key={u.id} className="admin-mobile-card-item">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                      <div>
+                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.94rem' }}>{u.name}</div>
+                        <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{u.email}</div>
+                      </div>
+                      <div>
+                        {isVerified ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, border: '1px solid #bbf7d0' }}>
+                            <CheckCircle2 size={11} /> Terverifikasi
+                          </span>
+                        ) : (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fef3c7', color: '#b45309', padding: '2px 8px', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, border: '1px solid #fde68a' }}>
+                            <Clock size={11} /> Belum Verif
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#64748b', paddingTop: 6, borderTop: '1px dashed #e2e8f0', flexWrap: 'wrap', gap: 6 }}>
+                      <span>Daftar: {u.registeredAt}</span>
+                      <span>
+                        SMTP: {isFailedSmtp ? <strong style={{ color: '#dc2626' }}>Gagal</strong> : <strong style={{ color: '#16a34a' }}>Terkirim</strong>}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                      <button
+                        onClick={() => handleResendEmail(u)}
+                        disabled={resendingUserId === u.userId}
+                        className="btn-uda btn-uda-secondary btn-uda-sm"
+                        style={{ flex: 1, justifyContent: 'center', padding: '8px 10px' }}
+                      >
+                        {resendingUserId === u.userId ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                        <span>Kirim Ulang</span>
+                      </button>
+                      {!isVerified && (
+                        <button
+                          onClick={() => setTargetUserToVerify(u)}
+                          className="btn-uda btn-uda-primary btn-uda-sm"
+                          style={{ flex: 1, justifyContent: 'center', padding: '8px 10px' }}
+                        >
+                          <ShieldCheck size={13} />
+                          <span>Verif Manual</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 

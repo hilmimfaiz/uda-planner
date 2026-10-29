@@ -80,7 +80,7 @@ export default function AdminPengaturanPage() {
         </p>
       </div>
 
-      <div className="uda-card">
+      <div className="uda-card" style={{ padding: '20px 18px' }}>
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
             <CreditCard size={18} style={{ color: '#16a34a' }} />
@@ -153,11 +153,21 @@ export default function AdminPengaturanPage() {
 
           <button
             type="submit"
+            disabled={isSaving}
             className="btn-uda btn-uda-primary"
-            style={{ marginTop: 8, width: 'fit-content', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+            style={{
+              marginTop: 8,
+              width: '100%',
+              maxWidth: 240,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              fontWeight: 800,
+            }}
           >
             <Save size={16} />
-            <span>Simpan Pengaturan</span>
+            <span>{isSaving ? 'Menyimpan...' : 'Simpan Pengaturan'}</span>
           </button>
         </form>
       </div>

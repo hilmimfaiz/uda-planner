@@ -470,11 +470,12 @@ export default function AdminPaketPage() {
             style={{
               maxWidth: 580,
               width: '100%',
-              padding: 28,
+              padding: 24,
               borderRadius: 20,
               backgroundColor: '#ffffff',
               maxHeight: '90vh',
               overflowY: 'auto',
+              boxSizing: 'border-box',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -493,7 +494,7 @@ export default function AdminPaketPage() {
             </div>
 
             <form onSubmit={handleSavePlan} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="admin-modal-grid-2col">
                 <div>
                   <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 4 }}>
                     Kode Paket (Unik) *
@@ -544,7 +545,7 @@ export default function AdminPaketPage() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="admin-modal-grid-2col">
                 <div>
                   <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 4 }}>
                     Harga Dasar (Rp) *
@@ -573,7 +574,7 @@ export default function AdminPaketPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="admin-modal-grid-2col">
                 <div>
                   <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 4 }}>
                     Maksimal Brand
@@ -600,7 +601,7 @@ export default function AdminPaketPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="admin-modal-grid-2col">
                 <div>
                   <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 4 }}>
                     Kapasitas Storage (MB)
@@ -657,13 +658,13 @@ export default function AdminPaketPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={() => setShowPlanModal(false)}
                   disabled={isSavingPlan}
                   className="btn-uda btn-uda-secondary"
-                  style={{ fontWeight: 700 }}
+                  style={{ fontWeight: 700, flex: '1 1 100px', justifyContent: 'center' }}
                 >
                   Batal
                 </button>
@@ -671,7 +672,7 @@ export default function AdminPaketPage() {
                   type="submit"
                   disabled={isSavingPlan}
                   className="btn-uda btn-uda-primary"
-                  style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}
+                  style={{ fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: '1 1 160px' }}
                 >
                   {isSavingPlan ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                   <span>Simpan Konfigurasi</span>
@@ -703,16 +704,19 @@ export default function AdminPaketPage() {
             style={{
               maxWidth: 460,
               width: '100%',
-              padding: 26,
+              padding: 24,
               borderRadius: 20,
               backgroundColor: '#ffffff',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxSizing: 'border-box',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Clock size={20} style={{ color: '#0284c7' }} />
                 <h3 style={{ fontSize: '1.18rem', fontWeight: 800, color: '#0f172a' }}>
-                  {editingDuration ? 'Edit Variasi Durasi' : `Tambah Durasi: Paket ${targetPlanForDuration.name}`}
+                  {editingDuration ? 'Edit Variasi Durasi' : `Tambah Durasi: Paket ${targetPlanForDuration?.name}`}
                 </h3>
               </div>
               <button
@@ -738,7 +742,7 @@ export default function AdminPaketPage() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="admin-modal-grid-2col">
                 <div>
                   <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 4 }}>
                     Jumlah Hari (Aktif) *
@@ -793,13 +797,13 @@ export default function AdminPaketPage() {
                 </label>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={() => setShowDurationModal(false)}
                   disabled={isSavingDuration}
                   className="btn-uda btn-uda-secondary"
-                  style={{ fontWeight: 700 }}
+                  style={{ fontWeight: 700, flex: '1 1 100px', justifyContent: 'center' }}
                 >
                   Batal
                 </button>
@@ -807,7 +811,7 @@ export default function AdminPaketPage() {
                   type="submit"
                   disabled={isSavingDuration}
                   className="btn-uda btn-uda-primary"
-                  style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}
+                  style={{ fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: '1 1 160px' }}
                 >
                   {isSavingDuration ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                   <span>Simpan Variasi</span>

@@ -346,10 +346,13 @@ export default function AdminRekeningPage() {
             style={{
               maxWidth: 500,
               width: '100%',
-              padding: 28,
+              padding: 24,
               borderRadius: 20,
               backgroundColor: '#ffffff',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxSizing: 'border-box',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
@@ -423,7 +426,7 @@ export default function AdminRekeningPage() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="admin-modal-grid-2col">
                 <div>
                   <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 4 }}>
                     Urutan Tampilan
@@ -452,13 +455,13 @@ export default function AdminRekeningPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
                   disabled={isSaving}
                   className="btn-uda btn-uda-secondary"
-                  style={{ fontWeight: 700, fontSize: '0.86rem' }}
+                  style={{ fontWeight: 700, fontSize: '0.86rem', flex: '1 1 100px', justifyContent: 'center' }}
                 >
                   Batal
                 </button>
@@ -471,11 +474,13 @@ export default function AdminRekeningPage() {
                     fontSize: '0.86rem',
                     display: 'flex',
                     alignItems: 'center',
+                    justifyContent: 'center',
                     gap: 6,
+                    flex: '1 1 160px',
                   }}
                 >
                   {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  <span>{editingAccount ? 'Simpan Perubahan' : 'Tambah Rekening'}</span>
+                  <span>{editingAccount ? 'Simpan' : 'Tambah Rekening'}</span>
                 </button>
               </div>
             </form>

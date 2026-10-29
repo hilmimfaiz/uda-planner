@@ -489,7 +489,7 @@ export default function KalenderPage() {
         {/* Main Grid Kalender */}
         <div
           id="tour-calendar-grid"
-          className="uda-card"
+          className="uda-card calendar-main-card"
           style={{
             padding: 14,
             minWidth: 0,
@@ -846,6 +846,7 @@ export default function KalenderPage() {
                 {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map((d) => (
                   <div
                     key={d}
+                    className="calendar-day-header-item"
                     style={{
                       fontWeight: 700,
                       fontSize: "0.78rem",
@@ -871,6 +872,7 @@ export default function KalenderPage() {
                   return (
                     <div
                       key={idx}
+                      className="calendar-cell-item"
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault();
@@ -903,6 +905,7 @@ export default function KalenderPage() {
                       }}
                     >
                       <div
+                        className="calendar-cell-date-num"
                         style={{
                           fontSize: "0.78rem",
                           fontWeight: 700,
@@ -921,6 +924,7 @@ export default function KalenderPage() {
                         return (
                           <div
                             key={post.id}
+                            className="calendar-post-chip"
                             draggable
                             onDragStart={(e) => {
                               e.stopPropagation();

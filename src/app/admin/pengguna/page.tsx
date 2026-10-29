@@ -529,7 +529,8 @@ export default function AdminPenggunaPage() {
 
       {/* Tabel Pengguna */}
       <div className="uda-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
+        {/* Desktop Table */}
+        <div className="admin-table-desktop" style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.86rem' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
@@ -847,6 +848,138 @@ export default function AdminPenggunaPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile & Tablet Card List */}
+        <div className="admin-cards-mobile" style={{ padding: 12 }}>
+          {paginatedUsers.length === 0 ? (
+            <div style={{ padding: '24px 14px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
+              Tidak ada pengguna yang cocok dengan pencarian &quot;{searchQuery}&quot;.
+            </div>
+          ) : (
+            paginatedUsers.map((u) => {
+              const initial = (u.name || u.email || 'U').charAt(0).toUpperCase();
+              const isChecked = selectedUserIds.includes(u.id);
+              return (
+                <div
+                  key={u.id}
+                  className="admin-mobile-card-item"
+                  style={{
+                    background: isChecked ? '#fff1f2' : '#ffffff',
+                    borderColor: isChecked ? '#f43f5e' : '#0f172a',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggleSelectUser(u.id)}
+                        style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#e11d48', flexShrink: 0 }}
+                      />
+                      <div
+                        style={{
+                          width: 38,
+                          height: 38,
+                          borderRadius: '50%',
+                          overflow: 'hidden',
+                          background: '#16a34a',
+                          color: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 800,
+                          fontSize: '0.92rem',
+                          flexShrink: 0,
+                          border: '1.5px solid #cbd5e1',
+                        }}
+                      >
+                        {u.avatarUrl ? (
+                          <img src={u.avatarUrl} alt={u.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <span>{initial}</span>
+                        )}
+                      </div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {u.name}
+                        </div>
+                        <div style={{ fontSize: '0.76rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {u.email}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ flexShrink: 0 }}>
+                      <span
+                        style={{
+                          fontWeight: 900,
+                          fontSize: '0.72rem',
+                          textTransform: 'uppercase',
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          background: u.plan === 'team' ? '#f5f3ff' : u.plan === 'pro' ? '#f0fdf4' : '#f1f5f9',
+                          color: u.plan === 'team' ? '#7c3aed' : u.plan === 'pro' ? '#16a34a' : '#475569',
+                          border: '1px solid currentColor',
+                        }}
+                      >
+                        {u.plan}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, paddingTop: 6, borderTop: '1px dashed #e2e8f0', flexWrap: 'wrap' }}>
+                    <div>
+                      {u.isEmailVerified ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#16a34a', padding: '2px 7px', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700 }}>
+                          <CheckCircle2 size={11} /> Terverifikasi
+                        </span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fffbeb', color: '#b45309', padding: '2px 7px', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700 }}>
+                          <AlertTriangle size={11} /> Belum Verif
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
+                      Penyimpanan: <strong style={{ color: '#0f172a' }}>{u.storageMb} MB</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    <button
+                      type="button"
+                      className="btn-uda btn-uda-secondary btn-uda-sm"
+                      style={{ flex: 1, justifyContent: 'center' }}
+                      onClick={() => setDetailUser(u)}
+                    >
+                      <Eye size={13} />
+                      <span>Detail</span>
+                    </button>
+                    {!u.isEmailVerified && (
+                      <button
+                        type="button"
+                        className="btn-uda btn-uda-primary btn-uda-sm"
+                        style={{ flex: 1, justifyContent: 'center' }}
+                        onClick={() => handleManualVerifyUser(u)}
+                      >
+                        <MailCheck size={13} />
+                        <span>Verif</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-uda btn-uda-danger btn-uda-sm"
+                      style={{ padding: '6px 10px' }}
+                      onClick={() => setUserToDelete(u)}
+                      title="Hapus Pengguna"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
 
         {/* Paginasi Manajemen Pengguna */}
