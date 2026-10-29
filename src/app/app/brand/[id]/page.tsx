@@ -130,6 +130,13 @@ export default function PengaturanBrandDetailPage() {
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
   const [isAccessDenied, setIsAccessDenied] = useState<boolean>(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState<boolean>(true);
+  const [brandOwner, setBrandOwner] = useState<{
+    id: string;
+    name: string;
+    email: string;
+    avatar?: string | null;
+    planCode?: string;
+  } | null>(null);
 
   React.useEffect(() => {
     setIsLoadingAuth(true);
@@ -151,6 +158,35 @@ export default function PengaturanBrandDetailPage() {
         setRequireApproval(b.require_approval);
         setBrandPlatforms(b.platforms && b.platforms.length > 0 ? b.platforms : ['instagram', 'tiktok']);
         setSelectedPlatforms(b.platforms && b.platforms.length > 0 ? b.platforms : ['instagram', 'tiktok']);
+
+        // Ambil data profil dan paket dari pembuat/pemilik asli brand
+        const creatorId = b.owner_id;
+        if (creatorId) {
+          if (user && user.id === creatorId) {
+            setBrandOwner({
+              id: user.id,
+              name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pemilik Brand',
+              email: user.email || '',
+              avatar: user.user_metadata?.avatar_url,
+              planCode: account?.plan_code || 'free',
+            });
+          } else if (supabase) {
+            Promise.all([
+              (supabase.from('profiles' as any) as any).select('id, full_name, email, avatar_url').eq('id', creatorId).maybeSingle(),
+              (supabase.from('accounts' as any) as any).select('plan_code').eq('user_id', creatorId).maybeSingle(),
+            ]).then(([profRes, accRes]) => {
+              if (profRes.data) {
+                setBrandOwner({
+                  id: profRes.data.id,
+                  name: profRes.data.full_name || 'Pemilik Brand',
+                  email: profRes.data.email || '',
+                  avatar: profRes.data.avatar_url,
+                  planCode: accRes.data?.plan_code || 'free',
+                });
+              }
+            }).catch(() => {});
+          }
+        }
       }
     });
 
@@ -174,20 +210,35 @@ export default function PengaturanBrandDetailPage() {
           } catch (e) {}
         }
 
-        const storedLocal = localStorage.getItem('uda_brand_members_' + brandId);
         let rawMembers: any[] = [];
-        if (storedLocal) {
-          rawMembers = JSON.parse(storedLocal);
+        const mems = await MemberService.getBrandMembers(brandId);
+        if (mems && mems.length > 0) {
+          rawMembers = mems.map((m) => ({
+            id: m.user_id,
+            name: m.profile?.full_name || 'Anggota Tim',
+            email: m.profile?.email || 'member@udaplanner.id',
+            avatar: m.profile?.avatar_url,
+            role: m.role as any,
+          }));
         } else {
-          const mems = await MemberService.getBrandMembers(brandId);
-          if (mems && mems.length > 0) {
-            rawMembers = mems.map((m) => ({
-              id: m.user_id,
-              name: m.profile?.full_name || 'Anggota Tim',
-              email: m.profile?.email || 'member@udaplanner.id',
-              avatar: m.profile?.avatar_url,
-              role: m.role as any,
-            }));
+          const storedLocal = localStorage.getItem('uda_brand_members_' + brandId);
+          if (storedLocal) {
+            rawMembers = JSON.parse(storedLocal);
+          }
+        }
+
+        // Pastikan pemilik asli brand selalu ada di list
+        const hasOwner = rawMembers.some((m) => m.role === 'owner');
+        if (!hasOwner && currentBrand?.owner_id) {
+          const ownerProf = profilesMap.get(currentBrand.owner_id);
+          if (ownerProf) {
+            rawMembers.unshift({
+              id: ownerProf.id,
+              name: ownerProf.full_name || 'Pemilik Brand',
+              email: ownerProf.email || '',
+              avatar: ownerProf.avatar_url,
+              role: 'owner',
+            });
           }
         }
 
@@ -728,6 +779,27 @@ export default function PengaturanBrandDetailPage() {
     );
   }
 
+  const isBrandOwner = userRole === 'owner';
+  const ownerFromMembers = members.find((m) => m.role === 'owner');
+  const effectiveOwner =
+    ownerFromMembers ||
+    brandOwner ||
+    (isBrandOwner && user
+      ? {
+          id: user.id,
+          name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pemilik Brand',
+          email: user.email || '',
+          avatar: user.user_metadata?.avatar_url,
+          role: 'owner' as const,
+        }
+      : null);
+
+  const isBrandOwnerTeamPlan = (brandOwner?.planCode || (isBrandOwner ? account?.plan_code : null)) === 'team';
+  const hasCollaborators = members.filter((m) => m.role !== 'owner').length > 0;
+  // Pengguna undangan tim (Editor, Reviewer, Viewer) SELALU melihat daftar anggota tim kolaborator
+  // Pemilik brand melihat tampilan tim jika berlangganan Paket Tim atau sudah memiliki anggota tim kolaborator
+  const showTeamView = !isBrandOwner || isBrandOwnerTeamPlan || hasCollaborators;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {toastMessage && (
@@ -1174,8 +1246,8 @@ export default function PengaturanBrandDetailPage() {
       {/* TAB 3: ANGGOTA & UNDANGAN */}
       {activeTab === 'anggota' && (
         <div className="uda-card" style={{ maxWidth: 740 }}>
-          {/* Jika bukan Paket Tim, tampilkan notice kunci & panduan */}
-          {!isTeamPlan ? (
+          {/* Jika bukan Paket Tim dan belum ada kolaborator, tampilkan notice kunci & panduan */}
+          {!showTeamView ? (
             <div>
               <div
                 style={{
@@ -1235,7 +1307,7 @@ export default function PengaturanBrandDetailPage() {
                 </span>
               </div>
 
-              {/* Tampilkan hanya owner */}
+              {/* Tampilkan hanya owner pembuat brand */}
               <div
                 style={{
                   display: 'flex',
@@ -1249,18 +1321,18 @@ export default function PengaturanBrandDetailPage() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <img
-                    src={getSyncedAvatar(user?.user_metadata?.full_name || '', user?.email || '', user?.user_metadata?.avatar_url, user?.id)}
+                    src={getSyncedAvatar(effectiveOwner?.name || '', effectiveOwner?.email || '', effectiveOwner?.avatar, effectiveOwner?.id)}
                     alt=""
                     style={{ width: 42, height: 42, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #cbd5e1' }}
                   />
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>{user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Pemilik Brand'}</span>
+                      <span>{effectiveOwner?.name || 'Pemilik Brand'}</span>
                       <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 999, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>
                         Pemilik Utama (Owner)
                       </span>
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{user?.email || 'owner@udaplanner.id'}</div>
+                    <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{effectiveOwner?.email || 'owner@udaplanner.id'}</div>
                   </div>
                 </div>
                 <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#16a34a', background: '#f0fdf4', padding: '4px 10px', borderRadius: 6, border: '1px solid #bbf7d0' }}>
@@ -1270,30 +1342,48 @@ export default function PengaturanBrandDetailPage() {
             </div>
           ) : (
             <div>
-              {/* Header Tab untuk Paket Tim */}
+              {/* Header Tab untuk Tim Kolaborator */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Anggota Tim Kolaborator</h3>
-                    <span
-                      style={{
-                        fontSize: '0.72rem',
-                        padding: '3px 9px',
-                        borderRadius: 999,
-                        fontWeight: 800,
-                        background: members.filter((m) => m.role !== 'owner').length >= 10 ? '#fef2f2' : '#f0fdf4',
-                        color: members.filter((m) => m.role !== 'owner').length >= 10 ? '#dc2626' : '#16a34a',
-                        border: `1px solid ${members.filter((m) => m.role !== 'owner').length >= 10 ? '#fecaca' : '#bbf7d0'}`,
-                      }}
-                    >
-                      {members.filter((m) => m.role !== 'owner').length}/10 Anggota Kolaborator (Maks. 10)
-                    </span>
+                    {isBrandOwner ? (
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          padding: '3px 9px',
+                          borderRadius: 999,
+                          fontWeight: 800,
+                          background: members.filter((m) => m.role !== 'owner').length >= 10 ? '#fef2f2' : '#f0fdf4',
+                          color: members.filter((m) => m.role !== 'owner').length >= 10 ? '#dc2626' : '#16a34a',
+                          border: `1px solid ${members.filter((m) => m.role !== 'owner').length >= 10 ? '#fecaca' : '#bbf7d0'}`,
+                        }}
+                      >
+                        {members.filter((m) => m.role !== 'owner').length}/10 Anggota Kolaborator (Maks. 10)
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          padding: '3px 9px',
+                          borderRadius: 999,
+                          fontWeight: 800,
+                          background: '#f0fdf4',
+                          color: '#16a34a',
+                          border: '1px solid #bbf7d0',
+                        }}
+                      >
+                        {members.length} Anggota Tim
+                      </span>
+                    )}
                   </div>
                   <p style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 4 }}>
-                    Kelola hak akses tim: Owner (Akses Penuh), Editor (Buat Konten), Reviewer (Menyetujui), Viewer (Lihat Saja)
+                    {isBrandOwner
+                      ? 'Kelola hak akses tim: Owner (Akses Penuh), Editor (Buat Konten), Reviewer (Menyetujui), Viewer (Lihat Saja)'
+                      : `Daftar anggota tim kolaborator pada brand ${brand.name}`}
                   </p>
                 </div>
-                {userRole === 'owner' && (
+                {isBrandOwner && (
                   <button
                     className="btn-uda btn-uda-primary btn-uda-sm"
                     disabled={members.filter((m) => m.role !== 'owner').length >= 10}
@@ -1315,7 +1405,8 @@ export default function PengaturanBrandDetailPage() {
               {/* Daftar Anggota Aktif */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {members.map((m) => {
-                  const isOwner = m.role === 'owner';
+                  const isMemberOwner = m.role === 'owner';
+                  const isCurrentUser = m.id === user?.id || (user?.email && m.email?.toLowerCase() === user?.email?.toLowerCase());
 
                   return (
                     <div
@@ -1341,40 +1432,63 @@ export default function PengaturanBrandDetailPage() {
                         <div>
                           <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span>{m.name}</span>
-                            {isOwner && (
+                            {isMemberOwner ? (
                               <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 999, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>
-                                Pemilik
+                                Pemilik Utama (Owner)
                               </span>
-                            )}
+                            ) : isCurrentUser ? (
+                              <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 999, background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>
+                                Anda ({m.role.toUpperCase()})
+                              </span>
+                            ) : null}
                           </div>
                           <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{m.email}</div>
                         </div>
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <select
-                          className="brand-dropdown-select"
-                          value={m.role}
-                          disabled={isOwner}
-                          onChange={async (e) => {
-                            const newRole = e.target.value as any;
-                            const updatedMembers = members.map((item) => (item.id === m.id ? { ...item, role: newRole } : item));
-                            setMembers(updatedMembers);
-                            localStorage.setItem('uda_brand_members_' + brand.id, JSON.stringify(updatedMembers));
-                            await MemberService.updateRole(brand.id, m.id, newRole);
-                            playSuccessSound();
-                            showToast(`Peran ${m.name} diubah menjadi ${newRole.toUpperCase()}`);
-                          }}
-                          style={{ fontSize: '0.82rem', padding: '6px 10px', minWidth: 120 }}
-                        >
-                          <option value="owner" disabled={!isOwner}>Owner (Penuh)</option>
-                          <option value="editor">Editor (Buat Konten)</option>
-                          <option value="reviewer">Reviewer (Menyetujui)</option>
-                          <option value="viewer">Viewer (Lihat Saja)</option>
-                        </select>
+                        {isMemberOwner ? (
+                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#16a34a', background: '#f0fdf4', padding: '4px 10px', borderRadius: 6, border: '1px solid #bbf7d0' }}>
+                            Owner (Penuh)
+                          </span>
+                        ) : isBrandOwner ? (
+                          <select
+                            className="brand-dropdown-select"
+                            value={m.role}
+                            onChange={async (e) => {
+                              const newRole = e.target.value as any;
+                              const updatedMembers = members.map((item) => (item.id === m.id ? { ...item, role: newRole } : item));
+                              setMembers(updatedMembers);
+                              localStorage.setItem('uda_brand_members_' + brand.id, JSON.stringify(updatedMembers));
+                              await MemberService.updateRole(brand.id, m.id, newRole);
+                              playSuccessSound();
+                              showToast(`Peran ${m.name} diubah menjadi ${newRole.toUpperCase()}`);
+                            }}
+                            style={{ fontSize: '0.82rem', padding: '6px 10px', minWidth: 120 }}
+                          >
+                            <option value="editor">Editor (Buat Konten)</option>
+                            <option value="reviewer">Reviewer (Menyetujui)</option>
+                            <option value="viewer">Viewer (Lihat Saja)</option>
+                          </select>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              color: m.role === 'reviewer' ? '#4338ca' : m.role === 'editor' ? '#92400e' : '#475569',
+                              background: m.role === 'reviewer' ? '#e0e7ff' : m.role === 'editor' ? '#fef3c7' : '#f1f5f9',
+                              padding: '4px 10px',
+                              borderRadius: 6,
+                              border: '1px solid currentColor',
+                              textTransform: 'capitalize',
+                            }}
+                          >
+                            {m.role === 'editor' ? 'Editor (Buat Konten)' : m.role === 'reviewer' ? 'Reviewer (Menyetujui)' : 'Viewer (Lihat Saja)'}
+                          </span>
+                        )}
 
                         {/* Tombol Hapus Anggota untuk Owner */}
-                        {!isOwner && userRole === 'owner' && (
+                        {!isMemberOwner && isBrandOwner && (
                           <button
                             type="button"
                             className="btn-uda btn-uda-secondary btn-uda-sm"
@@ -1401,7 +1515,7 @@ export default function PengaturanBrandDetailPage() {
                         )}
 
                         {/* Tombol Keluar dari Tim untuk Diri Sendiri jika bukan Owner */}
-                        {userRole !== 'owner' && (m.id === user?.id || (user?.email && m.email?.toLowerCase() === user?.email?.toLowerCase())) && (
+                        {!isBrandOwner && isCurrentUser && (
                           <button
                             type="button"
                             className="btn-uda btn-uda-secondary btn-uda-sm"
@@ -1410,13 +1524,13 @@ export default function PengaturanBrandDetailPage() {
                             onClick={() => {
                               confirmDelete({
                                 title: `Keluar dari Brand "${brand.name}"?`,
-                                message: `Apakah Anda yakin ingin keluar dari brand "${brand.name}"? Status paket langganan TIM Anda akan berakhir dan kembali ke Paket Free sehingga Anda dapat bebas memilih paket langganan sendiri.`,
+                                message: `Apakah Anda yakin ingin keluar dari brand "${brand.name}"? Status akses kolaborator Anda pada brand ini akan berakhir.`,
                                 confirmText: 'Ya, Keluar dari Brand',
                                 onConfirm: async () => {
                                   await MemberService.leaveTeam(user?.id || '', user?.email, brand.id);
                                   playSuccessSound();
                                   showSuccess('Berhasil Keluar', `Anda telah berhasil keluar dari brand "${brand.name}".`);
-                                  router.push('/app/langganan');
+                                  router.push('/app/brand');
                                 },
                               });
                             }}
@@ -1430,8 +1544,8 @@ export default function PengaturanBrandDetailPage() {
                 })}
               </div>
 
-              {/* Bagian Undangan Menunggu Konfirmasi (Pending Invitations) */}
-              {pendingInvites.length > 0 && (
+              {/* Bagian Undangan Menunggu Konfirmasi (Pending Invitations) - Khusus Owner */}
+              {isBrandOwner && pendingInvites.length > 0 && (
                 <div style={{ marginTop: 24, borderTop: '1px solid #e2e8f0', paddingTop: 18 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                     <Clock size={16} style={{ color: '#d97706' }} />

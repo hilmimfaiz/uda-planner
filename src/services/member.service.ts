@@ -13,16 +13,32 @@ export class MemberService {
   static async getBrandMembers(brandId: string): Promise<MemberWithProfile[]> {
     const supabase = createClient();
     if (supabase) {
-      const { data, error } = await supabase
-        .from('brand_members')
-        .select('*, profiles(*)')
-        .eq('brand_id', brandId);
+      try {
+        const { data: bMembers, error: mErr } = await (supabase.from('brand_members' as any) as any)
+          .select('*')
+          .eq('brand_id', brandId);
 
-      if (!error && data) {
-        return (data as any[]).map((item) => ({
-          ...item,
-          profile: item.profiles,
-        }));
+        if (!mErr && bMembers && bMembers.length > 0) {
+          const userIds = bMembers.map((m: any) => m.user_id).filter(Boolean);
+          const profMap = new Map<string, Profile>();
+
+          if (userIds.length > 0) {
+            const { data: profs } = await (supabase.from('profiles' as any) as any)
+              .select('*')
+              .in('id', userIds);
+
+            if (profs) {
+              profs.forEach((p: Profile) => profMap.set(p.id, p));
+            }
+          }
+
+          return bMembers.map((item: any) => ({
+            ...item,
+            profile: profMap.get(item.user_id),
+          }));
+        }
+      } catch (err) {
+        console.warn('MemberService.getBrandMembers db lookup notice:', err);
       }
     }
 
