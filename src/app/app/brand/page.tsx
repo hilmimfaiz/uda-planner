@@ -54,11 +54,82 @@ export default function DaftarBrandPage() {
   const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
   const [showAddBrandModal, setShowAddBrandModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [brandRoles, setBrandRoles] = useState<Record<string, 'owner' | 'editor' | 'reviewer' | 'viewer'>>({});
+  const [isInvitedTeamMember, setIsInvitedTeamMember] = useState<boolean>(false);
 
   React.useEffect(() => {
-    BrandService.getBrands(user?.id).then((data) => {
-      setBrands(data || []);
+    let isMounted = true;
+
+    BrandService.getBrands(user?.id).then(async (data) => {
+      if (!isMounted) return;
+      const loadedBrands = data || [];
+      setBrands(loadedBrands);
+
+      if (!user?.id) return;
+
+      const rolesMap: Record<string, 'owner' | 'editor' | 'reviewer' | 'viewer'> = {};
+      let hasOwnedBrand = false;
+      let hasInvitedBrand = false;
+
+      for (const b of loadedBrands) {
+        if (b.owner_id === user.id) {
+          rolesMap[b.id] = 'owner';
+          hasOwnedBrand = true;
+        } else {
+          const role = await BrandService.getUserBrandRole(b.id, user.id);
+          const resolvedRole = role || 'editor';
+          rolesMap[b.id] = resolvedRole;
+          if (resolvedRole !== 'owner') {
+            hasInvitedBrand = true;
+          } else {
+            hasOwnedBrand = true;
+          }
+        }
+      }
+
+      // Periksa juga langsung tabel brand_members di database Supabase
+      if (supabase) {
+        try {
+          const { data: dbMembers } = await (supabase.from('brand_members' as any) as any)
+            .select('brand_id, role')
+            .eq('user_id', user.id);
+
+          if (dbMembers && dbMembers.length > 0) {
+            dbMembers.forEach((m: any) => {
+              if (m.brand_id) {
+                rolesMap[m.brand_id] = m.role as any;
+                if (m.role !== 'owner') hasInvitedBrand = true;
+                else hasOwnedBrand = true;
+              }
+            });
+          }
+        } catch (e) {}
+      }
+
+      // Periksa keanggotaan tim lokal
+      if (typeof window !== 'undefined') {
+        try {
+          const rawTeam = localStorage.getItem('uda_team_membership_' + user.id);
+          if (rawTeam) {
+            const teamObj = JSON.parse(rawTeam);
+            if (teamObj.role && teamObj.role !== 'owner') {
+              hasInvitedBrand = true;
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (isMounted) {
+        setBrandRoles(rolesMap);
+        // Pengguna undangan tim: terdaftar di brand orang lain dan tidak memiliki brand sendiri sebagai owner
+        const isInvited = !hasOwnedBrand && (hasInvitedBrand || loadedBrands.some((b) => b.owner_id !== user.id));
+        setIsInvitedTeamMember(isInvited);
+      }
     });
+
+    return () => {
+      isMounted = false;
+    };
   }, [user?.id]);
 
   // New Brand Form State
@@ -182,22 +253,40 @@ export default function DaftarBrandPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Manajemen Akun Brand</h1>
-            <span
-              style={{
-                fontSize: '0.74rem',
-                fontWeight: 800,
-                padding: '3px 10px',
-                borderRadius: 999,
-                background: isQuotaFull ? '#fef2f2' : '#f0fdf4',
-                color: isQuotaFull ? '#dc2626' : '#16a34a',
-                border: `1.5px solid ${isQuotaFull ? '#fca5a5' : '#86efac'}`,
-              }}
-            >
-              {brands.length} / {maxBrands} Brand (Paket {planCode.toUpperCase()})
-            </span>
+            {isInvitedTeamMember ? (
+              <span
+                style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  background: '#fef3c7',
+                  color: '#92400e',
+                  border: '1.5px solid #fde68a',
+                }}
+              >
+                Akses Kolaborator Tim ({brands.length} Brand)
+              </span>
+            ) : (
+              <span
+                style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  background: isQuotaFull ? '#fef2f2' : '#f0fdf4',
+                  color: isQuotaFull ? '#dc2626' : '#16a34a',
+                  border: `1.5px solid ${isQuotaFull ? '#fca5a5' : '#86efac'}`,
+                }}
+              >
+                {brands.length} / {maxBrands} Brand (Paket {planCode.toUpperCase()})
+              </span>
+            )}
           </div>
           <p style={{ color: '#64748b', fontSize: '0.88rem', marginTop: 2 }}>
-            {planCode === 'free'
+            {isInvitedTeamMember
+              ? 'Anda tergabung sebagai anggota kolaborator pada brand di bawah ini. Pembuatan dan penambahan akun brand baru hanya dapat dilakukan oleh Pemilik Brand (Owner).'
+              : planCode === 'free'
               ? 'Paket Gratis dibatasi maksimal 1 Akun Brand. Upgrade ke Pro (5 Brand) atau Tim (20 Brand) untuk ekspansi brand.'
               : planCode === 'pro'
               ? 'Paket Pro mendukung hingga 5 Brand Media Sosial. Upgrade ke Tim untuk mengelola hingga 20 brand.'
@@ -205,33 +294,38 @@ export default function DaftarBrandPage() {
           </p>
         </div>
 
-        <button
-          className={`btn-uda ${isQuotaFull ? 'btn-uda-secondary' : 'btn-uda-primary'} btn-uda-sm`}
-          onClick={() => {
-            if (isQuotaFull) {
-              const upgradeMsg =
-                planCode === 'free'
-                  ? 'Batas 1 Akun Brand untuk Paket Gratis telah tercapai. Tingkatkan ke Paket Pro (5 Brand) atau Paket Tim (20 Brand) untuk menambah akun brand baru.'
-                  : planCode === 'pro'
-                  ? 'Batas 5 Akun Brand untuk Paket Pro telah tercapai. Tingkatkan ke Paket Tim (20 Brand) untuk mengelola brand baru.'
-                  : 'Anda telah mencapai batas maksimal 20 Akun Brand pada Paket Tim.';
+        {/* Tombol Tambah Brand Hanya Tersedia untuk Pemilik Akun Brand (Owner) */}
+        {!isInvitedTeamMember && (
+          <button
+            className={`btn-uda ${isQuotaFull ? 'btn-uda-secondary' : 'btn-uda-primary'} btn-uda-sm`}
+            onClick={() => {
+              if (isQuotaFull) {
+                const upgradeMsg =
+                  planCode === 'free'
+                    ? 'Batas 1 Akun Brand untuk Paket Gratis telah tercapai. Tingkatkan ke Paket Pro (5 Brand) atau Paket Tim (20 Brand) untuk menambah akun brand baru.'
+                    : planCode === 'pro'
+                    ? 'Batas 5 Akun Brand untuk Paket Pro telah tercapai. Tingkatkan ke Paket Tim (20 Brand) untuk mengelola brand baru.'
+                    : 'Anda telah mencapai batas maksimal 20 Akun Brand pada Paket Tim.';
 
-              showError('Kuota Brand Maksimal Tercapai', upgradeMsg);
-            } else {
-              setShowAddBrandModal(true);
-            }
-          }}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-        >
-          {isQuotaFull ? <Lock size={15} style={{ color: '#dc2626' }} /> : <Plus size={15} />}
-          <span>{isQuotaFull ? `Kuota Penuh (${brands.length}/${maxBrands})` : 'Tambah Brand'}</span>
-        </button>
+                showError('Kuota Brand Maksimal Tercapai', upgradeMsg);
+              } else {
+                setShowAddBrandModal(true);
+              }
+            }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            {isQuotaFull ? <Lock size={15} style={{ color: '#dc2626' }} /> : <Plus size={15} />}
+            <span>{isQuotaFull ? `Kuota Penuh (${brands.length}/${maxBrands})` : 'Tambah Brand'}</span>
+          </button>
+        )}
       </div>
 
       {/* Grid Kartu Brand Responsif */}
       <div id="tour-brand-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 290px), 1fr))', gap: 20 }}>
         {brands.map((b, bIdx) => {
           const isUpdatingThis = updatingBrandId === b.id;
+          const userRoleOnThisBrand = brandRoles[b.id] || (b.owner_id === user?.id ? 'owner' : 'editor');
+          const canEditPhoto = userRoleOnThisBrand === 'owner' || userRoleOnThisBrand === 'editor';
 
           return (
             <div
@@ -284,7 +378,7 @@ export default function DaftarBrandPage() {
                         >
                           <Loader2 size={16} className="animate-spin" />
                         </div>
-                      ) : (
+                      ) : canEditPhoto ? (
                         <button
                           type="button"
                           title="Klik untuk ubah foto brand"
@@ -313,12 +407,30 @@ export default function DaftarBrandPage() {
                         >
                           <Camera size={10} />
                         </button>
-                      )}
+                      ) : null}
                     </div>
 
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>{b.name}</div>
-                      <div style={{ fontSize: '0.8rem', color: '#64748b' }}>@{b.handle}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>{b.name}</span>
+                        {userRoleOnThisBrand && (
+                          <span
+                            style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              padding: '2px 8px',
+                              borderRadius: 999,
+                              background: userRoleOnThisBrand === 'owner' ? '#dcfce7' : userRoleOnThisBrand === 'reviewer' ? '#e0e7ff' : userRoleOnThisBrand === 'editor' ? '#fef3c7' : '#f1f5f9',
+                              color: userRoleOnThisBrand === 'owner' ? '#15803d' : userRoleOnThisBrand === 'reviewer' ? '#4338ca' : userRoleOnThisBrand === 'editor' ? '#92400e' : '#475569',
+                              border: '1px solid currentColor',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            Peran: {userRoleOnThisBrand}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>@{b.handle}</div>
                     </div>
                   </div>
 
@@ -389,22 +501,26 @@ export default function DaftarBrandPage() {
               Belum Ada Brand
             </h3>
             <p style={{ color: '#64748b', fontSize: '0.88rem', maxWidth: 420, margin: 0 }}>
-              Mulai kelola konten dengan menambahkan akun brand media sosial pertama Anda secara manual.
+              {isInvitedTeamMember
+                ? 'Anda belum memiliki akses ke brand kolaborasi manapun. Mintalah Pemilik Brand (Owner) untuk mengundang Anda ke brand mereka.'
+                : 'Mulai kelola konten dengan menambahkan akun brand media sosial pertama Anda secara manual.'}
             </p>
-            <button
-              onClick={() => setShowAddBrandModal(true)}
-              className="btn-uda btn-uda-primary"
-              style={{ marginTop: 8 }}
-            >
-              <Plus size={16} />
-              <span>Tambah Brand Pertama</span>
-            </button>
+            {!isInvitedTeamMember && (
+              <button
+                onClick={() => setShowAddBrandModal(true)}
+                className="btn-uda btn-uda-primary"
+                style={{ marginTop: 8 }}
+              >
+                <Plus size={16} />
+                <span>Tambah Brand Pertama</span>
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {/* Modal Tambah Brand */}
-      {showAddBrandModal && (
+      {/* Modal Tambah Brand - Hanya untuk Owner */}
+      {showAddBrandModal && !isInvitedTeamMember && (
         <div
           style={{
             position: 'fixed',
@@ -432,6 +548,11 @@ export default function DaftarBrandPage() {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                if (isInvitedTeamMember) {
+                  showError('Akses Dibatasi', 'Pengguna undangan tim tidak dapat menambah brand baru. Fitur ini hanya tersedia untuk Pemilik Akun Brand (Owner).');
+                  setShowAddBrandModal(false);
+                  return;
+                }
                 try {
                   const finalPlatforms = selectedPlatforms.length > 0 ? selectedPlatforms : ['instagram'];
                   const created = await BrandService.createBrand({

@@ -455,6 +455,25 @@ export class BrandService {
 
     if (supabase && effectiveOwnerId && isUuid(effectiveOwnerId)) {
       try {
+        // Cek apakah pengguna adalah anggota tim undangan yang bukan pemilik brand
+        const { data: memberRows } = await (supabase.from('brand_members' as any) as any)
+          .select('brand_id, role')
+          .eq('user_id', effectiveOwnerId);
+
+        const { data: ownedBrands } = await (supabase.from('brands' as any) as any)
+          .select('id')
+          .eq('owner_id', effectiveOwnerId);
+
+        const isCollaboratorOnly =
+          (!ownedBrands || ownedBrands.length === 0) &&
+          memberRows &&
+          memberRows.length > 0 &&
+          memberRows.every((m: any) => m.role !== 'owner');
+
+        if (isCollaboratorOnly) {
+          throw new Error('Pengguna undangan tim tidak dapat menambah brand baru. Hanya Pemilik Akun Brand (Owner) yang berwenang menambah brand.');
+        }
+
         const insertPayload: any = {
           owner_id: effectiveOwnerId,
           name: payload.name,
