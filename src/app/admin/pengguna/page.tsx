@@ -89,10 +89,20 @@ export default function AdminPenggunaPage() {
     window.addEventListener('uda_payment_approved', handleRealtimeUpdate);
     window.addEventListener('storage', handleRealtimeUpdate);
 
-    // Polling setiap 3 detik untuk memastikan status paket aktif dan pengguna selalu realtime
+    // Polling periodik ringan (30 detik) sebagai fallback sinkronisasi di latar belakang
     const interval = setInterval(() => {
       loadUsers();
-    }, 3000);
+    }, 30000);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDetailUser(null);
+        setSelectedUser(null);
+        setUserToDelete(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       window.removeEventListener('uda_user_registered', handleRealtimeUpdate);
@@ -100,6 +110,7 @@ export default function AdminPenggunaPage() {
       window.removeEventListener('uda_account_updated', handleRealtimeUpdate);
       window.removeEventListener('uda_payment_approved', handleRealtimeUpdate);
       window.removeEventListener('storage', handleRealtimeUpdate);
+      window.removeEventListener('keydown', handleKeyDown);
       clearInterval(interval);
     };
   }, []);
@@ -1411,6 +1422,9 @@ export default function AdminPenggunaPage() {
             style={{
               maxWidth: 540,
               width: '100%',
+              maxHeight: 'min(90vh, 720px)',
+              display: 'flex',
+              flexDirection: 'column',
               padding: 0,
               borderRadius: 16,
               background: '#ffffff',
@@ -1455,7 +1469,7 @@ export default function AdminPenggunaPage() {
             </div>
 
             {/* Profile Info & Avatar */}
-            <div style={{ padding: '0 24px 24px', marginTop: -42, position: 'relative' }}>
+            <div style={{ padding: '0 24px 24px', marginTop: -42, position: 'relative', overflowY: 'auto', flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                 {/* Large Avatar */}
                 <div
@@ -1703,7 +1717,7 @@ export default function AdminPenggunaPage() {
                   </div>
                   <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <FileText size={14} style={{ color: '#f59e0b' }} />
-                    <span>{detailUser.postsCount || 12} Postingan Dibuat</span>
+                    <span>{detailUser.postsCount ?? 0} Postingan Dibuat</span>
                   </div>
                 </div>
               </div>
@@ -1726,7 +1740,7 @@ export default function AdminPenggunaPage() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Phone size={13} style={{ color: '#64748b' }} />
-                  <span>Kontak: <strong>{detailUser.phone || '0812-3456-7890'}</strong></span>
+                  <span>Kontak: <strong>{detailUser.phone || '-'}</strong></span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Calendar size={13} style={{ color: '#64748b' }} />

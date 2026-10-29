@@ -50,7 +50,9 @@ export default function LandingPhoneMockup() {
         justifyContent: 'center',
         padding: '24px 16px',
         maxWidth: 540,
+        width: '100%',
         margin: '0 auto',
+        overflow: 'hidden',
       }}
     >
       {/* ============================================================

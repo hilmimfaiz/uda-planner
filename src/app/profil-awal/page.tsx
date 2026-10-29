@@ -14,12 +14,13 @@ import {
   AlertCircle,
   ShieldCheck,
   CheckCircle2,
+  LogOut,
 } from 'lucide-react';
 import { PlanService, DynamicPlan, PlanDurationItem } from '@/services/plan.service';
 
 export default function ProfilAwalPage() {
   const router = useRouter();
-  const { user, profile, refreshUserData } = useAuth();
+  const { user, profile, refreshUserData, signOut } = useAuth();
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -39,6 +40,26 @@ export default function ProfilAwalPage() {
   const [plans, setPlans] = useState<DynamicPlan[]>([]);
   const [selectedDurationIndex, setSelectedDurationIndex] = useState<Record<string, number>>({});
   const [isSelectingPlan, setIsSelectingPlan] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+      await signOut();
+    } catch (e) {
+      console.warn('Sign out error:', e);
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('uda_needs_profile_setup');
+        localStorage.removeItem('uda_google_auth_pending');
+      } catch (e) {}
+      window.location.href = '/masuk?logout=true';
+    } else {
+      router.replace('/masuk?logout=true');
+    }
+  };
 
   // Muat data paket dinamis dari PlanService
   useEffect(() => {
@@ -506,7 +527,7 @@ export default function ProfilAwalPage() {
       >
         <div style={{ maxWidth: 1080, width: '100%' }}>
           {/* Header Step 2 */}
-          <div style={{ textAlign: 'center', marginBottom: 36 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <button
               type="button"
               onClick={() => {
@@ -523,12 +544,33 @@ export default function ProfilAwalPage() {
                 fontSize: '0.84rem',
                 fontWeight: 700,
                 cursor: 'pointer',
-                marginBottom: 16,
               }}
             >
               <ArrowLeft size={15} />
               <span>Kembali ke Lengkapi Profil</span>
             </button>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="btn-uda btn-uda-secondary btn-uda-sm"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: '0.82rem',
+                padding: '6px 14px',
+                color: '#dc2626',
+                borderColor: '#fca5a5',
+                cursor: 'pointer',
+              }}
+            >
+              <LogOut size={14} />
+              <span>Keluar</span>
+            </button>
+          </div>
+
+          <div style={{ textAlign: 'center', marginBottom: 36 }}>
 
             <h1
               style={{
@@ -958,6 +1000,26 @@ export default function ProfilAwalPage() {
               </div>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="btn-uda btn-uda-secondary btn-uda-sm"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: '0.82rem',
+              padding: '6px 14px',
+              color: '#dc2626',
+              borderColor: '#fca5a5',
+              cursor: 'pointer',
+            }}
+            title="Keluar dari akun dan batalkan proses onboarding"
+          >
+            <LogOut size={14} />
+            <span>Keluar</span>
+          </button>
         </div>
 
         {/* Title & Description */}

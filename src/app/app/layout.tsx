@@ -61,7 +61,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       if (user?.email || user?.id) {
         syncServerInvitations(user?.email || undefined, user?.id || undefined).then(refreshNotifs);
       }
-    }, 10000);
+    }, 30000);
 
     const onFocus = () => {
       if (user?.email || user?.id) {

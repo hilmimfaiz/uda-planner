@@ -30,7 +30,7 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
   const redirectPath = searchParams?.get('redirect') || '/app';
   const isVerified = searchParams?.get('verified') === 'true';
 
-  const { user, isAdmin, signIn, signUp } = useAuth();
+  const { user, isAdmin, signIn, signUp, signOut } = useAuth();
 
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
 
@@ -71,6 +71,17 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
 
   // Jika user sudah terautentikasi sebelumnya
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('logout') === 'true') {
+        signOut();
+        return;
+      }
+      if (urlParams.get('switch') === 'true') {
+        return;
+      }
+    }
+
     if (user) {
       if (isAdmin) {
         router.push('/admin');
@@ -88,7 +99,7 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
         }
       }
     }
-  }, [user, isAdmin, redirectPath, router]);
+  }, [user, isAdmin, redirectPath, router, signOut]);
 
   // Fungsi pergantian mode dengan animasi halus dan perubahan URL aman
   const switchTo = (target: 'login' | 'register') => {

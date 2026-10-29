@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createServerClient } from '@/lib/supabase/server';
 import { resolvePaymentDuration } from '@/services/plan.service';
+import { formatWibDate } from '@/lib/date-utils';
 import fs from 'fs';
 import path from 'path';
 
@@ -58,13 +59,7 @@ export async function GET(req: NextRequest) {
               bank: `${p.sender_bank || 'Transfer'} — A/N ${p.sender_name || prof.full_name || 'Pelanggan'}`,
               proof: p.proof_path || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
               status: p.status || 'pending',
-              date: new Date(p.created_at).toLocaleString('id-ID', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
+              date: formatWibDate(p.created_at),
               reason: p.admin_note,
             };
           });
@@ -114,6 +109,42 @@ export async function POST(req: NextRequest) {
     const userEmail = body.userEmail || (senderName ? `${senderName.toLowerCase().replace(/\s+/g, '')}@gmail.com` : 'pelanggan@udaplanner.id');
     const userId = body.userId || body.accountId || null;
 
+    // Validasi pencegahan pengajuan ganda (Bug B4)
+    if (db && userId) {
+      try {
+        const { data: existingPending } = await (db.from('payments' as any) as any)
+          .select('id')
+          .eq('user_id', userId)
+          .eq('status', 'pending')
+          .limit(1)
+          .maybeSingle();
+
+        if (existingPending) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Anda masih memiliki pengajuan pembayaran yang sedang menunggu verifikasi admin. Mohon tunggu proses verifikasi selesai sebelum mengajukan kembali.',
+            },
+            { status: 400 }
+          );
+        }
+      } catch (checkErr) {}
+    }
+
+    const backupList = loadBackupPayments();
+    const existingPendingBackup = backupList.find(
+      (p: any) => (p.userId === userId || p.email?.toLowerCase() === userEmail.toLowerCase()) && p.status === 'pending'
+    );
+    if (existingPendingBackup) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Anda masih memiliki pengajuan pembayaran yang sedang menunggu verifikasi admin. Mohon tunggu proses verifikasi selesai sebelum mengajukan kembali.',
+        },
+        { status: 400 }
+      );
+    }
+
     let createdRecordId = paymentId;
 
     if (db && userId && userId.includes('-') && userId.length > 20) {
@@ -152,17 +183,10 @@ export async function POST(req: NextRequest) {
       bank: `${senderBank} — A/N ${senderName}`,
       proof: proofPath,
       status: 'pending',
-      date: new Date().toLocaleString('id-ID', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
+      date: formatWibDate(new Date()),
       created_at: new Date().toISOString(),
     };
 
-    const backupList = loadBackupPayments();
     const filteredBackup = backupList.filter((p: any) => p.id !== newPaymentRecord.id);
     filteredBackup.unshift(newPaymentRecord);
     saveBackupPayments(filteredBackup);
@@ -263,7 +287,6 @@ export async function PATCH(req: NextRequest) {
               .update({
                 plan_code: targetPlan,
                 plan_until: planUntil,
-                updated_at: new Date().toISOString(),
               })
               .or(`user_id.eq.${targetUserId},id.eq.${targetUserId}`);
 

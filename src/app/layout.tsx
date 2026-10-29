@@ -21,6 +21,11 @@ const jetBrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'UdaPlanner — Social Media Planner & Management System',
   description: 'Sistem manajemen konten dan kalender perencanaan postingan sosial media terintegrasi dengan backend Supabase.',
+  icons: {
+    icon: '/icon.png',
+    shortcut: '/favicon.ico',
+    apple: '/icon.png',
+  },
 };
 
 export const viewport: Viewport = {

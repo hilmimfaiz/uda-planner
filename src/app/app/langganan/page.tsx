@@ -35,6 +35,7 @@ import { playSuccessSound, playErrorSound } from '@/lib/audio-effects';
 import { useAuth } from '@/contexts/auth-context';
 import { useModal } from '@/contexts/modal-context';
 import { GuidedTour, TourStep } from '@/components/guided-tour';
+import { formatWibDate } from '@/lib/date-utils';
 
 const langgananTourSteps: TourStep[] = [
   {
@@ -69,6 +70,7 @@ export default function LanggananPage() {
   const [selectedPlanCode, setSelectedPlanCode] = useState<string>('pro');
   const [selectedDurationIndex, setSelectedDurationIndex] = useState<Record<string, number>>({});
   const [selectedBankId, setSelectedBankId] = useState<string>('');
+  const [isPageLoading, setIsPageLoading] = useState(true);
 
   // Status Keanggotaan TIM
   const [teamMembership, setTeamMembership] = useState<{
@@ -182,7 +184,7 @@ export default function LanggananPage() {
           }
         });
 
-        // Verifikasi dan sinkronkan durasi masa aktif jika user memiliki pembayaran berdurasi panjang (misal 1 Tahun / 365 hari)
+        // B1: Verifikasi dan sinkronkan durasi masa aktif jika user memiliki pembayaran berstatus approved
         const approvedList = myPayments.filter((p: any) => p.status === 'approved');
         if (approvedList.length > 0) {
           const latestApproved = approvedList[0];
@@ -192,61 +194,66 @@ export default function LanggananPage() {
             latestApproved.amount,
             latestApproved.plan_code
           );
-          if (dur.days >= 90) {
-            let currentPlanUntil = account?.plan_until;
+          const approvedPlan = latestApproved.plan_code || 'pro';
+          let currentPlanUntil = account?.plan_until;
+          if (typeof window !== 'undefined') {
+            try {
+              const rawAcc = localStorage.getItem('uda_auth_account');
+              if (rawAcc) {
+                const parsed = JSON.parse(rawAcc);
+                currentPlanUntil = parsed.plan_until || currentPlanUntil;
+              }
+            } catch (e) {}
+          }
+
+          const currentExpiry = currentPlanUntil ? new Date(currentPlanUntil).getTime() : 0;
+          const isExpiredOrMissing = isNaN(currentExpiry) || currentExpiry <= Date.now();
+          const needsPlanUpgrade =
+            account?.plan_code === 'free' ||
+            !account?.plan_code ||
+            isExpiredOrMissing ||
+            (dur.days >= 90 && (currentExpiry - Date.now()) / 86400000 < dur.days - 30);
+
+          if (needsPlanUpgrade) {
+            const payTime = latestApproved.created_at ? new Date(latestApproved.created_at).getTime() : Date.now();
+            const baseTime = isNaN(payTime) ? Date.now() : payTime;
+            const fixedPlanUntil = new Date(baseTime + Math.max(dur.days, 30) * 86400000).toISOString();
+
             if (typeof window !== 'undefined') {
               try {
                 const rawAcc = localStorage.getItem('uda_auth_account');
-                if (rawAcc) {
-                  const parsed = JSON.parse(rawAcc);
-                  currentPlanUntil = parsed.plan_until || currentPlanUntil;
-                }
+                const accObj = rawAcc ? JSON.parse(rawAcc) : {};
+                const updatedAcc = {
+                  ...accObj,
+                  plan_code: approvedPlan,
+                  plan_until: fixedPlanUntil,
+                };
+                localStorage.setItem('uda_auth_account', JSON.stringify(updatedAcc));
               } catch (e) {}
             }
 
-            const currentExpiry = currentPlanUntil ? new Date(currentPlanUntil).getTime() : 0;
-            const remainingDays = !isNaN(currentExpiry) && currentExpiry > Date.now() ? (currentExpiry - Date.now()) / 86400000 : 0;
-            if (remainingDays < dur.days - 30) {
-              const payTime = latestApproved.created_at ? new Date(latestApproved.created_at).getTime() : Date.now();
-              const baseTime = isNaN(payTime) ? Date.now() : payTime;
-              const fixedPlanUntil = new Date(baseTime + dur.days * 86400000).toISOString();
-
-              if (typeof window !== 'undefined') {
-                try {
-                  const rawAcc = localStorage.getItem('uda_auth_account');
-                  const accObj = rawAcc ? JSON.parse(rawAcc) : {};
-                  const updatedAcc = {
-                    ...accObj,
-                    plan_code: latestApproved.plan_code || accObj.plan_code || 'team',
-                    plan_until: fixedPlanUntil,
-                  };
-                  localStorage.setItem('uda_auth_account', JSON.stringify(updatedAcc));
-                } catch (e) {}
-              }
-
-              if (supabase && user?.id) {
-                (supabase.from('accounts' as any) as any)
-                  .update({ plan_code: latestApproved.plan_code || 'team', plan_until: fixedPlanUntil })
-                  .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-                  .then(() => {})
-                  .catch(() => {});
-              }
-
-              AdminService.updateUserPlan(user?.id || account?.id || 'usr-1', (latestApproved.plan_code || 'team') as any, dur.days, {
-                customPlanUntil: fixedPlanUntil,
-              }).catch(() => {});
-
-              window.dispatchEvent(
-                new CustomEvent('uda_account_updated', {
-                  detail: {
-                    userId: user?.id,
-                    email: user?.email,
-                    planCode: latestApproved.plan_code || 'team',
-                    planUntil: fixedPlanUntil,
-                  },
-                })
-              );
+            if (supabase && user?.id) {
+              (supabase.from('accounts' as any) as any)
+                .update({ plan_code: approvedPlan, plan_until: fixedPlanUntil })
+                .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+                .then(() => {})
+                .catch(() => {});
             }
+
+            AdminService.updateUserPlan(user?.id || account?.id || 'usr-1', approvedPlan as any, dur.days, {
+              customPlanUntil: fixedPlanUntil,
+            }).catch(() => {});
+
+            window.dispatchEvent(
+              new CustomEvent('uda_account_updated', {
+                detail: {
+                  userId: user?.id,
+                  email: user?.email,
+                  planCode: approvedPlan,
+                  planUntil: fixedPlanUntil,
+                },
+              })
+            );
           }
         }
       }
@@ -283,6 +290,8 @@ export default function LanggananPage() {
       }
     } catch (err) {
       console.warn('LanggananPage loadData fallback:', err);
+    } finally {
+      setIsPageLoading(false);
     }
   };
 
@@ -443,6 +452,15 @@ export default function LanggananPage() {
       return;
     }
 
+    // B4: Cegah pengajuan berulang kali jika masih ada pembayaran yang pending
+    if (pendingPayment) {
+      showError(
+        'Pengajuan Sedang Diproses',
+        'Anda masih memiliki pengajuan pembayaran yang sedang menunggu verifikasi admin. Harap tunggu persetujuan admin atau hubungi admin via WhatsApp sebelum mengirim pengajuan baru.'
+      );
+      return;
+    }
+
     if (!senderName.trim()) {
       showError('Nama Pengirim Wajib Diisi', 'Silakan masukkan nama pemilik rekening pengirim.');
       return;
@@ -518,6 +536,30 @@ export default function LanggananPage() {
     return true;
   });
 
+  if (isPageLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 1040, margin: '0 auto', width: '100%', padding: '40px 0' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <ShieldCheck size={26} style={{ color: '#16a34a' }} />
+            <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em' }}>
+              Paket Langganan & Upgrade Akun
+            </h1>
+          </div>
+          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
+            Memuat data paket dan status akun Anda...
+          </p>
+        </div>
+
+        <div className="uda-card" style={{ padding: 56, textAlign: 'center', color: '#64748b', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+          <Loader2 size={36} className="animate-spin" style={{ color: '#16a34a' }} />
+          <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>Memuat Konfigurasi Paket & Transaksi...</div>
+          <div style={{ fontSize: '0.84rem', color: '#64748b' }}>Mohon tunggu sebentar, sedang menyinkronkan data langganan.</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 1040, margin: '0 auto', width: '100%' }}>
       {/* Header Halaman */}
@@ -579,7 +621,7 @@ export default function LanggananPage() {
                     MENUNGGU VERIFIKASI ADMIN
                   </span>
                   <span style={{ fontSize: '0.8rem', color: '#854d0e', fontWeight: 700 }}>
-                    {pendingPayment.created_at ? new Date(pendingPayment.created_at).toLocaleDateString('id-ID') : 'Hari ini'}
+                    {pendingPayment.created_at ? formatWibDate(pendingPayment.created_at) : 'Hari ini'}
                   </span>
                 </div>
                 <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
@@ -1078,16 +1120,40 @@ export default function LanggananPage() {
 
               <div>
                 <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 4 }}>
-                  Bank Pengirim yang Anda Gunakan *
+                  Bank / E-Wallet Pengirim *
                 </label>
-                <input
-                  type="text"
+                <select
                   required
-                  placeholder="Contoh: BCA / Mandiri / SeaBank / GoPay"
                   value={senderBank}
                   onChange={(e) => setSenderBank(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none' }}
-                />
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none', backgroundColor: '#ffffff', cursor: 'pointer' }}
+                >
+                  <optgroup label="Bank Populer & Syariah">
+                    <option value="BCA">BCA (Bank Central Asia)</option>
+                    <option value="Bank Mandiri">Bank Mandiri</option>
+                    <option value="BNI">BNI (Bank Negara Indonesia)</option>
+                    <option value="BRI">BRI (Bank Rakyat Indonesia)</option>
+                    <option value="BSI">BSI (Bank Syariah Indonesia)</option>
+                    <option value="CIMB Niaga">CIMB Niaga</option>
+                    <option value="Permata Bank">Permata Bank</option>
+                    <option value="Bank Danamon">Bank Danamon</option>
+                    <option value="BTN">Bank BTN</option>
+                    <option value="Jenius / BTPN">Jenius / BTPN</option>
+                    <option value="SeaBank">SeaBank</option>
+                    <option value="Bank Jago">Bank Jago</option>
+                    <option value="Bank Neo Commerce">Bank Neo Commerce</option>
+                    <option value="Bank Panin">Bank Panin</option>
+                    <option value="Bank Mega">Bank Mega</option>
+                    <option value="Bank OCBC NISP">Bank OCBC NISP</option>
+                  </optgroup>
+                  <optgroup label="Dompet Digital / E-Wallet">
+                    <option value="GoPay">GoPay</option>
+                    <option value="OVO">OVO</option>
+                    <option value="DANA">DANA</option>
+                    <option value="ShopeePay">ShopeePay</option>
+                    <option value="LinkAja">LinkAja</option>
+                  </optgroup>
+                </select>
               </div>
 
               {/* Upload Foto Bukti Struk Transfer */}

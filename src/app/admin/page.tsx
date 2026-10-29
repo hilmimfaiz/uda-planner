@@ -20,6 +20,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  Loader2,
 } from 'lucide-react';
 import { AdminService } from '@/services/admin.service';
 import { resolvePaymentDuration } from '@/services/plan.service';
@@ -55,6 +56,8 @@ export default function AdminDashboardPage() {
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
   const [allPayments, setAllPayments] = useState<any[]>([]);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isApproving, setIsApproving] = useState(false);
 
   const fetchDashboardStats = React.useCallback(async () => {
     try {
@@ -71,6 +74,8 @@ export default function AdminDashboardPage() {
       }
     } catch (err) {
       console.warn('fetchDashboardStats error:', err);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -141,21 +146,29 @@ export default function AdminDashboardPage() {
   };
 
   const handleApprovePayment = async (id: string) => {
+    if (isApproving) return;
     const item = pendingPayments.find((p) => p.id === id);
-    const targetPlan = item?.plan || 'pro';
-    const dur = resolvePaymentDuration(
-      (item as any)?.durationDays,
-      (item as any)?.durationLabel,
-      item?.amount,
-      targetPlan
-    );
-    await AdminService.approvePayment(id, item?.userId, targetPlan, {
-      email: item?.email,
-      durationDays: dur.days,
-    });
-    setPendingPayments(pendingPayments.filter((p) => p.id !== id));
-    setSelectedProof(null);
-    showToast(`✅ Pembayaran disetujui! Pengguna ${item?.user || ''} otomatis ditingkatkan ke paket ${targetPlan.toUpperCase()} (${dur.label} / ${dur.days} Hari).`);
+    if (!item || item.status === 'approved') return;
+
+    setIsApproving(true);
+    try {
+      const targetPlan = item?.plan || 'pro';
+      const dur = resolvePaymentDuration(
+        (item as any)?.durationDays,
+        (item as any)?.durationLabel,
+        item?.amount,
+        targetPlan
+      );
+      await AdminService.approvePayment(id, item?.userId, targetPlan, {
+        email: item?.email,
+        durationDays: dur.days,
+      });
+      setPendingPayments((prev) => prev.filter((p) => p.id !== id));
+      setSelectedProof(null);
+      showToast(`✅ Pembayaran disetujui! Pengguna ${item?.user || ''} otomatis ditingkatkan ke paket ${targetPlan.toUpperCase()} (${dur.label} / ${dur.days} Hari).`);
+    } finally {
+      setIsApproving(false);
+    }
   };
 
   const handleRejectPayment = async (id: string) => {
@@ -224,10 +237,10 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PENGGUNA TERDAFTAR</div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
-            {totalUsersCount}
+            {isLoading ? '...' : totalUsersCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>
-            {freeUsersCount} akun gratis (free)
+            {isLoading ? 'Memuat data...' : `${freeUsersCount} akun gratis (free)`}
           </div>
         </div>
 
@@ -239,7 +252,7 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#3b82f6', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA PRO AKTIF</div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#1d4ed8', marginTop: 4 }}>
-            {proUsersCount}
+            {isLoading ? '...' : proUsersCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Rp 49.000 / 30 hari</div>
         </div>
@@ -252,7 +265,7 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#8b5cf6', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA TIM AKTIF</div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#6d28d9', marginTop: 4 }}>
-            {teamUsersCount}
+            {isLoading ? '...' : teamUsersCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Rp 149.000 / 30 hari</div>
         </div>
@@ -264,7 +277,7 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#b45309', fontSize: '0.78rem', fontWeight: 700 }}>MENUNGGU VERIFIKASI</div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#d97706', marginTop: 4 }}>
-            {pendingPayments.length}
+            {isLoading ? '...' : pendingPayments.length}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600, marginTop: 4 }}>Klik untuk cek transfer →</div>
         </div>
@@ -276,7 +289,7 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#c2410c', fontSize: '0.78rem', fontWeight: 700 }}>EMAIL BELUM DIVERIFIKASI</div>
           <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#ea580c', marginTop: 4 }}>
-            {Math.max(0, adminUsers.filter((u) => u.isSuspended).length)}
+            {isLoading ? '...' : Math.max(0, adminUsers.filter((u) => u.isSuspended).length)}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#c2410c', fontWeight: 600, marginTop: 4 }}>Verifikasi akun manual →</div>
         </div>
@@ -289,10 +302,10 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#15803d', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PEMASUKAN DIVERIFIKASI</div>
           <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#166534', marginTop: 4 }}>
-            {formattedRevenue}
+            {isLoading ? '...' : formattedRevenue}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>
-            Dari {allPayments.filter((p) => p.status === 'approved').length} transaksi berhasil
+            {isLoading ? 'Memuat data omset...' : `Dari ${allPayments.filter((p) => p.status === 'approved').length} transaksi berhasil`}
           </div>
         </div>
       </div>
@@ -302,7 +315,7 @@ export default function AdminDashboardPage() {
       <div className="uda-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
-            Verifikasi Pembayaran Masuk ({pendingPayments.length} Menunggu)
+            Verifikasi Pembayaran Masuk {isLoading ? '' : `(${pendingPayments.length} Menunggu)`}
           </h3>
           <button
             className="btn-uda btn-uda-secondary btn-uda-sm"
@@ -312,7 +325,12 @@ export default function AdminDashboardPage() {
           </button>
         </div>
 
-        {pendingPayments.length === 0 ? (
+        {isLoading ? (
+          <div style={{ padding: '32px 16px', textAlign: 'center', color: '#64748b', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <Loader2 size={18} className="animate-spin" />
+            <span>Memuat data verifikasi pembayaran...</span>
+          </div>
+        ) : pendingPayments.length === 0 ? (
           <p style={{ color: '#64748b', fontSize: '0.88rem', fontStyle: 'italic' }}>
             Semua pembayaran transfer telah selesai diverifikasi.
           </p>

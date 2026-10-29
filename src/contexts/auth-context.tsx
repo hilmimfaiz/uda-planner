@@ -43,35 +43,23 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('uda_auth_user');
-        if (cached) return JSON.parse(cached);
-      } catch (e) {}
-    }
-    return null;
-  });
-  const [profile, setProfile] = useState<UserProfile | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('uda_auth_profile');
-        if (cached) return JSON.parse(cached);
-      } catch (e) {}
-    }
-    return null;
-  });
-  const [account, setAccount] = useState<UserAccount | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('uda_auth_account');
-        if (cached) return JSON.parse(cached);
-      } catch (e) {}
-    }
-    return null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [account, setAccount] = useState<UserAccount | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Sync cache lokal hanya setelah komponen ter-mount di sisi client untuk mencegah Hydration Error (#418 & #423)
+  useEffect(() => {
+    try {
+      const cachedUser = localStorage.getItem('uda_auth_user');
+      const cachedProfile = localStorage.getItem('uda_auth_profile');
+      const cachedAccount = localStorage.getItem('uda_auth_account');
+      if (cachedUser) setUser(JSON.parse(cachedUser));
+      if (cachedProfile) setProfile(JSON.parse(cachedProfile));
+      if (cachedAccount) setAccount(JSON.parse(cachedAccount));
+    } catch (e) {}
+  }, []);
 
   const supabase = createClient();
   const loadedUserIdRef = React.useRef<string | null>(null);
@@ -221,13 +209,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (accRes.data) {
-        const resolvedPlan =
+        let resolvedPlan =
           accRes.data.plan_code && accRes.data.plan_code !== 'free'
             ? accRes.data.plan_code
             : cachedLocalPlan || 'free';
         let resolvedUntil = accRes.data.plan_until || cachedLocalPlanUntil;
 
-        // Auto-heal / fix jika user memiliki pembayaran 1 tahun atau berdurasi panjang
+        // Auto-heal / fix jika user memiliki pembayaran yang telah disetujui (Bug B1 Fix)
         if (typeof window !== 'undefined') {
           try {
             const rawAdminPays = localStorage.getItem('uda_admin_payments');
@@ -240,7 +228,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               );
               if (myApproved.length > 0) {
                 const latest = myApproved[0];
+                const approvedPlan = latest.plan || latest.plan_code || 'pro';
+                if (resolvedPlan === 'free' || !resolvedPlan) {
+                  resolvedPlan = approvedPlan;
+                }
                 const amt = latest.amount || 0;
+                const durDays = latest.durationDays || 30;
+                if (!resolvedUntil) {
+                  resolvedUntil = new Date(Date.now() + durDays * 86400000).toISOString();
+                }
+
                 const isOneYear =
                   latest.durationDays >= 365 ||
                   (latest.durationLabel && (latest.durationLabel.includes('1 Tahun') || latest.durationLabel.includes('12 Bulan'))) ||
@@ -251,11 +248,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   const curExp = resolvedUntil ? new Date(resolvedUntil).getTime() : 0;
                   const payTime = latest.date ? new Date(latest.date).getTime() : Date.now();
                   const targetTime = (isNaN(payTime) ? Date.now() : payTime) + 365 * 86400000;
-                  // Jika masa aktif saat ini kurang dari 300 hari ke depan, perbaiki ke 1 tahun penuh
                   if (isNaN(curExp) || curExp < targetTime - 86400000 * 30) {
                     resolvedUntil = new Date(targetTime).toISOString();
                   }
                 }
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Cek juga ke tabel payments Supabase jika status akun di accounts belum ter-update
+        if (supabase && currentUser.id && (resolvedPlan === 'free' || !resolvedPlan)) {
+          try {
+            const { data: dbApproved } = await (supabase.from('payments' as any) as any)
+              .select('plan_code, duration_days, created_at')
+              .eq('user_id', currentUser.id)
+              .eq('status', 'approved')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (dbApproved && dbApproved.plan_code) {
+              resolvedPlan = dbApproved.plan_code;
+              if (!resolvedUntil) {
+                const dDays = dbApproved.duration_days || 30;
+                resolvedUntil = new Date(Date.now() + dDays * 86400000).toISOString();
               }
             }
           } catch (e) {}
@@ -270,6 +287,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           is_suspended: !!accRes.data.is_suspended,
         };
       } else {
+        let fallbackPlan = cachedLocalPlan || 'free';
         let fallbackUntil = cachedLocalPlanUntil;
         if (typeof window !== 'undefined') {
           try {
@@ -283,12 +301,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               );
               if (myApproved.length > 0) {
                 const latest = myApproved[0];
+                fallbackPlan = latest.plan || latest.plan_code || 'pro';
                 const amt = latest.amount || 0;
+                const durDays = latest.durationDays || 30;
+                fallbackUntil = new Date(Date.now() + durDays * 86400000).toISOString();
                 const isOneYear =
                   latest.durationDays >= 365 ||
                   (latest.durationLabel && (latest.durationLabel.includes('1 Tahun') || latest.durationLabel.includes('12 Bulan'))) ||
                   amt >= 1200000 ||
-                  (amt >= 400000 && cachedLocalPlan === 'pro');
+                  (amt >= 400000 && fallbackPlan === 'pro');
                 if (isOneYear) {
                   fallbackUntil = new Date(Date.now() + 365 * 86400000).toISOString();
                 }
@@ -297,10 +318,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (e) {}
         }
 
+        if (supabase && currentUser.id && fallbackPlan === 'free') {
+          try {
+            const { data: dbApproved } = await (supabase.from('payments' as any) as any)
+              .select('plan_code, duration_days, created_at')
+              .eq('user_id', currentUser.id)
+              .eq('status', 'approved')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (dbApproved && dbApproved.plan_code) {
+              fallbackPlan = dbApproved.plan_code;
+              const dDays = dbApproved.duration_days || 30;
+              fallbackUntil = new Date(Date.now() + dDays * 86400000).toISOString();
+            }
+          } catch (e) {}
+        }
+
         const newAccount = {
           user_id: currentUser.id,
           role: (currentUser.user_metadata?.role as 'user' | 'admin') || 'user',
-          plan_code: cachedLocalPlan || 'free',
+          plan_code: fallbackPlan,
           plan_until: fallbackUntil,
           payment_code: Math.floor(100 + Math.random() * 899),
         };
@@ -309,14 +348,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: createdAcc.id,
           user_id: createdAcc.user_id,
           role: createdAcc.role as 'user' | 'admin',
-          plan_code: createdAcc.plan_code || cachedLocalPlan || 'free',
+          plan_code: createdAcc.plan_code || fallbackPlan,
           plan_until: createdAcc.plan_until || fallbackUntil,
           is_suspended: !!createdAcc.is_suspended,
         } : {
           id: currentUser.id,
           user_id: currentUser.id,
           role: (currentUser.user_metadata?.role as 'user' | 'admin') || 'user',
-          plan_code: cachedLocalPlan || 'free',
+          plan_code: fallbackPlan,
           plan_until: fallbackUntil,
         };
       }

@@ -72,11 +72,11 @@ export async function middleware(request: NextRequest) {
       return supabaseResponse;
     }
 
-    // 3. Hanya jika memiliki cookie auth, verifikasi user secara aman dengan fallback catch
-    const { data } = await supabase.auth
-      .getUser()
-      .catch(() => ({ data: { user: null }, error: null }));
-    const user = data?.user ?? null;
+    // 3. Hanya jika memiliki cookie auth, verifikasi session secara cepat dari cookie JWT
+    const { data: { session } } = await supabase.auth
+      .getSession()
+      .catch(() => ({ data: { session: null } }));
+    const user = session?.user ?? null;
 
     if (!user && isProtectedArea) {
       // Jika cookie auth ada, jangan langsung redirect ke /masuk di middleware agar client-side auth guard yang memverifikasi
@@ -90,6 +90,10 @@ export async function middleware(request: NextRequest) {
     }
 
     if (user && isGuestOnlyArea) {
+      // Izinkan akses jika pengguna ingin logout atau mengganti akun (B9)
+      if (request.nextUrl.searchParams.get('logout') === 'true' || request.nextUrl.searchParams.get('switch') === 'true') {
+        return supabaseResponse;
+      }
       const url = request.nextUrl.clone();
       url.pathname = '/app';
       return NextResponse.redirect(url);

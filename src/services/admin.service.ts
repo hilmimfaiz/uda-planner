@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client';
 import { DUMMY_PLANS } from '@/lib/dummy-data';
 import { resolvePaymentDuration } from './plan.service';
+import { formatWibDate } from '@/lib/date-utils';
 
 export interface AdminPaymentItem {
   id: string;
@@ -249,7 +250,7 @@ export class AdminService {
               bank: `${p.sender_bank || 'Transfer'} — A/N ${p.sender_name || prof.full_name || 'Pelanggan'}`,
               proof: p.proof_path || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
               status: p.status || 'pending',
-              date: new Date(p.created_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+              date: formatWibDate(p.created_at),
               reason: p.admin_note,
             };
           });
@@ -557,7 +558,7 @@ export class AdminService {
           const dbUsers: AdminUserItem[] = accRes.data.map((a: any) => {
             const prof = profilesMap.get(a.user_id) || {};
             const userBrands = userBrandIdsMap.get(a.user_id) || new Set<string>();
-            const brandsCount = brandCountMap.get(a.user_id) || 1;
+            const brandsCount = brandCountMap.get(a.user_id) || 0;
 
             let userPosts = 0;
             let userStorage = 0;
@@ -565,14 +566,6 @@ export class AdminService {
               userPosts += postCountMap.get(bId) || 0;
               userStorage += storageMap.get(bId) || 0;
             });
-
-            // Fallback storage berdasarkan paket jika postingan masih baru
-            if (userStorage === 0) {
-              userStorage = a.plan_code === 'team' ? 120 : a.plan_code === 'pro' ? 85 : 15;
-            }
-            if (userPosts === 0) {
-              userPosts = a.plan_code === 'team' ? 24 : a.plan_code === 'pro' ? 12 : 3;
-            }
 
             let localAvatar: string | null = null;
             let localRole: string = 'Owner';
@@ -646,13 +639,13 @@ export class AdminService {
               }
             }
 
-            // 5. Default fallback:
-            // Admin (Owner), akun dengan email admin@udaplanner.id, atau akun aktif dengan brand otomatis terverifikasi!
-            // Hanya akun yang secara eksplisit pending / unverified yang bernilai false.
+            // 5. Default fallback status verifikasi:
+            // Admin (Owner) atau akun dengan email admin@udaplanner.id otomatis terverifikasi.
+            // Pengguna lain mengikuti status verifikasi asli dan tidak otomatis diverifikasi hanya karena memiliki brand (Bug B8).
             const finalVerified =
               isVerified ||
               (!isPendingUnverified &&
-                (a.role === 'admin' || cleanEmail === 'admin@udaplanner.id' || brandsCount > 0));
+                (a.role === 'admin' || cleanEmail === 'admin@udaplanner.id'));
 
             // Selesaikan status Paket Aktif secara komprehensif & realtime
             let resolvedPlan: 'free' | 'pro' | 'team' | 'admin' = 'free';
@@ -813,11 +806,11 @@ export class AdminService {
               name: prof.full_name || (isAdmin ? 'Administrator UdaPlanner' : 'Pengguna UdaPlanner'),
               email: prof.email || 'user@udaplanner.id',
               avatarUrl: prof.avatar_url || localAvatar || null,
-              phone: prof.phone || '0812-3456-7890',
+              phone: prof.phone || null,
               role: resolvedRole as any,
               plan: finalPlan,
               planUntil: finalPlanUntil,
-              brandsCount: isAdmin ? Math.max(10, brandsCount) : Math.max(1, brandsCount),
+              brandsCount: brandsCount,
               postsCount: userPosts,
               storageMb: userStorage,
               isSuspended: a.is_suspended ?? false,

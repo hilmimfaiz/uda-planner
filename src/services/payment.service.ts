@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client';
 import { resolvePaymentDuration } from './plan.service';
+import { formatWibDate } from '@/lib/date-utils';
 
 export interface SubmitPaymentPayload {
   userId?: string;
@@ -271,13 +272,7 @@ export class PaymentService {
           bank: `${senderBank} — A/N ${senderName}`,
           proof: proofPath,
           status: 'pending',
-          date: new Date().toLocaleString('id-ID', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
+          date: formatWibDate(new Date()),
         };
 
         const updatedList = [adminItem, ...list.filter((it: any) => it.id !== finalRecord.id)];

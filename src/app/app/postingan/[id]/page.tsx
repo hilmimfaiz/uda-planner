@@ -228,6 +228,7 @@ export default function PostEditorDetailPage() {
   const primaryPlatform = post.platforms[0] || 'instagram';
   const maxCaption = PLATFORMS[primaryPlatform]?.maxCaptionLength || 2200;
   const isOverLimit = post.caption.length > maxCaption;
+  const isFreePlan = !account || account.plan_code === 'free';
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -237,6 +238,14 @@ export default function PostEditorDetailPage() {
   const handleSavePost = async () => {
     if (!post.title.trim()) {
       showError('Judul Wajib Diisi', 'Silakan masukkan judul postingan sebelum menyimpannya ke database.');
+      return;
+    }
+
+    if (isFreePlan && (post.content_type === 'video' || post.content_type === 'reels')) {
+      showError(
+        'Tipe Konten Terkunci',
+        'Tipe konten Video dan Reels hanya tersedia untuk pelanggan paket Pro dan Tim. Silakan upgrade paket langganan Anda terlebih dahulu.'
+      );
       return;
     }
 
@@ -559,15 +568,30 @@ END:VCALENDAR`;
                 className="brand-dropdown-select"
                 value={post.content_type}
                 disabled={isReadOnly}
-                onChange={(e) => setPost({ ...post, content_type: e.target.value as any })}
+                onChange={(e) => {
+                  const val = e.target.value as any;
+                  if (isFreePlan && (val === 'video' || val === 'reels')) {
+                    showError(
+                      'Tipe Konten Terkunci',
+                      'Tipe konten Video dan Reels hanya tersedia untuk pelanggan paket Pro dan Tim. Silakan upgrade paket langganan Anda untuk membuka fitur ini.'
+                    );
+                    return;
+                  }
+                  setPost({ ...post, content_type: val });
+                }}
                 style={{
                   backgroundColor: isReadOnly ? '#f8fafc' : '#ffffff',
                   cursor: isReadOnly ? 'not-allowed' : 'pointer',
                 }}
               >
-                {CONTENT_TYPES.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
+                {CONTENT_TYPES.map((t) => {
+                  const isLocked = isFreePlan && (t.id === 'video' || t.id === 'reels');
+                  return (
+                    <option key={t.id} value={t.id} disabled={isLocked}>
+                      {t.name} {isLocked ? '🔒 (Khusus Pro/Tim)' : ''}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>

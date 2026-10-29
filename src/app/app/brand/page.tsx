@@ -224,7 +224,7 @@ export default function DaftarBrandPage() {
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
         >
           {isQuotaFull ? <Lock size={15} style={{ color: '#dc2626' }} /> : <Plus size={15} />}
-          <span>{isQuotaFull ? `Kuota Penuh (${brands.length}/${maxBrands})` : '+ Tambah Brand'}</span>
+          <span>{isQuotaFull ? `Kuota Penuh (${brands.length}/${maxBrands})` : 'Tambah Brand'}</span>
         </button>
       </div>
 

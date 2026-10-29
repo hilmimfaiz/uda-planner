@@ -37,7 +37,10 @@ export default function LandingPage() {
   const [copiedCaption, setCopiedCaption] = useState(false);
   const [activeTabFeature, setActiveTabFeature] = useState<'calendar' | 'kanban' | 'grid' | 'snippets'>('calendar');
   const [inquiryEmail, setInquiryEmail] = useState('');
+  const [inquiryQuestion, setInquiryQuestion] = useState('');
   const [inquirySubmitted, setInquirySubmitted] = useState(false);
+  const [isSubmittingInquiry, setIsSubmittingInquiry] = useState(false);
+  const [inquiryError, setInquiryError] = useState<string | null>(null);
 
   useEffect(() => {
     PlanService.getActivePlans().then((data) => {
@@ -87,14 +90,35 @@ export default function LandingPage() {
     setTimeout(() => setCopiedCaption(false), 2000);
   };
 
-  const handleInquirySubmit = (e: React.FormEvent) => {
+  const handleInquirySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inquiryEmail) return;
-    setInquirySubmitted(true);
-    setTimeout(() => {
-      setInquirySubmitted(false);
+    if (!inquiryEmail.trim()) return;
+    setIsSubmittingInquiry(true);
+    setInquiryError(null);
+    try {
+      const res = await fetch('/api/inquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: inquiryEmail.trim(),
+          question: inquiryQuestion.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Gagal mengirimkan pertanyaan. Silakan periksa kembali email Anda.');
+      }
+      setInquirySubmitted(true);
       setInquiryEmail('');
-    }, 3000);
+      setInquiryQuestion('');
+      setTimeout(() => {
+        setInquirySubmitted(false);
+      }, 5000);
+    } catch (err: any) {
+      setInquiryError(err.message || 'Terjadi kesalahan sistem, silakan coba lagi.');
+    } finally {
+      setIsSubmittingInquiry(false);
+    }
   };
 
   const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
@@ -231,21 +255,8 @@ export default function LandingPage() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', color: '#0f172a', overflowX: 'hidden' }}>
       {/* Top Navbar */}
-      <nav
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
-          backgroundColor: 'rgba(255, 255, 255, 0.92)',
-          backdropFilter: 'blur(12px)',
-          borderBottom: '1px solid #f1f5f9',
-          padding: '14px 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <nav className="camply-top-nav">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div
             style={{
               width: 38,
@@ -259,15 +270,17 @@ export default function LandingPage() {
               fontWeight: 900,
               fontSize: '1.25rem',
               boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)',
+              flexShrink: 0,
             }}
           >
             U
           </div>
-          <div>
-            <span style={{ fontWeight: 800, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.02em' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <span style={{ fontWeight: 800, fontSize: '1.15rem', color: '#0f172a', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
               UdaPlanner
             </span>
             <span
+              className="camply-brand-badge"
               style={{
                 marginLeft: 8,
                 fontSize: '0.68rem',
@@ -278,6 +291,7 @@ export default function LandingPage() {
                 color: '#15803d',
                 border: '1.5px solid #0f172a',
                 boxShadow: '1.5px 1.5px 0px #0f172a',
+                whiteSpace: 'nowrap',
               }}
             >
               by UdaCoding
@@ -294,18 +308,16 @@ export default function LandingPage() {
           <a href="#faq" onClick={(e) => scrollToSection(e, 'faq')}>FAQ</a>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="camply-nav-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <Link
             href="/masuk"
             className="btn-camply-dark"
-            style={{ padding: '8px 20px', fontSize: '0.88rem' }}
           >
             Masuk
           </Link>
           <Link
             href="/daftar"
             className="btn-camply-outline"
-            style={{ padding: '8px 20px', fontSize: '0.88rem' }}
           >
             Daftar Gratis
           </Link>
@@ -1305,49 +1317,92 @@ export default function LandingPage() {
               Jika ada pertanyaan khusus yang ingin Anda ajukan seputar fitur, pembayaran, atau kustomisasi tim, kami siap membantu menjawabnya.
             </p>
 
-            {/* Email Capsule Pill Input seperti di Gambar 1 */}
-            <form onSubmit={handleInquirySubmit} className="camply-capsule-input">
-              <input
-                type="email"
-                placeholder="Enter Your Email"
-                value={inquiryEmail}
-                onChange={(e) => setInquiryEmail(e.target.value)}
-                required
+            {/* Form Pertanyaan Langsung Berfungsi */}
+            <form onSubmit={handleInquirySubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 460 }}>
+              <div
                 style={{
-                  border: 'none',
-                  outline: 'none',
-                  background: 'transparent',
-                  padding: '10px 16px',
-                  fontSize: '0.92rem',
-                  fontWeight: 600,
-                  color: '#0f172a',
-                  flex: 1,
-                  minWidth: 0,
-                }}
-              />
-              <button
-                type="submit"
-                style={{
-                  backgroundColor: '#0f172a',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: 999,
-                  padding: '10px 24px',
-                  fontSize: '0.88rem',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  transition: 'background-color 0.2s',
+                  background: '#ffffff',
+                  border: '2.5px solid #0f172a',
+                  borderRadius: 14,
+                  boxShadow: '4px 4px 0px #0f172a',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
                 }}
               >
-                {inquirySubmitted ? 'Terkirim ✓' : 'Submit'}
-              </button>
+                <input
+                  type="email"
+                  placeholder="Masukkan Email Anda (cth: anda@gmail.com)"
+                  value={inquiryEmail}
+                  onChange={(e) => setInquiryEmail(e.target.value)}
+                  required
+                  disabled={isSubmittingInquiry}
+                  style={{
+                    border: 'none',
+                    borderBottom: '1.5px solid #cbd5e1',
+                    outline: 'none',
+                    background: 'transparent',
+                    padding: '6px 4px',
+                    fontSize: '0.92rem',
+                    fontWeight: 600,
+                    color: '#0f172a',
+                    width: '100%',
+                  }}
+                />
+                <textarea
+                  rows={2}
+                  placeholder="Tuliskan pertanyaan Anda seputar fitur, pembayaran, atau kustomisasi..."
+                  value={inquiryQuestion}
+                  onChange={(e) => setInquiryQuestion(e.target.value)}
+                  disabled={isSubmittingInquiry}
+                  style={{
+                    border: 'none',
+                    outline: 'none',
+                    background: 'transparent',
+                    padding: '4px',
+                    fontSize: '0.88rem',
+                    color: '#0f172a',
+                    resize: 'none',
+                    fontFamily: 'inherit',
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={isSubmittingInquiry || !inquiryEmail.trim()}
+                  style={{
+                    backgroundColor: '#0f172a',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: 999,
+                    padding: '10px 22px',
+                    fontSize: '0.88rem',
+                    fontWeight: 800,
+                    cursor: isSubmittingInquiry ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    alignSelf: 'flex-end',
+                    transition: 'all 0.15s ease',
+                    opacity: isSubmittingInquiry ? 0.7 : 1,
+                  }}
+                >
+                  {isSubmittingInquiry ? 'Mengirim Data...' : inquirySubmitted ? 'Terkirim ✓' : 'Kirim Pertanyaan'}
+                </button>
+              </div>
+
+              {inquiryError && (
+                <p style={{ color: '#dc2626', fontSize: '0.84rem', fontWeight: 700, margin: '2px 0 0' }}>
+                  {inquiryError}
+                </p>
+              )}
+              {inquirySubmitted && (
+                <div style={{ backgroundColor: '#dcfce7', border: '1.5px solid #16a34a', borderRadius: 8, padding: '10px 14px', color: '#15803d', fontSize: '0.86rem', fontWeight: 700, marginTop: 4 }}>
+                  ✓ Pertanyaan berhasil terkirim! Tim UdaPlanner akan segera merespons ke email Anda.
+                </div>
+              )}
             </form>
-            {inquirySubmitted && (
-              <p style={{ color: '#16a34a', fontSize: '0.84rem', fontWeight: 700, marginTop: 10 }}>
-                Terima kasih! Kami akan segera menghubungi email Anda.
-              </p>
-            )}
           </div>
 
           {/* Kolom Kanan: FAQ Subtitle + Clean Accordion Items */}

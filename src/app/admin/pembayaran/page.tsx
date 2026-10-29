@@ -18,6 +18,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  Loader2,
 } from 'lucide-react';
 import { AdminService, AdminPaymentItem } from '@/services/admin.service';
 import { resolvePaymentDuration } from '@/services/plan.service';
@@ -28,6 +29,8 @@ type PaymentItem = AdminPaymentItem;
 export default function AdminPembayaranPage() {
   const { showSuccess, showError } = useModal();
   const [payments, setPayments] = useState<PaymentItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [selectedProof, setSelectedProof] = useState<PaymentItem | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
@@ -68,9 +71,13 @@ export default function AdminPembayaranPage() {
 
   React.useEffect(() => {
     const fetchPayments = () => {
-      AdminService.getPayments().then((data) => {
-        if (data && data.length > 0) setPayments(data);
-      });
+      AdminService.getPayments()
+        .then((data) => {
+          if (data && data.length > 0) setPayments(data);
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
     };
 
     fetchPayments();
@@ -93,28 +100,36 @@ export default function AdminPembayaranPage() {
   };
 
   const handleApprove = async (id: string) => {
+    if (isProcessing) return;
     const target = payments.find((p) => p.id === id);
-    const targetPlan = target?.plan || 'pro';
-    const dur = resolvePaymentDuration(
-      target?.durationDays,
-      target?.durationLabel,
-      target?.amount,
-      targetPlan
-    );
-    await AdminService.approvePayment(id, target?.userId, targetPlan, {
-      email: target?.email,
-      durationDays: dur.days,
-    });
-    setPayments((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, status: 'approved', durationDays: dur.days, durationLabel: dur.label } : p
-      )
-    );
-    setSelectedProof(null);
-    showSuccess(
-      'Pembayaran Berhasil Disetujui!',
-      `Bukti transfer dari ${target?.user} telah diverifikasi. Akun pengguna otomatis ditingkatkan ke paket ${targetPlan.toUpperCase()} (${dur.label} / ${dur.days} Hari).`
-    );
+    if (!target || target.status === 'approved') return;
+
+    setIsProcessing(true);
+    try {
+      const targetPlan = target?.plan || 'pro';
+      const dur = resolvePaymentDuration(
+        target?.durationDays,
+        target?.durationLabel,
+        target?.amount,
+        targetPlan
+      );
+      await AdminService.approvePayment(id, target?.userId, targetPlan, {
+        email: target?.email,
+        durationDays: dur.days,
+      });
+      setPayments((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, status: 'approved', durationDays: dur.days, durationLabel: dur.label } : p
+        )
+      );
+      setSelectedProof(null);
+      showSuccess(
+        'Pembayaran Berhasil Disetujui!',
+        `Bukti transfer dari ${target?.user} telah diverifikasi. Akun pengguna otomatis ditingkatkan ke paket ${targetPlan.toUpperCase()} (${dur.label} / ${dur.days} Hari).`
+      );
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleReject = async (id: string) => {
@@ -215,7 +230,12 @@ export default function AdminPembayaranPage() {
 
       {/* Tabel Pembayaran */}
       <div className="uda-card" style={{ padding: 0, overflow: 'hidden' }}>
-        {filteredPayments.length === 0 ? (
+        {isLoading ? (
+          <div style={{ padding: 48, textAlign: 'center', color: '#64748b', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <Loader2 className="animate-spin" size={20} />
+            <span>Memuat data transaksi pembayaran...</span>
+          </div>
+        ) : filteredPayments.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: '#64748b', fontSize: '0.88rem' }}>
             Tidak ada pembayaran pada kategori ini.
           </div>
