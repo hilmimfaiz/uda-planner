@@ -25,8 +25,10 @@ import {
   TrendingUp,
   Layers,
   Check,
+  MessageCircle,
 } from 'lucide-react';
 import { PlanService, DynamicPlan } from '@/services/plan.service';
+import { AdminService } from '@/services/admin.service';
 import LandingPhoneMockup from '@/components/landing-phone-mockup';
 
 export default function LandingPage() {
@@ -96,24 +98,45 @@ export default function LandingPage() {
     setIsSubmittingInquiry(true);
     setInquiryError(null);
     try {
-      const res = await fetch('/api/inquiries', {
+      // 1. Simpan salinan ke server inquiries sebagai arsip
+      await fetch('/api/inquiries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: inquiryEmail.trim(),
           question: inquiryQuestion.trim() || undefined,
         }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Gagal mengirimkan pertanyaan. Silakan periksa kembali email Anda.');
-      }
+      }).catch(() => {});
+
+      // 2. Dapatkan nomor WhatsApp Admin resmi dari Pengaturan
+      let adminPhone = '6281234567890';
+      try {
+        const settings = await AdminService.getAppSettings();
+        if (settings?.adminWhatsapp) {
+          adminPhone = settings.adminWhatsapp;
+        }
+      } catch {}
+
+      const cleanPhone = adminPhone.replace(/[^0-9]/g, '');
+
+      // 3. Susun pesan WhatsApp dengan format terstruktur dan profesional
+      const message =
+        `Halo Admin UdaPlanner, saya ingin bertanya seputar aplikasi:\n\n` +
+        `📧 *Email:* ${inquiryEmail.trim()}\n` +
+        `💬 *Pertanyaan:* ${inquiryQuestion.trim() || 'Pertanyaan seputar fitur, paket langganan, atau konsultasi tim UdaPlanner'}\n\n` +
+        `Mohon informasinya, terima kasih!`;
+
+      const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+
+      // 4. Arahkan / buka WhatsApp di tab baru
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+
       setInquirySubmitted(true);
       setInquiryEmail('');
       setInquiryQuestion('');
       setTimeout(() => {
         setInquirySubmitted(false);
-      }, 5000);
+      }, 6000);
     } catch (err: any) {
       setInquiryError(err.message || 'Terjadi kesalahan sistem, silakan coba lagi.');
     } finally {
@@ -1284,10 +1307,10 @@ export default function LandingPage() {
       </section>
 
       {/* FAQ Section (Camply Image 1: Got A Question For Campty? + Accordion) */}
-      <section id="faq" style={{ padding: '90px 24px', maxWidth: 1180, margin: '0 auto' }}>
+      <section id="faq" className="faq-section">
         <div className="camply-faq-grid">
           {/* Kolom Kiri: Got a Question + Email Capsule Input */}
-          <div className="scroll-reveal reveal-left">
+          <div className="scroll-reveal reveal-left" style={{ width: '100%' }}>
             <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>
               <svg
                 style={{
@@ -1307,10 +1330,10 @@ export default function LandingPage() {
               </svg>
               <h2
                 style={{
-                  fontSize: 'clamp(2rem, 3.8vw, 3rem)',
+                  fontSize: 'clamp(1.85rem, 3.6vw, 3rem)',
                   fontWeight: 900,
                   color: '#0f172a',
-                  lineHeight: 1.15,
+                  lineHeight: 1.18,
                   letterSpacing: '-0.03em',
                   margin: 0,
                 }}
@@ -1319,24 +1342,13 @@ export default function LandingPage() {
               </h2>
             </div>
 
-            <p style={{ color: '#64748b', fontSize: '0.96rem', lineHeight: 1.6, maxWidth: 420, marginBottom: 28 }}>
+            <p style={{ color: '#64748b', fontSize: '0.96rem', lineHeight: 1.6, maxWidth: 460, marginBottom: 24 }}>
               Jika ada pertanyaan khusus yang ingin Anda ajukan seputar fitur, pembayaran, atau kustomisasi tim, kami siap membantu menjawabnya.
             </p>
 
             {/* Form Pertanyaan Langsung Berfungsi */}
-            <form onSubmit={handleInquirySubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 460 }}>
-              <div
-                style={{
-                  background: '#ffffff',
-                  border: '2.5px solid #0f172a',
-                  borderRadius: 14,
-                  boxShadow: '4px 4px 0px #0f172a',
-                  padding: '14px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 10,
-                }}
-              >
+            <form onSubmit={handleInquirySubmit} className="faq-inquiry-form">
+              <div className="faq-inquiry-card">
                 <input
                   type="email"
                   placeholder="Masukkan Email Anda (cth: anda@gmail.com)"
@@ -1344,17 +1356,7 @@ export default function LandingPage() {
                   onChange={(e) => setInquiryEmail(e.target.value)}
                   required
                   disabled={isSubmittingInquiry}
-                  style={{
-                    border: 'none',
-                    borderBottom: '1.5px solid #cbd5e1',
-                    outline: 'none',
-                    background: 'transparent',
-                    padding: '6px 4px',
-                    fontSize: '0.92rem',
-                    fontWeight: 600,
-                    color: '#0f172a',
-                    width: '100%',
-                  }}
+                  className="faq-inquiry-input"
                 />
                 <textarea
                   rows={2}
@@ -1362,39 +1364,21 @@ export default function LandingPage() {
                   value={inquiryQuestion}
                   onChange={(e) => setInquiryQuestion(e.target.value)}
                   disabled={isSubmittingInquiry}
-                  style={{
-                    border: 'none',
-                    outline: 'none',
-                    background: 'transparent',
-                    padding: '4px',
-                    fontSize: '0.88rem',
-                    color: '#0f172a',
-                    resize: 'none',
-                    fontFamily: 'inherit',
-                  }}
+                  className="faq-inquiry-textarea"
                 />
                 <button
                   type="submit"
                   disabled={isSubmittingInquiry || !inquiryEmail.trim()}
-                  style={{
-                    backgroundColor: '#0f172a',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: 999,
-                    padding: '10px 22px',
-                    fontSize: '0.88rem',
-                    fontWeight: 800,
-                    cursor: isSubmittingInquiry ? 'not-allowed' : 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    alignSelf: 'flex-end',
-                    transition: 'all 0.15s ease',
-                    opacity: isSubmittingInquiry ? 0.7 : 1,
-                  }}
+                  className="faq-inquiry-btn"
                 >
-                  {isSubmittingInquiry ? 'Mengirim Data...' : inquirySubmitted ? 'Terkirim ✓' : 'Kirim Pertanyaan'}
+                  <MessageCircle size={18} />
+                  <span>
+                    {isSubmittingInquiry
+                      ? 'Membuka WhatsApp...'
+                      : inquirySubmitted
+                        ? 'Diteruskan ke WhatsApp ✓'
+                        : 'Kirim ke WhatsApp Admin'}
+                  </span>
                 </button>
               </div>
 
@@ -1404,8 +1388,8 @@ export default function LandingPage() {
                 </p>
               )}
               {inquirySubmitted && (
-                <div style={{ backgroundColor: '#dcfce7', border: '1.5px solid #16a34a', borderRadius: 8, padding: '10px 14px', color: '#15803d', fontSize: '0.86rem', fontWeight: 700, marginTop: 4 }}>
-                  ✓ Pertanyaan berhasil terkirim! Tim UdaPlanner akan segera merespons ke email Anda.
+                <div style={{ backgroundColor: '#dcfce7', border: '1.5px solid #16a34a', borderRadius: 10, padding: '10px 14px', color: '#15803d', fontSize: '0.86rem', fontWeight: 700, marginTop: 4 }}>
+                  ✓ Pertanyaan Anda berhasil diteruskan ke WhatsApp Admin UdaPlanner!
                 </div>
               )}
             </form>

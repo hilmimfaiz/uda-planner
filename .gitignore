@@ -42,3 +42,4 @@ ehthumbs.db
 *.tsbuildinfo
 .server_invitations.json
 .server_payments.json
+.server_inquiries.json
