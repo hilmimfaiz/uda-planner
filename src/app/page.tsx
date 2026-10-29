@@ -125,7 +125,7 @@ export default function LandingPage() {
     e.preventDefault();
     const element = document.getElementById(id);
     if (element) {
-      const navOffset = 80;
+      const navOffset = 90;
       const elementPosition = element.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.pageYOffset - navOffset;
 
@@ -253,7 +253,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', color: '#0f172a', overflowX: 'hidden' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', color: '#0f172a', overflowX: 'clip', position: 'relative' }}>
       {/* Top Navbar */}
       <nav className="camply-top-nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

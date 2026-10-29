@@ -1922,13 +1922,14 @@ tr:last-child td {
 .camply-top-nav {
   position: sticky;
   top: 14px;
-  z-index: 50;
+  z-index: 100;
   margin: 0 auto;
   max-width: 1200px;
   width: calc(100% - 32px);
   padding: 10px 22px;
-  background-color: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(12px);
+  background-color: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-radius: 999px;
   border: 2.5px solid #0f172a;
   box-shadow: 4px 4px 0px #0f172a;
@@ -1936,6 +1937,16 @@ tr:last-child td {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  transition: all 0.2s ease;
+}
+
+/* Scroll margin offset agar judul section tidak tertutup navbar saat diklik */
+#fitur,
+#alur,
+#fitur-demo,
+#harga,
+#faq {
+  scroll-margin-top: 100px;
 }
 
 @media (max-width: 640px) {
