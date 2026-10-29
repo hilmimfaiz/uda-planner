@@ -40,6 +40,7 @@ export default function LandingPhoneMockup() {
 
   return (
     <div
+      className="camply-mockup-wrapper"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       style={{
@@ -95,6 +96,7 @@ export default function LandingPhoneMockup() {
 
       {/* Floating Retro Doodle Clouds */}
       <div
+        className="camply-doodle-cloud-left"
         style={{
           position: 'absolute',
           top: 8,
@@ -116,6 +118,7 @@ export default function LandingPhoneMockup() {
       </div>
 
       <div
+        className="camply-doodle-cloud-right"
         style={{
           position: 'absolute',
           top: 38,
@@ -266,6 +269,7 @@ export default function LandingPhoneMockup() {
             SMARTPHONE DEVICE FRAME (Neo-Brutalist Modern Phone)
             ============================================================ */}
         <div
+          className="camply-phone-frame"
           style={{
             position: 'relative',
             zIndex: 2,

@@ -326,6 +326,7 @@ export default function LandingPage() {
 
       {/* Hero Section (Camply Split Layout - Neo-Brutalism Jaman Dulu) */}
       <header
+        className="camply-hero-header"
         style={{
           padding: '60px 24px 50px',
           maxWidth: 1200,
@@ -433,6 +434,7 @@ export default function LandingPage() {
 
             {/* Tombol Aksi CTA (Camply Pill Style with Retro Brutalist Shadow) */}
             <div
+              className="camply-hero-cta"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -475,6 +477,7 @@ export default function LandingPage() {
       {/* Live Interactive Product Showcase Sandbox (Camply Image 3 Split Layout) */}
       <section
         id="fitur-demo"
+        className="camply-demo-section"
         style={{
           padding: '60px 24px 80px',
           maxWidth: 1200,
@@ -485,7 +488,7 @@ export default function LandingPage() {
           {/* Kolom Kiri: Window Interaktif Live Sandbox */}
           <div className="scroll-reveal reveal-left delay-100">
             <div
-              className="uda-card"
+              className="uda-card camply-sandbox-window"
               style={{
                 width: '100%',
                 padding: 0,
@@ -499,6 +502,7 @@ export default function LandingPage() {
             >
               {/* Header Window Bar */}
               <div
+                className="camply-sandbox-window-bar"
                 style={{
                   backgroundColor: '#0f172a',
                   color: '#f8fafc',
@@ -533,21 +537,21 @@ export default function LandingPage() {
               </div>
 
               {/* Viewport Konten Berdasarkan Tab */}
-              <div style={{ padding: '20px', backgroundColor: '#f8fafc', minHeight: 330 }}>
+              <div className="camply-sandbox-viewport" style={{ padding: '20px', backgroundColor: '#f8fafc', minHeight: 330, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 {activeTabFeature === 'calendar' && (
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a' }}>
+                  <div className="camply-calendar-inner" style={{ minWidth: 280 }}>
+                    <div className="camply-sandbox-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <div className="camply-sandbox-title" style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a' }}>
                         Oktober 2026 — Jadwal Multi-Brand
                       </div>
-                      <span className="status-pill" style={{ backgroundColor: '#dcfce7', color: '#16a34a', fontSize: '0.72rem' }}>
+                      <span className="status-pill camply-sandbox-pill" style={{ backgroundColor: '#dcfce7', color: '#16a34a', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
                         Jadwal Terpadu
                       </span>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, textAlign: 'center' }}>
+                    <div className="camply-calendar-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, textAlign: 'center' }}>
                       {['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((day) => (
-                        <div key={day} style={{ fontWeight: 700, fontSize: '0.72rem', color: '#64748b', paddingBottom: 4 }}>
+                        <div key={day} className="camply-calendar-day-header" style={{ fontWeight: 700, fontSize: '0.72rem', color: '#64748b', paddingBottom: 4 }}>
                           {day}
                         </div>
                       ))}
@@ -563,6 +567,7 @@ export default function LandingPage() {
                       ].map((item, idx) => (
                         <div
                           key={idx}
+                          className="camply-calendar-cell"
                           style={{
                             minHeight: 74,
                             borderRadius: 8,
@@ -577,12 +582,13 @@ export default function LandingPage() {
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: item.today ? '#16a34a' : '#334155' }}>
+                            <span className="camply-calendar-date" style={{ fontSize: '0.7rem', fontWeight: 800, color: item.today ? '#16a34a' : '#334155' }}>
                               {item.date} {item.today && '•'}
                             </span>
-                            <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>{item.time}</span>
+                            <span className="camply-calendar-time" style={{ fontSize: '0.62rem', color: '#94a3b8' }}>{item.time}</span>
                           </div>
                           <div
+                            className="camply-calendar-tag"
                             style={{
                               backgroundColor: `${item.color}15`,
                               borderLeft: `2.5px solid ${item.color}`,
@@ -696,7 +702,7 @@ export default function LandingPage() {
           </div>
 
           {/* Kolom Kanan: Pengantar Fitur & Capsule Selector Dock (Image 3) */}
-          <div className="scroll-reveal reveal-right delay-200">
+          <div className="scroll-reveal reveal-right delay-200 camply-demo-right">
             <h2
               style={{
                 fontSize: 'clamp(2rem, 3.6vw, 2.9rem)',

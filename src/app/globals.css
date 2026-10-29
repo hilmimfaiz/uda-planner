@@ -2350,6 +2350,13 @@ tr:last-child td {
 /* ========================================================
    Camply Hero Phone Mockup & Floating Badges
    ======================================================== */
+.camply-hero-cta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
 .camply-phone-stage {
   position: relative;
   width: 100%;
@@ -2424,26 +2431,207 @@ tr:last-child td {
   }
 }
 
-@media (max-width: 640px) {
-  .camply-badge-top-right {
-    top: 18px;
-    right: -8px;
-    padding: 6px 10px;
-    font-size: 0.72rem;
-    box-shadow: 2.5px 2.5px 0px #0f172a;
+/* ========================================================
+   Landing Page Mobile Optimizations (<= 640px)
+   ======================================================== */
+@media (max-width: 1024px) {
+  .camply-hero-cta {
+    justify-content: center !important;
   }
-  .camply-badge-bottom-left {
-    bottom: 46px;
-    left: -8px;
-    padding: 6px 10px;
-    font-size: 0.72rem;
-    box-shadow: 2.5px 2.5px 0px #0f172a;
+  .camply-demo-right {
+    text-align: center !important;
   }
-  .camply-badge-bottom-right {
-    bottom: 154px;
-    right: -6px;
-    padding: 5px 9px;
-    font-size: 0.68rem;
-    box-shadow: 2px 2px 0px #0f172a;
+  .camply-demo-right h2,
+  .camply-demo-right p {
+    margin-left: auto !important;
+    margin-right: auto !important;
   }
 }
+
+@media (max-width: 640px) {
+  /* 1. Hero Header & Centered CTA Buttons */
+  .camply-hero-header {
+    padding: 36px 14px 40px !important;
+  }
+
+  .camply-hero-cta {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    gap: 12px !important;
+  }
+
+  .camply-hero-cta .btn-camply-dark,
+  .camply-hero-cta .btn-camply-outline {
+    width: 100% !important;
+    max-width: 310px !important;
+    justify-content: center !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 2. Phone Mockup Carousel on Mobile (Never clipped) */
+  .camply-mockup-wrapper {
+    padding: 12px 4px !important;
+    max-width: 100% !important;
+  }
+
+  .camply-phone-stage {
+    max-width: 290px !important;
+  }
+
+  .camply-phone-frame {
+    max-width: 290px !important;
+    box-shadow: 6px 6px 0px #0f172a !important;
+    border-radius: 38px !important;
+  }
+
+  .camply-phone-frame > div:first-child {
+    border-radius: 30px !important;
+    min-height: 480px !important;
+  }
+
+  /* Tucked badges flush with phone border */
+  .camply-badge-top-right {
+    top: 14px !important;
+    right: 4px !important;
+    padding: 4px 8px !important;
+    font-size: 0.68rem !important;
+    box-shadow: 2px 2px 0px #0f172a !important;
+    border-width: 2px !important;
+    transform: rotate(2deg) !important;
+  }
+
+  .camply-badge-bottom-left {
+    bottom: 42px !important;
+    left: 4px !important;
+    padding: 4px 8px !important;
+    font-size: 0.68rem !important;
+    box-shadow: 2px 2px 0px #0f172a !important;
+    border-width: 2px !important;
+    transform: rotate(-2deg) !important;
+  }
+
+  .camply-badge-bottom-right {
+    bottom: 140px !important;
+    right: 4px !important;
+    padding: 3px 7px !important;
+    font-size: 0.64rem !important;
+    box-shadow: 1.5px 1.5px 0px #0f172a !important;
+    border-width: 2px !important;
+    transform: rotate(-1deg) !important;
+  }
+
+  .camply-doodle-cloud-left {
+    left: 4px !important;
+    top: 4px !important;
+    transform: scale(0.75) !important;
+    transform-origin: left top !important;
+  }
+
+  .camply-doodle-cloud-right {
+    right: 4px !important;
+    top: 28px !important;
+    transform: scale(0.75) !important;
+    transform-origin: right top !important;
+  }
+
+  /* 3. Interactive Calendar Demo Section (Scaled & Unclipped) */
+  .camply-demo-section {
+    padding: 40px 14px 60px !important;
+  }
+
+  .camply-sandbox-window {
+    box-shadow: 5px 5px 0px #0f172a !important;
+    border-radius: 12px !important;
+  }
+
+  .camply-sandbox-window-bar {
+    padding: 10px 12px !important;
+  }
+
+  .camply-sandbox-viewport {
+    padding: 12px 8px !important;
+    min-height: 250px !important;
+  }
+
+  .camply-sandbox-header {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .camply-sandbox-title {
+    font-size: 0.78rem !important;
+  }
+
+  .camply-sandbox-pill {
+    font-size: 0.62rem !important;
+    padding: 2px 6px !important;
+  }
+
+  .camply-calendar-grid {
+    gap: 3px !important;
+  }
+
+  .camply-calendar-day-header {
+    font-size: 0.6rem !important;
+    padding-bottom: 2px !important;
+  }
+
+  .camply-calendar-cell {
+    min-height: 52px !important;
+    padding: 3px 2px !important;
+    border-radius: 5px !important;
+  }
+
+  .camply-calendar-date {
+    font-size: 0.58rem !important;
+  }
+
+  .camply-calendar-time {
+    display: none !important;
+  }
+
+  .camply-calendar-tag {
+    font-size: 0.52rem !important;
+    padding: 1px 2px !important;
+    border-left-width: 2px !important;
+    border-radius: 2px !important;
+    line-height: 1.1 !important;
+  }
+
+  .camply-dock-pill {
+    display: flex !important;
+    justify-content: center !important;
+    width: 100% !important;
+    max-width: 330px !important;
+    margin: 0 auto !important;
+    padding: 4px 6px !important;
+    gap: 4px !important;
+  }
+
+  .camply-dock-pill button {
+    padding: 6px 10px !important;
+    font-size: 0.74rem !important;
+    gap: 5px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .camply-phone-stage {
+    max-width: 265px !important;
+  }
+  .camply-phone-frame {
+    max-width: 265px !important;
+    box-shadow: 4px 4px 0px #0f172a !important;
+    border-radius: 32px !important;
+  }
+  .camply-phone-frame > div:first-child {
+    border-radius: 24px !important;
+  }
+}
+
