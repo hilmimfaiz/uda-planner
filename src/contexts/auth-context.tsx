@@ -178,6 +178,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (e) {}
 
+      // Sinkronisasi status konfirmasi email pengguna (SMTP atau Google Auth)
+      const isConfirmed =
+        !!(currentUser.email_confirmed_at || currentUser.confirmed_at || currentUser.user_metadata?.email_verified) ||
+        currentUser.app_metadata?.provider === 'google' ||
+        currentUser.email === 'admin@udaplanner.id';
+
+      if (isConfirmed && currentUser.email) {
+        const cleanEmail = currentUser.email.toLowerCase().trim();
+        try {
+          localStorage.setItem(`uda_manually_verified_${cleanEmail}`, 'true');
+          localStorage.setItem(`uda_manually_verified_${currentUser.id}`, 'true');
+          localStorage.removeItem(`uda_unverified_registration_${cleanEmail}`);
+          localStorage.removeItem(`uda_unverified_registration_${currentUser.id}`);
+        } catch (e) {}
+      }
+
       // 2. Proses Akun
       let finalAccount: UserAccount;
 
@@ -640,6 +656,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             data: { has_logged_in_before: true },
           }).catch(() => {});
         }
+      }
+
+      // Pengguna yang berhasil login berarti telah terverifikasi
+      if (data.user?.email) {
+        const cEmail = data.user.email.toLowerCase().trim();
+        try {
+          localStorage.setItem(`uda_manually_verified_${cEmail}`, 'true');
+          localStorage.setItem(`uda_manually_verified_${data.user.id}`, 'true');
+          localStorage.removeItem(`uda_unverified_registration_${cEmail}`);
+          localStorage.removeItem(`uda_unverified_registration_${data.user.id}`);
+        } catch (e) {}
       }
 
       return { error: null, isAdmin: isUserAdmin, needsOnboarding };

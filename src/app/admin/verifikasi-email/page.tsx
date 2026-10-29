@@ -56,6 +56,26 @@ export default function AdminVerifikasiEmailPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
+      const res = await fetch('/api/admin/verify-email');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setUsers(json.data.users || []);
+          setStats(
+            json.data.stats || {
+              totalUsers: 0,
+              unverifiedEmailCount: 0,
+              verifiedEmailCount: 0,
+              failedDeliveryCount: 0,
+              manualVerifiedCount: 0,
+              pendingRegistrationCount: 0,
+            }
+          );
+          setLogs(json.data.logs || []);
+          return;
+        }
+      }
+
       const [uList, sData, lList] = await Promise.all([
         VerificationService.getVerifiableUsers(),
         VerificationService.getVerificationStats(),
@@ -90,14 +110,28 @@ export default function AdminVerifikasiEmailPage() {
     setIsSubmittingVerify(true);
 
     try {
-      const success = await VerificationService.manualVerifyEmail(
-        targetUserToVerify.userId,
-        'admin-001',
-        'Administrator',
-        verifyNote
-      );
+      const res = await fetch('/api/admin/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'manual_verify',
+          userId: targetUserToVerify.userId,
+          email: targetUserToVerify.email,
+          adminId: 'admin-001',
+          adminName: 'Administrator',
+          note: verifyNote,
+        }),
+      });
+      const data = await res.json();
 
-      if (success) {
+      if (data.success) {
+        await VerificationService.manualVerifyEmail(
+          targetUserToVerify.userId,
+          targetUserToVerify.email,
+          'Administrator',
+          verifyNote
+        );
+
         showSuccess(
           'Email Berhasil Diverifikasi Manual!',
           `Alamat email ${targetUserToVerify.email} milik "${targetUserToVerify.name}" telah aktif dan terverifikasi di sistem database tanpa hambatan SMTP.`
@@ -106,7 +140,7 @@ export default function AdminVerifikasiEmailPage() {
         setVerifyNote('Verifikasi manual oleh admin (SMTP Limit)');
         await loadData();
       } else {
-        showError('Gagal Memverifikasi', 'Terjadi kendala saat memperbarui status di database.');
+        showError('Gagal Memverifikasi', data.error || 'Terjadi kendala saat memperbarui status di database.');
       }
     } catch (err: any) {
       showError('Terjadi Kesalahan', err.message);
@@ -118,16 +152,23 @@ export default function AdminVerifikasiEmailPage() {
   const handleResendEmail = async (user: VerifiableUser) => {
     setResendingUserId(user.userId);
     try {
-      const result = await VerificationService.resendVerificationEmail(
-        user.userId,
-        'admin-001',
-        'Administrator'
-      );
+      const res = await fetch('/api/admin/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'resend_email',
+          userId: user.userId,
+          email: user.email,
+          adminId: 'admin-001',
+          adminName: 'Administrator',
+        }),
+      });
+      const result = await res.json();
 
       if (result.success) {
-        showSuccess('Email Terkirim', result.message);
+        showSuccess('Email Terkirim', result.message || 'Tautan verifikasi email berhasil dikirim ulang ke alamat pengguna.');
       } else {
-        showError('Pengiriman SMTP Gagal', result.message);
+        showError('Pengiriman SMTP Gagal', result.message || 'Gagal mengirim ulang email verifikasi.');
       }
       await loadData();
     } catch (err: any) {

@@ -69,6 +69,24 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Jika user tiba melalui tautan konfirmasi email (?verified=true)
+  useEffect(() => {
+    if (isVerified && typeof window !== 'undefined') {
+      try {
+        const keys = Object.keys(localStorage);
+        keys.forEach((k) => {
+          if (k.startsWith('uda_unverified_registration_')) {
+            const target = k.replace('uda_unverified_registration_', '');
+            localStorage.setItem(`uda_manually_verified_${target}`, 'true');
+            localStorage.removeItem(k);
+          }
+        });
+        window.dispatchEvent(new CustomEvent('uda_user_verified'));
+        window.dispatchEvent(new Event('storage'));
+      } catch (e) {}
+    }
+  }, [isVerified]);
+
   // Jika user sudah terautentikasi sebelumnya
   useEffect(() => {
     if (typeof window !== 'undefined') {
