@@ -2347,7 +2347,103 @@ tr:last-child td {
   }
 }
 
+/* ========================================================
+   Camply Hero Phone Mockup & Floating Badges
+   ======================================================== */
+.camply-phone-stage {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+  z-index: 2;
+}
 
+.camply-badge-top-right {
+  position: absolute;
+  top: 26px;
+  right: -20px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-weight: 800;
+  font-size: 0.82rem;
+  border: 2.5px solid #0f172a;
+  border-radius: 10px;
+  box-shadow: 4px 4px 0px #0f172a;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: badgeFadeIn 0.35s ease-out;
+}
 
+.camply-badge-bottom-left {
+  position: absolute;
+  bottom: 56px;
+  left: -20px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-weight: 800;
+  font-size: 0.82rem;
+  border: 2.5px solid #0f172a;
+  border-radius: 10px;
+  box-shadow: 4px 4px 0px #0f172a;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: badgeFadeIn 0.35s ease-out;
+}
 
+.camply-badge-bottom-right {
+  position: absolute;
+  bottom: 168px;
+  right: -16px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  font-weight: 800;
+  font-size: 0.78rem;
+  border: 2.5px solid #0f172a;
+  border-radius: 10px;
+  box-shadow: 3px 3px 0px #0f172a;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: badgeFadeIn 0.35s ease-out;
+}
 
+@keyframes badgeFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .camply-badge-top-right {
+    top: 18px;
+    right: -8px;
+    padding: 6px 10px;
+    font-size: 0.72rem;
+    box-shadow: 2.5px 2.5px 0px #0f172a;
+  }
+  .camply-badge-bottom-left {
+    bottom: 46px;
+    left: -8px;
+    padding: 6px 10px;
+    font-size: 0.72rem;
+    box-shadow: 2.5px 2.5px 0px #0f172a;
+  }
+  .camply-badge-bottom-right {
+    bottom: 154px;
+    right: -6px;
+    padding: 5px 9px;
+    font-size: 0.68rem;
+    box-shadow: 2px 2px 0px #0f172a;
+  }
+}

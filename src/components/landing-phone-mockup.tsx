@@ -48,43 +48,57 @@ export default function LandingPhoneMockup() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '24px 16px',
-        maxWidth: 540,
+        padding: '24px 20px',
+        maxWidth: 480,
         width: '100%',
         margin: '0 auto',
-        overflow: 'hidden',
+        overflow: 'visible',
       }}
     >
       {/* ============================================================
-          CONCENTRIC RIPPLE RINGS (Aesthetic background from reference)
+          CONCENTRIC RIPPLE RINGS (Aesthetic background contained)
           ============================================================ */}
-      <svg
+      <div
         aria-hidden="true"
         style={{
           position: 'absolute',
           top: '46%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: '140%',
-          height: '140%',
+          width: '120%',
+          height: '120%',
+          maxWidth: 540,
+          maxHeight: 540,
           pointerEvents: 'none',
           zIndex: 0,
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
-        viewBox="0 0 600 600"
-        fill="none"
       >
-        <circle cx="300" cy="300" r="270" stroke="#e2e8f0" strokeWidth="1.5" strokeDasharray="4 6" opacity="0.7" />
-        <circle cx="300" cy="300" r="215" stroke="#cbd5e1" strokeWidth="1.5" opacity="0.8" />
-        <circle cx="300" cy="300" r="160" stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="6 6" opacity="0.85" />
-        <circle cx="300" cy="300" r="110" stroke="#94a3b8" strokeWidth="1.5" opacity="0.6" />
-      </svg>
+        <svg
+          style={{
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+          }}
+          viewBox="0 0 600 600"
+          fill="none"
+        >
+          <circle cx="300" cy="300" r="270" stroke="#e2e8f0" strokeWidth="1.5" strokeDasharray="4 6" opacity="0.7" />
+          <circle cx="300" cy="300" r="215" stroke="#cbd5e1" strokeWidth="1.5" opacity="0.8" />
+          <circle cx="300" cy="300" r="160" stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="6 6" opacity="0.85" />
+          <circle cx="300" cy="300" r="110" stroke="#94a3b8" strokeWidth="1.5" opacity="0.6" />
+        </svg>
+      </div>
 
       {/* Floating Retro Doodle Clouds */}
       <div
         style={{
           position: 'absolute',
-          top: 10,
-          left: -15,
+          top: 8,
+          left: 12,
           zIndex: 3,
           pointerEvents: 'none',
           animation: 'pulse 4s ease-in-out infinite',
@@ -104,8 +118,8 @@ export default function LandingPhoneMockup() {
       <div
         style={{
           position: 'absolute',
-          top: 45,
-          right: -25,
+          top: 38,
+          right: 10,
           zIndex: 3,
           pointerEvents: 'none',
         }}
@@ -122,271 +136,150 @@ export default function LandingPhoneMockup() {
       </div>
 
       {/* ============================================================
-          DYNAMIC FLOATING BADGES BERDASARKAN SLIDE AKTIF
+          PHONE STAGE WRAPPER (Device Frame + Anchored Floating Badges)
           ============================================================ */}
-      {activeSlide === 0 && (
-        <>
-          <div
-            className="scroll-reveal revealed"
-            style={{
-              position: 'absolute',
-              top: 36,
-              right: -14,
-              zIndex: 10,
-              backgroundColor: '#dcfce7',
-              color: '#15803d',
-              border: '2.5px solid #0f172a',
-              borderRadius: 10,
-              padding: '8px 14px',
-              fontWeight: 800,
-              fontSize: '0.82rem',
-              boxShadow: '4px 4px 0px #0f172a',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              transform: 'rotate(4deg)',
-              transition: 'all 0.3s ease',
-            }}
-          >
-            <CheckCircle2 size={16} />
-            <span>100% Terjadwal</span>
-          </div>
+      <div className="camply-phone-stage">
+        {/* ============================================================
+            DYNAMIC FLOATING BADGES BERDASARKAN SLIDE AKTIF
+            ============================================================ */}
+        {activeSlide === 0 && (
+          <>
+            <div
+              className="camply-badge-top-right"
+              style={{
+                backgroundColor: '#dcfce7',
+                color: '#15803d',
+                transform: 'rotate(4deg)',
+              }}
+            >
+              <CheckCircle2 size={16} />
+              <span>100% Terjadwal</span>
+            </div>
 
-          <div
-            className="scroll-reveal revealed"
-            style={{
-              position: 'absolute',
-              bottom: 60,
-              left: -20,
-              zIndex: 10,
-              backgroundColor: '#fef08a',
-              color: '#0f172a',
-              border: '2.5px solid #0f172a',
-              borderRadius: 10,
-              padding: '8px 14px',
-              fontWeight: 800,
-              fontSize: '0.82rem',
-              boxShadow: '4px 4px 0px #0f172a',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              transform: 'rotate(-4deg)',
-              transition: 'all 0.3s ease',
-            }}
-          >
-            <Grid size={15} style={{ color: '#0f172a' }} />
-            <span>Preview Grid IG</span>
-          </div>
+            <div
+              className="camply-badge-bottom-left"
+              style={{
+                backgroundColor: '#fef08a',
+                color: '#0f172a',
+                transform: 'rotate(-4deg)',
+              }}
+            >
+              <Grid size={15} style={{ color: '#0f172a' }} />
+              <span>Preview Grid IG</span>
+            </div>
 
-          <div
-            className="scroll-reveal revealed"
-            style={{
-              position: 'absolute',
-              bottom: 175,
-              right: -24,
-              zIndex: 10,
-              backgroundColor: '#ffedd5',
-              color: '#c2410c',
-              border: '2.5px solid #0f172a',
-              borderRadius: 10,
-              padding: '6px 12px',
-              fontWeight: 800,
-              fontSize: '0.78rem',
-              boxShadow: '3px 3px 0px #0f172a',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              transform: 'rotate(-2deg)',
-              transition: 'all 0.3s ease',
-            }}
-          >
-            <Layers size={14} />
-            <span>Multi-Brand Aktif</span>
-          </div>
-        </>
-      )}
+            <div
+              className="camply-badge-bottom-right"
+              style={{
+                backgroundColor: '#ffedd5',
+                color: '#c2410c',
+                transform: 'rotate(-2deg)',
+              }}
+            >
+              <Layers size={14} />
+              <span>Multi-Brand Aktif</span>
+            </div>
+          </>
+        )}
 
-      {activeSlide === 1 && (
-        <>
-          <div
-            className="scroll-reveal revealed"
-            style={{
-              position: 'absolute',
-              top: 36,
-              right: -14,
-              zIndex: 10,
-              backgroundColor: '#e0f2fe',
-              color: '#0284c7',
-              border: '2.5px solid #0f172a',
-              borderRadius: 10,
-              padding: '8px 14px',
-              fontWeight: 800,
-              fontSize: '0.82rem',
-              boxShadow: '4px 4px 0px #0f172a',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              transform: 'rotate(3deg)',
-              transition: 'all 0.3s ease',
-            }}
-          >
-            <Grid size={16} />
-            <span>Visual 3-Kolom Rapi</span>
-          </div>
+        {activeSlide === 1 && (
+          <>
+            <div
+              className="camply-badge-top-right"
+              style={{
+                backgroundColor: '#e0f2fe',
+                color: '#0284c7',
+                transform: 'rotate(3deg)',
+              }}
+            >
+              <Grid size={16} />
+              <span>Visual 3-Kolom Rapi</span>
+            </div>
 
-          <div
-            className="scroll-reveal revealed"
-            style={{
-              position: 'absolute',
-              bottom: 60,
-              left: -20,
-              zIndex: 10,
-              backgroundColor: '#fae8ff',
-              color: '#a21caf',
-              border: '2.5px solid #0f172a',
-              borderRadius: 10,
-              padding: '8px 14px',
-              fontWeight: 800,
-              fontSize: '0.82rem',
-              boxShadow: '4px 4px 0px #0f172a',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              transform: 'rotate(-3deg)',
-              transition: 'all 0.3s ease',
-            }}
-          >
-            <Sparkles size={15} />
-            <span>Harmonisasi Feed</span>
-          </div>
+            <div
+              className="camply-badge-bottom-left"
+              style={{
+                backgroundColor: '#fae8ff',
+                color: '#a21caf',
+                transform: 'rotate(-3deg)',
+              }}
+            >
+              <Sparkles size={15} />
+              <span>Harmonisasi Feed</span>
+            </div>
 
-          <div
-            className="scroll-reveal revealed"
-            style={{
-              position: 'absolute',
-              bottom: 175,
-              right: -24,
-              zIndex: 10,
-              backgroundColor: '#fef9c3',
-              color: '#854d0e',
-              border: '2.5px solid #0f172a',
-              borderRadius: 10,
-              padding: '6px 12px',
-              fontWeight: 800,
-              fontSize: '0.78rem',
-              boxShadow: '3px 3px 0px #0f172a',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              transform: 'rotate(2deg)',
-              transition: 'all 0.3s ease',
-            }}
-          >
-            <CheckCircle2 size={14} />
-            <span>Tone Warna Selaras</span>
-          </div>
-        </>
-      )}
+            <div
+              className="camply-badge-bottom-right"
+              style={{
+                backgroundColor: '#fef9c3',
+                color: '#854d0e',
+                transform: 'rotate(2deg)',
+              }}
+            >
+              <CheckCircle2 size={14} />
+              <span>Tone Warna Selaras</span>
+            </div>
+          </>
+        )}
 
-      {activeSlide === 2 && (
-        <>
-          <div
-            className="scroll-reveal revealed"
-            style={{
-              position: 'absolute',
-              top: 36,
-              right: -14,
-              zIndex: 10,
-              backgroundColor: '#ffedd5',
-              color: '#c2410c',
-              border: '2.5px solid #0f172a',
-              borderRadius: 10,
-              padding: '8px 14px',
-              fontWeight: 800,
-              fontSize: '0.82rem',
-              boxShadow: '4px 4px 0px #0f172a',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              transform: 'rotate(4deg)',
-              transition: 'all 0.3s ease',
-            }}
-          >
-            <Copy size={16} />
-            <span>1-Klik Salin Caption</span>
-          </div>
+        {activeSlide === 2 && (
+          <>
+            <div
+              className="camply-badge-top-right"
+              style={{
+                backgroundColor: '#ffedd5',
+                color: '#c2410c',
+                transform: 'rotate(4deg)',
+              }}
+            >
+              <Copy size={16} />
+              <span>1-Klik Salin Caption</span>
+            </div>
 
-          <div
-            className="scroll-reveal revealed"
-            style={{
-              position: 'absolute',
-              bottom: 60,
-              left: -20,
-              zIndex: 10,
-              backgroundColor: '#dcfce7',
-              color: '#16a34a',
-              border: '2.5px solid #0f172a',
-              borderRadius: 10,
-              padding: '8px 14px',
-              fontWeight: 800,
-              fontSize: '0.82rem',
-              boxShadow: '4px 4px 0px #0f172a',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              transform: 'rotate(-4deg)',
-              transition: 'all 0.3s ease',
-            }}
-          >
-            <Clock size={15} />
-            <span>Pengingat Tepat Waktu</span>
-          </div>
+            <div
+              className="camply-badge-bottom-left"
+              style={{
+                backgroundColor: '#dcfce7',
+                color: '#16a34a',
+                transform: 'rotate(-4deg)',
+              }}
+            >
+              <Clock size={15} />
+              <span>Pengingat Tepat Waktu</span>
+            </div>
 
-          <div
-            className="scroll-reveal revealed"
-            style={{
-              position: 'absolute',
-              bottom: 175,
-              right: -24,
-              zIndex: 10,
-              backgroundColor: '#f3e8ff',
-              color: '#7e22ce',
-              border: '2.5px solid #0f172a',
-              borderRadius: 10,
-              padding: '6px 12px',
-              fontWeight: 800,
-              fontSize: '0.78rem',
-              boxShadow: '3px 3px 0px #0f172a',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              transform: 'rotate(-2deg)',
-              transition: 'all 0.3s ease',
-            }}
-          >
-            <Hash size={14} />
-            <span>Template Hook Viral</span>
-          </div>
-        </>
-      )}
+            <div
+              className="camply-badge-bottom-right"
+              style={{
+                backgroundColor: '#f3e8ff',
+                color: '#7e22ce',
+                transform: 'rotate(-2deg)',
+              }}
+            >
+              <Hash size={14} />
+              <span>Template Hook Viral</span>
+            </div>
+          </>
+        )}
 
-      {/* ============================================================
-          SMARTPHONE DEVICE FRAME (Neo-Brutalist Modern Phone)
-          ============================================================ */}
-      <div
-        style={{
-          position: 'relative',
-          zIndex: 2,
-          width: '100%',
-          maxWidth: 320,
-          backgroundColor: '#0f172a',
-          borderRadius: 44,
-          padding: '10px',
-          border: '3.5px solid #0f172a',
-          boxShadow: '10px 10px 0px #0f172a',
-          transition: 'transform 0.25s ease, box-shadow 0.25s ease',
-        }}
-      >
+        {/* ============================================================
+            SMARTPHONE DEVICE FRAME (Neo-Brutalist Modern Phone)
+            ============================================================ */}
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 2,
+            width: '100%',
+            maxWidth: 320,
+            backgroundColor: '#0f172a',
+            borderRadius: 44,
+            padding: '10px',
+            border: '3.5px solid #0f172a',
+            boxShadow: '10px 10px 0px #0f172a',
+            transition: 'transform 0.25s ease, box-shadow 0.25s ease',
+            margin: '0 auto',
+          }}
+        >
         {/* Inner Phone Screen */}
         <div
           style={{
@@ -1048,6 +941,7 @@ export default function LandingPhoneMockup() {
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       {/* ============================================================
