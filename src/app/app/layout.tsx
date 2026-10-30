@@ -603,6 +603,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 >
                   <Menu size={19} />
                 </button>
+              ) : pathname.startsWith('/app/postingan/') ? (
+                <div style={{ width: 38, height: 38 }} />
               ) : (
                 <button
                   type="button"
