@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Users, CheckCircle2, ShieldCheck, ArrowRight, Loader2, LogIn, Sparkles, Building } from 'lucide-react';
+import { Users, CheckCircle2, ShieldCheck, ArrowRight, Loader2, LogIn, Sparkles, Building, Clock, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { MemberService } from '@/services/member.service';
 import { createClient } from '@/lib/supabase/client';
@@ -21,6 +21,7 @@ export default function UndanganAnggotaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isJoining, setIsJoining] = useState(false);
   const [accepted, setAccepted] = useState(false);
+  const [isExpired, setIsExpired] = useState(false);
   const [inviteData, setInviteData] = useState<{
     id?: string;
     brand_id: string;
@@ -30,6 +31,7 @@ export default function UndanganAnggotaPage() {
     role: string;
     inviter_name: string;
     target_email?: string;
+    expires_at?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -140,6 +142,25 @@ export default function UndanganAnggotaPage() {
         };
       }
 
+      // Cek apakah tautan telah kedaluwarsa (dibatasi 1 jam saja)
+      const qExp = searchParams.get('exp');
+      let linkIsExpired = false;
+
+      if (qExp) {
+        const expNum = Number(qExp);
+        if (!isNaN(expNum) && Date.now() > expNum) {
+          linkIsExpired = true;
+        }
+      }
+
+      if (found?.expires_at) {
+        const expDate = new Date(found.expires_at).getTime();
+        if (!isNaN(expDate) && Date.now() > expDate) {
+          linkIsExpired = true;
+        }
+      }
+
+      setIsExpired(linkIsExpired);
       setInviteData(found);
       setIsLoading(false);
     };
@@ -354,6 +375,95 @@ export default function UndanganAnggotaPage() {
           </p>
           <Link href="/app" className="btn-uda btn-uda-primary" style={{ width: '100%', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 44, fontWeight: 800 }}>
             Kembali ke Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (isExpired) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #fff7ed 0%, #ffffff 50%, #fef2f2 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20,
+        }}
+      >
+        <div
+          className="uda-card"
+          style={{
+            maxWidth: 480,
+            width: '100%',
+            padding: 36,
+            textAlign: 'center',
+            borderRadius: 20,
+            border: '2.5px solid #0f172a',
+            boxShadow: '8px 8px 0px #0f172a',
+            backgroundColor: '#ffffff',
+          }}
+        >
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 16,
+              background: '#fee2e2',
+              color: '#dc2626',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              border: '2px solid #0f172a',
+              boxShadow: '3px 3px 0px #0f172a',
+            }}
+          >
+            <Clock size={32} />
+          </div>
+
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              backgroundColor: '#fee2e2',
+              color: '#b91c1c',
+              fontSize: '0.74rem',
+              fontWeight: 800,
+              padding: '4px 12px',
+              borderRadius: 999,
+              marginBottom: 14,
+              border: '1px solid #fca5a5',
+            }}
+          >
+            <span>⏱️ TAUTAN KEDALUWARSA (BATAS 1 JAM)</span>
+          </div>
+
+          <h1 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#0f172a', marginBottom: 12 }}>
+            Tautan Undangan Sudah Kedaluwarsa
+          </h1>
+
+          <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: 24 }}>
+            Tautan undangan untuk brand <strong>"{inviteData?.brand_name || 'Brand'}"</strong> telah melewati batas waktu berlaku (1 jam) dan otomatis dinonaktifkan demi keamanan. Silakan minta pemilik brand untuk membuat tautan undangan baru.
+          </p>
+
+          <Link
+            href="/app"
+            className="btn-uda btn-uda-primary"
+            style={{
+              width: '100%',
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 46,
+              fontWeight: 800,
+            }}
+          >
+            Kembali ke Beranda
           </Link>
         </div>
       </div>

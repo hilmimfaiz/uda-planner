@@ -136,6 +136,8 @@ export default function PengaturanBrandDetailPage() {
   const [copyLinkRole, setCopyLinkRole] = useState<'editor' | 'reviewer' | 'viewer'>('editor');
   const [copyLinkToken, setCopyLinkToken] = useState<string>('');
   const [isCopyLinkCopied, setIsCopyLinkCopied] = useState<boolean>(false);
+  const [showCopySuccessModal, setShowCopySuccessModal] = useState<boolean>(false);
+  const [copiedLinkInfo, setCopiedLinkInfo] = useState<{ url: string; role: string; expiresAtTime: string } | null>(null);
 
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
   const [isAccessDenied, setIsAccessDenied] = useState<boolean>(false);
@@ -324,7 +326,14 @@ export default function PengaturanBrandDetailPage() {
           };
         });
         localStorage.setItem('uda_brand_invitations', JSON.stringify(mapped));
-        setPendingInvites(mapped.filter((inv: any) => inv.brand_id === brandId && inv.status === 'pending'));
+        setPendingInvites(mapped.filter((inv: any) =>
+          inv.brand_id === brandId &&
+          inv.status === 'pending' &&
+          !inv.is_link_invite &&
+          Boolean(inv.target_email || inv.email) &&
+          (inv.target_email || inv.email).trim() !== '' &&
+          inv.target_name !== 'Penerima Tautan'
+        ));
       } catch {}
     };
 
@@ -552,7 +561,14 @@ export default function PengaturanBrandDetailPage() {
       const allInvites = raw ? JSON.parse(raw) : [];
       const updated = [newInvite, ...allInvites.filter((i: any) => !(i.brand_id === brand.id && i.target_email === newInvite.target_email))];
       localStorage.setItem('uda_brand_invitations', JSON.stringify(updated));
-      setPendingInvites(updated.filter((i: any) => i.brand_id === brand.id && i.status === 'pending'));
+      setPendingInvites(updated.filter((i: any) =>
+        i.brand_id === brand.id &&
+        i.status === 'pending' &&
+        !i.is_link_invite &&
+        Boolean(i.target_email || i.email) &&
+        (i.target_email || i.email).trim() !== '' &&
+        i.target_name !== 'Penerima Tautan'
+      ));
     } catch {}
 
     const rawPhone = inviteWaPhone || searchedUser.phone || '';
@@ -676,7 +692,14 @@ export default function PengaturanBrandDetailPage() {
       } catch {}
       const updatedAll = [newInvite, ...allInvites.filter((i: any) => !(i.brand_id === brand.id && (i.target_email || i.email)?.toLowerCase() === newInvite.target_email))];
       localStorage.setItem('uda_brand_invitations', JSON.stringify(updatedAll));
-      setPendingInvites(updatedAll.filter((i: any) => i.brand_id === brand.id && i.status === 'pending'));
+      setPendingInvites(updatedAll.filter((i: any) =>
+        i.brand_id === brand.id &&
+        i.status === 'pending' &&
+        !i.is_link_invite &&
+        Boolean(i.target_email || i.email) &&
+        (i.target_email || i.email).trim() !== '' &&
+        i.target_name !== 'Penerima Tautan'
+      ));
 
       // 3. Dispatch realtime notifikasi di client
       addAppNotification({
@@ -743,7 +766,14 @@ export default function PengaturanBrandDetailPage() {
             const list = JSON.parse(raw);
             const filtered = list.filter((inv: any) => inv.id !== inviteId);
             localStorage.setItem('uda_brand_invitations', JSON.stringify(filtered));
-            setPendingInvites(filtered.filter((inv: any) => inv.brand_id === brand.id && inv.status === 'pending'));
+            setPendingInvites(filtered.filter((inv: any) =>
+              inv.brand_id === brand.id &&
+              inv.status === 'pending' &&
+              !inv.is_link_invite &&
+              Boolean(inv.target_email || inv.email) &&
+              (inv.target_email || inv.email).trim() !== '' &&
+              inv.target_name !== 'Penerima Tautan'
+            ));
           }
           playSuccessSound();
           showToast(`Undangan untuk ${targetName} berhasil dibatalkan`);
@@ -760,18 +790,23 @@ export default function PengaturanBrandDetailPage() {
     setShowCopyLinkModal(true);
   };
 
-  const getCopyInviteUrl = (role: 'editor' | 'reviewer' | 'viewer', tokenVal: string) => {
+  const getCopyInviteUrl = (role: 'editor' | 'reviewer' | 'viewer', tokenVal: string, expTimeMs?: number) => {
     const siteUrl = getSiteUrl();
     const inviterName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Owner';
-    return `${siteUrl}/undangan/${tokenVal}?brand=${brand.id}&name=${encodeURIComponent(brand.name)}&role=${role}&inviter=${encodeURIComponent(inviterName)}`;
+    const exp = expTimeMs || (Date.now() + 60 * 60 * 1000);
+    return `${siteUrl}/undangan/${tokenVal}?brand=${brand.id}&name=${encodeURIComponent(brand.name)}&role=${role}&inviter=${encodeURIComponent(inviterName)}&exp=${exp}`;
   };
 
   const handleCopyLinkExecute = async () => {
     const currentToken = copyLinkToken || Math.random().toString(36).substring(2, 12);
     if (!copyLinkToken) setCopyLinkToken(currentToken);
 
-    const joinUrl = getCopyInviteUrl(copyLinkRole, currentToken);
-    const inviterName = user?.user_metadata?.full_name || user?.email || 'Owner';
+    const expTime = Date.now() + 60 * 60 * 1000;
+    const expiresAtIso = new Date(expTime).toISOString();
+    const expiryTimeString = new Date(expTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+    const joinUrl = getCopyInviteUrl(copyLinkRole, currentToken, expTime);
+    const inviterName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Owner';
 
     try {
       await navigator.clipboard.writeText(joinUrl);
@@ -785,7 +820,6 @@ export default function PengaturanBrandDetailPage() {
     }
 
     setIsCopyLinkCopied(true);
-    setTimeout(() => setIsCopyLinkCopied(false), 3000);
     playSuccessSound();
 
     const roleName = copyLinkRole === 'editor' ? 'Editor' : copyLinkRole === 'reviewer' ? 'Reviewer' : 'Viewer';
@@ -806,6 +840,7 @@ export default function PengaturanBrandDetailPage() {
       is_link_invite: true,
       status: 'pending' as const,
       created_at: new Date().toISOString(),
+      expires_at: expiresAtIso,
     };
 
     try {
@@ -829,9 +864,19 @@ export default function PengaturanBrandDetailPage() {
           inviterName,
           inviterEmail: user?.email,
           isLinkInvite: true,
+          expiresAt: expiresAtIso,
         }),
       }).catch(() => {});
     } catch {}
+
+    // Buka pop-up pesan tautan telah disalin dengan info batas durasi 1 jam
+    setCopiedLinkInfo({
+      url: joinUrl,
+      role: copyLinkRole,
+      expiresAtTime: expiryTimeString,
+    });
+    setShowCopyLinkModal(false);
+    setShowCopySuccessModal(true);
   };
 
   const handleShareLinkWhatsApp = () => {
@@ -2413,6 +2458,10 @@ export default function PengaturanBrandDetailPage() {
                 >
                   {getCopyInviteUrl(copyLinkRole, copyLinkToken || 'token-undangan')}
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: '0.74rem', color: '#d97706', fontWeight: 700 }}>
+                  <Clock size={13} />
+                  <span>Tautan ini dibatasi hanya berlaku 1 jam saja setelah disalin.</span>
+                </div>
               </div>
 
               {/* Modal Actions */}
@@ -2460,6 +2509,196 @@ export default function PengaturanBrandDetailPage() {
                     gap: 6,
                   }}
                   title="Bagikan undangan via WhatsApp"
+                >
+                  <Share2 size={16} />
+                  <span>Kirim ke WA</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL POPUP: PESAN TAUTAN TELAH DISALIN (DURASI 1 JAM) */}
+      {showCopySuccessModal && copiedLinkInfo && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.72)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1050,
+            padding: 16,
+          }}
+          onClick={() => setShowCopySuccessModal(false)}
+        >
+          <div
+            className="uda-card"
+            style={{
+              maxWidth: 480,
+              width: '100%',
+              padding: 0,
+              borderRadius: 20,
+              border: '2.5px solid #0f172a',
+              boxShadow: '8px 8px 0px #0f172a',
+              backgroundColor: '#ffffff',
+              overflow: 'hidden',
+              animation: 'fadeIn 0.2s ease-out',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '18px 24px',
+                borderBottom: '2px solid #0f172a',
+                background: '#f0fdf4',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: '#16a34a',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1.5px solid #0f172a',
+                  }}
+                >
+                  <Check size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>
+                    Tautan Telah Berhasil Disalin!
+                  </h3>
+                  <p style={{ fontSize: '0.78rem', color: '#166534', margin: 0 }}>
+                    Tautan siap dibagikan kepada calon anggota
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCopySuccessModal(false)}
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 8,
+                  border: '1.5px solid #cbd5e1',
+                  background: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Info Brand & Role */}
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  background: '#f8fafc',
+                  border: '1.5px solid #e2e8f0',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700 }}>BRAND TUJUAN:</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 900, color: '#0f172a' }}>{brand.name}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700 }}>ROLE DIBERIKAN:</div>
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 800,
+                      padding: '2px 10px',
+                      borderRadius: 6,
+                      background: copiedLinkInfo.role === 'editor' ? '#dcfce7' : copiedLinkInfo.role === 'reviewer' ? '#fef3c7' : '#dbeafe',
+                      color: copiedLinkInfo.role === 'editor' ? '#15803d' : copiedLinkInfo.role === 'reviewer' ? '#b45309' : '#1d4ed8',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {copiedLinkInfo.role}
+                  </span>
+                </div>
+              </div>
+
+              {/* Box Link */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 4 }}>
+                  TAUTAN UNDANGAN (SUDAH DISALIN):
+                </label>
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    background: '#f1f5f9',
+                    border: '1.5px solid #cbd5e1',
+                    fontSize: '0.76rem',
+                    fontFamily: 'monospace',
+                    wordBreak: 'break-all',
+                    color: '#334155',
+                  }}
+                >
+                  {copiedLinkInfo.url}
+                </div>
+              </div>
+
+              {/* Warning Notice: Batas 1 Jam */}
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  background: '#fffbeb',
+                  border: '1.5px solid #fde68a',
+                  display: 'flex',
+                  gap: 10,
+                  alignItems: 'flex-start',
+                }}
+              >
+                <Clock size={18} style={{ color: '#d97706', flexShrink: 0, marginTop: 2 }} />
+                <div style={{ fontSize: '0.8rem', color: '#92400e', lineHeight: 1.5 }}>
+                  <strong>⏱️ Batas Waktu 1 Jam:</strong> Tautan undangan ini dibatasi durasi aktifnya selama <strong>1 jam saja</strong> (kedaluwarsa pukul <strong>{copiedLinkInfo.expiresAtTime}</strong>). Jika lewat 1 jam, tautan otomatis tidak dapat diakses lagi. Jika ingin diakses kembali, silakan buat tautan undangan baru.
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button
+                  type="button"
+                  className="btn-uda btn-uda-primary"
+                  onClick={() => setShowCopySuccessModal(false)}
+                  style={{ flex: 1, height: 44, fontWeight: 800, fontSize: '0.9rem' }}
+                >
+                  OK, Mengerti
+                </button>
+                <button
+                  type="button"
+                  className="btn-uda btn-uda-secondary"
+                  onClick={() => {
+                    const msg = `Halo! 🚀\n\nAnda diundang untuk bergabung ke brand *${brand.name}* sebagai *${copiedLinkInfo.role.toUpperCase()}* di UdaPlanner.\n\nKlik tautan berikut (berlaku 1 jam):\n${copiedLinkInfo.url}`;
+                    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                  }}
+                  style={{ flex: 1, height: 44, fontWeight: 800, fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                 >
                   <Share2 size={16} />
                   <span>Kirim ke WA</span>

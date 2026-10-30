@@ -233,7 +233,9 @@ export async function POST(req: NextRequest) {
       is_link_invite: isLink,
       status: 'pending',
       created_at: createdAt,
-      expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+      expires_at: isLink
+        ? new Date(Date.now() + 60 * 60 * 1000).toISOString()
+        : new Date(Date.now() + 7 * 86400000).toISOString(),
     };
 
     // 4. Simpan di Supabase database via admin client
