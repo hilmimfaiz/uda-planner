@@ -53,6 +53,8 @@ export default function PapanKanbanPage() {
   const { user } = useAuth();
   const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
   const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
+  const [selectedBrandId, setSelectedBrandId] = useState<string>("all");
+  const [userRolesByBrand, setUserRolesByBrand] = useState<Record<string, 'owner' | 'editor' | 'reviewer' | 'viewer' | null>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [itemsPerPage, setItemsPerPage] = useState<number>(3);
   const [pageByColumn, setPageByColumn] = useState<Record<string, number>>({
@@ -64,9 +66,18 @@ export default function PapanKanbanPage() {
   });
 
   React.useEffect(() => {
-    BrandService.getBrands(user?.id).then((bList) => {
-      setBrands(bList || []);
-    });
+    const loadBrandsAndRoles = () => {
+      BrandService.getBrands(user?.id).then(async (bList) => {
+        const list = bList || [];
+        setBrands(list);
+
+        const rolesMap: Record<string, 'owner' | 'editor' | 'reviewer' | 'viewer' | null> = {};
+        for (const b of list) {
+          rolesMap[b.id] = await BrandService.getUserBrandRole(b.id, user?.id);
+        }
+        setUserRolesByBrand(rolesMap);
+      });
+    };
 
     const loadPosts = () => {
       PostService.getPosts({}, user?.id).then((data) => {
@@ -74,20 +85,28 @@ export default function PapanKanbanPage() {
       });
     };
 
+    loadBrandsAndRoles();
     loadPosts();
+
+    const handleDataChange = () => {
+      loadBrandsAndRoles();
+      loadPosts();
+    };
 
     window.addEventListener('uda_post_updated', loadPosts);
     window.addEventListener('uda_post_created', loadPosts);
     window.addEventListener('uda_post_deleted', loadPosts);
-    window.addEventListener('storage', loadPosts);
-    window.addEventListener('focus', loadPosts);
+    window.addEventListener('uda_team_updated', handleDataChange);
+    window.addEventListener('storage', handleDataChange);
+    window.addEventListener('focus', handleDataChange);
 
     return () => {
       window.removeEventListener('uda_post_updated', loadPosts);
       window.removeEventListener('uda_post_created', loadPosts);
       window.removeEventListener('uda_post_deleted', loadPosts);
-      window.removeEventListener('storage', loadPosts);
-      window.removeEventListener('focus', loadPosts);
+      window.removeEventListener('uda_team_updated', handleDataChange);
+      window.removeEventListener('storage', handleDataChange);
+      window.removeEventListener('focus', handleDataChange);
     };
   }, [user?.id]);
 
@@ -108,7 +127,10 @@ export default function PapanKanbanPage() {
       { id: "terposting", title: "Sudah Posting", color: "#475569" },
     ];
 
-  // Handle Drag & Drop Between Columns
+  // Role pengguna untuk brand yang sedang difilter
+  const currentFilteredRole = selectedBrandId !== "all" ? userRolesByBrand[selectedBrandId] : null;
+
+  // Handle Drag & Drop Between Columns dengan Validasi Role Tim
   const handleDropToColumn = async (
     targetStatus: "ide" | "draft" | "review" | "siap" | "terposting",
     postId: string,
@@ -116,8 +138,10 @@ export default function PapanKanbanPage() {
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
 
+    if (post.status === targetStatus) return;
+
     const brand = brands.find((b) => b.id === post.brand_id);
-    const userRole = await BrandService.getUserBrandRole(post.brand_id, user?.id);
+    const userRole = userRolesByBrand[post.brand_id] ?? (await BrandService.getUserBrandRole(post.brand_id, user?.id));
 
     if (!userRole) {
       playErrorSound();
@@ -125,37 +149,61 @@ export default function PapanKanbanPage() {
       return;
     }
 
+    // 1. Role: Viewer (Hanya Read-Only)
     if (userRole === "viewer") {
       playErrorSound();
-      showToast("👁️ Mode Lihat Saja (Viewer): Anda tidak dapat memindahkan atau mengubah status postingan.");
+      showToast("👁️ Akses Terbatas (Viewer): Anda hanya memiliki izin Read-Only dan tidak dapat memindahkan atau mengubah status alur kerja.");
       return;
     }
 
-    // Rule validation: jika brand require_approval dan editor mencoba memindahkan langsung ke 'siap' atau 'terposting'
-    if (
-      brand?.require_approval &&
-      userRole === "editor" &&
-      (targetStatus === "siap" || targetStatus === "terposting")
-    ) {
-      playErrorSound();
-      showToast(
-        "⚠️ Peran Editor: Postingan wajib melalui review dan disetujui oleh Owner atau Reviewer.",
-      );
-      return;
+    // 2. Role: Editor
+    // Aturan:
+    // - Hanya bisa bergeser antara Ide, Draft, dan Menunggu Review.
+    // - Jika status awal kartu sudah 'siap' (selesai direview & disetujui Reviewer/Owner), maka Editor BISA geser ke 'terposting' (Sudah Posting).
+    // - Editor TIDAK BISA memindahkan kartu ke 'siap' (karena persetujuan review hanya wewenang Reviewer atau Owner).
+    // - Editor TIDAK BISA langsung loncat ke 'terposting' jika status belum 'siap'.
+    if (userRole === "editor") {
+      if (post.status === "siap") {
+        if (targetStatus === "terposting") {
+          // Diizinkan: Editor mempublikasikan postingan yang sudah disetujui Reviewer
+        } else if (targetStatus === "draft" || targetStatus === "review") {
+          // Diizinkan: Mengembalikan ke alur pengerjaan jika memerlukan revisi
+        } else {
+          playErrorSound();
+          showToast("⚠️ Peran Editor: Dari 'Siap Posting', Anda dapat memindahkannya ke 'Sudah Posting' atau mengembalikannya ke draft alur kerja.");
+          return;
+        }
+      } else {
+        // Status awal belum 'siap' (misal: ide, draft, review)
+        if (targetStatus === "siap") {
+          playErrorSound();
+          showToast("⚠️ Peran Editor: Menyetujui postingan ke 'Siap Posting' hanya dapat dilakukan oleh Reviewer atau Owner setelah proses review.");
+          return;
+        }
+        if (targetStatus === "terposting") {
+          playErrorSound();
+          showToast("⚠️ Peran Editor: Postingan harus disetujui (Siap Posting) oleh Reviewer terlebih dahulu sebelum dapat dipindahkan ke 'Sudah Posting'.");
+          return;
+        }
+        // Perpindahan antar 'ide', 'draft', dan 'review' diizinkan untuk Editor
+      }
     }
 
-    // Rule validation: jika brand require_approval dan dipindah langsung ke 'siap' dari draft
-    if (
-      brand?.require_approval &&
-      targetStatus === "siap" &&
-      post.status === "draft"
-    ) {
-      playErrorSound();
-      showToast(
-        "⚠️ Brand ini wajib review! Ajukan review terlebih dahulu sebelum disetujui.",
-      );
-      return;
+    // 3. Role: Reviewer
+    // Aturan:
+    // - Dari 'review' (Menunggu Review), Reviewer bisa geser ke 'siap' (Siap Posting) dan juga bisa ke 'terposting' (Sudah Posting).
+    // - Reviewer juga bisa mengembalikan dari 'review' ke 'draft' (minta revisi).
+    // - Reviewer bisa menggeser kartu dari 'siap' ke 'terposting'.
+    // - Reviewer juga dapat mengelola status 'ide' & 'draft'.
+    if (userRole === "reviewer") {
+      if (brand?.require_approval && post.status === "draft" && targetStatus === "siap") {
+        playErrorSound();
+        showToast("⚠️ Alur Review: Pindahkan kartu ke 'Menunggu Review' terlebih dahulu sebelum disetujui menjadi Siap Posting.");
+        return;
+      }
     }
+
+    // 4. Role: Owner (Akses Penuh Tanpa Batasan)
 
     const postedAt =
       targetStatus === "terposting"
@@ -241,47 +289,153 @@ export default function PapanKanbanPage() {
           </p>
         </div>
 
-        {/* Pengaturan Jumlah Konten per Halaman Tiap Kolom */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <label
-            htmlFor="kanban-per-page"
-            style={{ fontSize: "0.82rem", fontWeight: 700, color: "#475569" }}
-          >
-            Konten per kolom:
-          </label>
-          <select
-            id="kanban-per-page"
-            value={itemsPerPage}
-            onChange={(e) => {
-              setItemsPerPage(Number(e.target.value));
-              setPageByColumn({
-                ide: 1,
-                draft: 1,
-                review: 1,
-                siap: 1,
-                terposting: 1,
-              });
-            }}
-            style={{
-              padding: "6px 12px",
-              borderRadius: 8,
-              border: "2px solid #0f172a",
-              boxShadow: "2px 2px 0px #0f172a",
-              fontSize: "0.82rem",
-              fontWeight: 800,
-              backgroundColor: "#ffffff",
-              color: "#0f172a",
-              cursor: "pointer",
-              outline: "none",
-            }}
-          >
-            <option value={3}>3 per halaman</option>
-            <option value={4}>4 per halaman</option>
-            <option value={5}>5 per halaman</option>
-            <option value={10}>10 per halaman</option>
-          </select>
+        {/* Filter Brand & Pengaturan Konten per Kolom */}
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          {/* Dropdown Filter Brand */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <label
+              htmlFor="kanban-filter-brand"
+              style={{ fontSize: "0.82rem", fontWeight: 700, color: "#475569" }}
+            >
+              Filter Brand:
+            </label>
+            <select
+              id="kanban-filter-brand"
+              value={selectedBrandId}
+              onChange={(e) => {
+                setSelectedBrandId(e.target.value);
+                setPageByColumn({
+                  ide: 1,
+                  draft: 1,
+                  review: 1,
+                  siap: 1,
+                  terposting: 1,
+                });
+              }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                border: "2px solid #0f172a",
+                boxShadow: "2px 2px 0px #0f172a",
+                fontSize: "0.82rem",
+                fontWeight: 800,
+                backgroundColor: "#ffffff",
+                color: "#0f172a",
+                cursor: "pointer",
+                outline: "none",
+                maxWidth: 220,
+              }}
+            >
+              <option value="all">Semua Brand ({brands.length})</option>
+              {brands.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Badge Role Tim saat brand spesifik dipilih */}
+          {selectedBrandId !== "all" && currentFilteredRole && (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "5px 10px",
+                borderRadius: 8,
+                fontSize: "0.78rem",
+                fontWeight: 800,
+                border: "1.5px solid",
+                borderColor:
+                  currentFilteredRole === "owner" ? "#8b5cf6" :
+                  currentFilteredRole === "reviewer" ? "#f59e0b" :
+                  currentFilteredRole === "editor" ? "#10b981" : "#94a3b8",
+                backgroundColor:
+                  currentFilteredRole === "owner" ? "#f5f3ff" :
+                  currentFilteredRole === "reviewer" ? "#fffbeb" :
+                  currentFilteredRole === "editor" ? "#ecfdf5" : "#f1f5f9",
+                color:
+                  currentFilteredRole === "owner" ? "#6d28d9" :
+                  currentFilteredRole === "reviewer" ? "#b45309" :
+                  currentFilteredRole === "editor" ? "#047857" : "#475569",
+              }}
+              title={`Peran Anda pada brand ini: ${currentFilteredRole.toUpperCase()}`}
+            >
+              <span>
+                {currentFilteredRole === "owner" && "👑 Owner"}
+                {currentFilteredRole === "reviewer" && "🛡️ Reviewer"}
+                {currentFilteredRole === "editor" && "✏️ Editor"}
+                {currentFilteredRole === "viewer" && "👁️ Viewer (Read-Only)"}
+              </span>
+            </div>
+          )}
+
+          {/* Pengaturan Jumlah Konten per Halaman Tiap Kolom */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <label
+              htmlFor="kanban-per-page"
+              style={{ fontSize: "0.82rem", fontWeight: 700, color: "#475569" }}
+            >
+              Konten per kolom:
+            </label>
+            <select
+              id="kanban-per-page"
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setPageByColumn({
+                  ide: 1,
+                  draft: 1,
+                  review: 1,
+                  siap: 1,
+                  terposting: 1,
+                });
+              }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                border: "2px solid #0f172a",
+                boxShadow: "2px 2px 0px #0f172a",
+                fontSize: "0.82rem",
+                fontWeight: 800,
+                backgroundColor: "#ffffff",
+                color: "#0f172a",
+                cursor: "pointer",
+                outline: "none",
+              }}
+            >
+              <option value={3}>3 per halaman</option>
+              <option value={4}>4 per halaman</option>
+              <option value={5}>5 per halaman</option>
+              <option value={10}>10 per halaman</option>
+            </select>
+          </div>
         </div>
       </div>
+
+      {/* Banner informasi jika user berperan sebagai Viewer pada brand yang dipilih */}
+      {selectedBrandId !== "all" && currentFilteredRole === "viewer" && (
+        <div
+          style={{
+            background: "#f8fafc",
+            border: "1.5px dashed #cbd5e1",
+            borderRadius: 10,
+            padding: "10px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            fontSize: "0.84rem",
+            color: "#475569",
+            fontWeight: 600,
+          }}
+        >
+          <span style={{ fontSize: "1.1rem" }}>👁️</span>
+          <span>
+            <strong>Mode Akses Lihat Saja (Viewer):</strong> Anda dapat memantau alur status kanban brand ini dalam mode Read-Only. Pemindahan kartu alur kerja hanya dapat dilakukan oleh Editor, Reviewer, atau Owner.
+          </span>
+        </div>
+      )}
 
       {/* 5 Kolom Kanban Responsif */}
       <div className="kanban-board-wrapper" style={{ position: "relative" }}>
@@ -299,7 +453,11 @@ export default function PapanKanbanPage() {
         />
         {columns.map((col, idx) => {
           const isRow1 = idx < 3; // 0 (ide), 1 (draft), 2 (review) -> Baris Atas 3 Kolom
-          const colPosts = posts.filter((p) => p.status === col.id);
+          // Terapkan filter brand pada daftar postingan
+          const filteredPosts = selectedBrandId === "all"
+            ? posts
+            : posts.filter((p) => p.brand_id === selectedBrandId);
+          const colPosts = filteredPosts.filter((p) => p.status === col.id);
           const totalPages = Math.max(1, Math.ceil(colPosts.length / itemsPerPage));
           const currentPage = pageByColumn[col.id] || 1;
           const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -408,52 +566,83 @@ export default function PapanKanbanPage() {
                     const assignee = DUMMY_MEMBERS.find(
                       (m) => m.id === post.assignee_id,
                     );
+                    const postRole = userRolesByBrand[post.brand_id];
+                    const isCardReadOnly = postRole === "viewer";
+
                     return (
                       <div
                         key={post.id}
                         id={col.id === "ide" && postIdx === 0 && safeCurrentPage === 1 ? "tour-papan-card" : undefined}
                         className="kanban-card-item"
-                        draggable
-                        onDragStart={(e) =>
-                          e.dataTransfer.setData("text/plain", post.id)
-                        }
+                        draggable={!isCardReadOnly}
+                        onDragStart={(e) => {
+                          if (isCardReadOnly) {
+                            e.preventDefault();
+                            return;
+                          }
+                          e.dataTransfer.setData("text/plain", post.id);
+                        }}
                         onClick={() => router.push(`/app/postingan/${post.id}`)}
+                        title={
+                          isCardReadOnly
+                            ? "Peran Viewer: Hanya dapat melihat postingan (Read-Only)"
+                            : undefined
+                        }
                         style={{
                           background: "#ffffff",
                           border: "1px solid #e2e8f0",
                           borderRadius: 10,
                           padding: 12,
-                          cursor: "grab",
+                          cursor: isCardReadOnly ? "pointer" : "grab",
                           boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
                           display: "flex",
                           flexDirection: "column",
                           gap: 8,
+                          opacity: isCardReadOnly ? 0.95 : 1,
                         }}
                       >
-                        {/* Brand Chip & Waktu */}
+                        {/* Brand Chip, Badge Viewer & Waktu */}
                         <div
                           style={{
                             display: "flex",
                             justifyContent: "space-between",
                             alignItems: "center",
+                            gap: 6,
                           }}
                         >
-                          {brand && (
-                            <span
-                              className="kanban-card-brand-chip"
-                              style={{
-                                fontSize: "0.68rem",
-                                fontWeight: 700,
-                                padding: "2px 6px",
-                                borderRadius: 4,
-                                background: `${brand.color}15`,
-                                color: brand.color,
-                              }}
-                            >
-                              {brand.name}
-                            </span>
-                          )}
-                          <span style={{ fontSize: "0.7rem", color: "#64748b" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            {brand && (
+                              <span
+                                className="kanban-card-brand-chip"
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 700,
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  background: `${brand.color}15`,
+                                  color: brand.color,
+                                }}
+                              >
+                                {brand.name}
+                              </span>
+                            )}
+                            {isCardReadOnly && (
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 700,
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  background: "#f1f5f9",
+                                  color: "#64748b",
+                                  border: "1px solid #e2e8f0",
+                                }}
+                              >
+                                👁️ Read-Only
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontSize: "0.7rem", color: "#64748b", flexShrink: 0 }}>
                             {post.scheduled_at
                               ? new Date(post.scheduled_at).toLocaleDateString(
                                 "id-ID",
