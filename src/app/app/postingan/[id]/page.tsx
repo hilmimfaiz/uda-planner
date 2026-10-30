@@ -543,7 +543,7 @@ END:VCALENDAR`;
       {/* Top Action Bar Responsif */}
       <div id="tour-editor-header" className="post-editor-top-bar">
         <div className="post-editor-top-left">
-          <button className="btn-uda btn-uda-secondary btn-uda-sm" onClick={() => router.back()}>
+          <button className="btn-uda btn-uda-secondary btn-uda-sm" onClick={() => router.push('/app/daftar')}>
             <ArrowLeft size={16} />
             <span>Kembali</span>
           </button>
