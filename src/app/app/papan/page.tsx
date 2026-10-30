@@ -149,14 +149,39 @@ export default function PapanKanbanPage() {
       return;
     }
 
-    // 1. Role: Viewer (Hanya Read-Only)
+    // 1. Role: Viewer (Hanya Read-Only, Tidak Ada Aksi Geser Apapun)
     if (userRole === "viewer") {
       playErrorSound();
-      showToast("👁️ Akses Terbatas (Viewer): Anda hanya memiliki izin Read-Only dan tidak dapat memindahkan atau mengubah status alur kerja.");
+      showToast("👁️ Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat dan tidak dapat melakukan aksi geser apapun di kanban.");
       return;
     }
 
-    // 2. Role: Editor
+    // 2. Role: Reviewer
+    // Aturan ketat:
+    // - Dari 'Menunggu Review' HANYA bisa geser ke 'Siap Posting'
+    // - Dari 'Siap Posting' HANYA bisa geser ke 'Sudah Posting'
+    // - Tidak dapat menggeser dari atau ke status lainnya
+    if (userRole === "reviewer") {
+      if (post.status === "review") {
+        if (targetStatus !== "siap") {
+          playErrorSound();
+          showToast("⚠️ Peran Reviewer: Dari 'Menunggu Review', aksi hanya dapat digeser ke kolom 'Siap Posting'.");
+          return;
+        }
+      } else if (post.status === "siap") {
+        if (targetStatus !== "terposting") {
+          playErrorSound();
+          showToast("⚠️ Peran Reviewer: Dari 'Siap Posting', aksi hanya dapat digeser ke kolom 'Sudah Posting'.");
+          return;
+        }
+      } else {
+        playErrorSound();
+        showToast("⚠️ Peran Reviewer: Anda hanya memiliki akses geser dari 'Menunggu Review' ke 'Siap Posting' dan dari 'Siap Posting' ke 'Sudah Posting'.");
+        return;
+      }
+    }
+
+    // 3. Role: Editor
     // Aturan:
     // - Hanya bisa bergeser antara Ide, Draft, dan Menunggu Review.
     // - Jika status awal kartu sudah 'siap' (selesai direview & disetujui Reviewer/Owner), maka Editor BISA geser ke 'terposting' (Sudah Posting).
@@ -186,20 +211,6 @@ export default function PapanKanbanPage() {
           return;
         }
         // Perpindahan antar 'ide', 'draft', dan 'review' diizinkan untuk Editor
-      }
-    }
-
-    // 3. Role: Reviewer
-    // Aturan:
-    // - Dari 'review' (Menunggu Review), Reviewer bisa geser ke 'siap' (Siap Posting) dan juga bisa ke 'terposting' (Sudah Posting).
-    // - Reviewer juga bisa mengembalikan dari 'review' ke 'draft' (minta revisi).
-    // - Reviewer bisa menggeser kartu dari 'siap' ke 'terposting'.
-    // - Reviewer juga dapat mengelola status 'ide' & 'draft'.
-    if (userRole === "reviewer") {
-      if (brand?.require_approval && post.status === "draft" && targetStatus === "siap") {
-        playErrorSound();
-        showToast("⚠️ Alur Review: Pindahkan kartu ke 'Menunggu Review' terlebih dahulu sebelum disetujui menjadi Siap Posting.");
-        return;
       }
     }
 
@@ -236,6 +247,18 @@ export default function PapanKanbanPage() {
       return;
     }
 
+    // Notifikasi sistem dan toast kustom sesuai perubahan
+    let notifMsg = `Status dipindahkan ke: ${POST_STATUSES[targetStatus].label}`;
+    if (userRole === 'reviewer' && targetStatus === 'siap') {
+      notifMsg = `✅ Review Selesai: Postingan disetujui dan dipindahkan ke 'Siap Posting'.`;
+    } else if (targetStatus === 'terposting') {
+      notifMsg = `🚀 Konten Dipublikasikan: Postingan berhasil dipindahkan ke 'Sudah Posting'.`;
+    } else if (targetStatus === 'review') {
+      notifMsg = `📬 Menunggu Review: Postingan diajukan untuk ditinjau oleh Reviewer.`;
+    } else {
+      notifMsg = `✅ Status Diperbarui: Postingan dipindahkan ke '${POST_STATUSES[targetStatus].label}'.`;
+    }
+
     addAppNotification({
       type: targetStatus === 'review' ? 'review_request' : targetStatus === 'siap' ? 'review_approved' : 'status_change',
       title: `Status: ${POST_STATUSES[targetStatus].label}`,
@@ -244,7 +267,7 @@ export default function PapanKanbanPage() {
     });
 
     playNotificationSound();
-    showToast(`Status dipindahkan ke: ${POST_STATUSES[targetStatus].label}`);
+    showToast(notifMsg);
   };
 
   return (
@@ -567,38 +590,49 @@ export default function PapanKanbanPage() {
                       (m) => m.id === post.assignee_id,
                     );
                     const postRole = userRolesByBrand[post.brand_id];
-                    const isCardReadOnly = postRole === "viewer";
+                    const isViewer = postRole === "viewer";
+                    const isReviewerNonMovable = postRole === "reviewer" && post.status !== "review" && post.status !== "siap";
+                    const isDraggable = !isViewer && !isReviewerNonMovable;
+
+                    const cardTooltip = isViewer
+                      ? "Mode Viewer: Hanya dapat melihat postingan (Read-Only)"
+                      : isReviewerNonMovable
+                      ? "Peran Reviewer: Hanya dapat menggeser dari 'Menunggu Review' (ke Siap Posting) dan 'Siap Posting' (ke Sudah Posting)"
+                      : undefined;
 
                     return (
                       <div
                         key={post.id}
                         id={col.id === "ide" && postIdx === 0 && safeCurrentPage === 1 ? "tour-papan-card" : undefined}
                         className="kanban-card-item"
-                        draggable={!isCardReadOnly}
+                        draggable={isDraggable}
                         onDragStart={(e) => {
-                          if (isCardReadOnly) {
+                          if (!isDraggable) {
                             e.preventDefault();
+                            if (isViewer) {
+                              playErrorSound();
+                              showToast("👁️ Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat (Read-Only).");
+                            } else if (isReviewerNonMovable) {
+                              playErrorSound();
+                              showToast("⚠️ Peran Reviewer: Anda hanya dapat memproses kartu di kolom 'Menunggu Review' dan 'Siap Posting'.");
+                            }
                             return;
                           }
                           e.dataTransfer.setData("text/plain", post.id);
                         }}
                         onClick={() => router.push(`/app/postingan/${post.id}`)}
-                        title={
-                          isCardReadOnly
-                            ? "Peran Viewer: Hanya dapat melihat postingan (Read-Only)"
-                            : undefined
-                        }
+                        title={cardTooltip}
                         style={{
                           background: "#ffffff",
                           border: "1px solid #e2e8f0",
                           borderRadius: 10,
                           padding: 12,
-                          cursor: isCardReadOnly ? "pointer" : "grab",
+                          cursor: isDraggable ? "grab" : "pointer",
                           boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
                           display: "flex",
                           flexDirection: "column",
                           gap: 8,
-                          opacity: isCardReadOnly ? 0.95 : 1,
+                          opacity: !isDraggable && isViewer ? 0.95 : 1,
                         }}
                       >
                         {/* Brand Chip, Badge Viewer & Waktu */}
@@ -626,7 +660,7 @@ export default function PapanKanbanPage() {
                                 {brand.name}
                               </span>
                             )}
-                            {isCardReadOnly && (
+                            {isViewer && (
                               <span
                                 style={{
                                   fontSize: "0.68rem",
