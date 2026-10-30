@@ -72,6 +72,88 @@ export default function PostEditorDetailPage() {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
+  const [isAccessDenied, setIsAccessDenied] = useState(false);
+  const [isLoadingPost, setIsLoadingPost] = useState(!isNew);
+
+  const isReadOnly = userRole === 'viewer';
+
+  // Deteksi apakah pengguna merupakan anggota undangan tim
+  const isTeamMember = React.useMemo(() => {
+    // 1. Berdasarkan role aktif brand
+    if (userRole && ['editor', 'reviewer', 'viewer'].includes(userRole)) {
+      return true;
+    }
+    // 2. Berdasarkan plan akun aktif
+    if (account?.plan_code === 'team') {
+      return true;
+    }
+    // 3. Pengecekan data keanggotaan lokal
+    if (typeof window !== 'undefined') {
+      try {
+        const uId = user?.id;
+        const uEmail = user?.email?.toLowerCase();
+
+        // Cek data team membership
+        if (uId && localStorage.getItem('uda_team_membership_' + uId)) {
+          return true;
+        }
+
+        // Cek system role
+        if (uId) {
+          const sysRole = localStorage.getItem('uda_system_role_' + uId);
+          if (sysRole && ['Editor', 'Reviewer', 'Viewer'].includes(sysRole)) {
+            return true;
+          }
+        }
+
+        // Cek brand members lokal pada brand saat ini
+        const bId = post.brand_id;
+        if (bId) {
+          const rawM = localStorage.getItem('uda_brand_members_' + bId);
+          if (rawM) {
+            const mList = JSON.parse(rawM);
+            const found = mList.find(
+              (m: any) =>
+                (uId && (m.id === uId || m.user_id === uId)) ||
+                (uEmail && m.email?.toLowerCase() === uEmail)
+            );
+            if (found && found.role && found.role !== 'owner') {
+              return true;
+            }
+          }
+        }
+
+        // Cek undangan yang telah diterima
+        const rawInv = localStorage.getItem('uda_brand_invitations');
+        if (rawInv) {
+          const invList = JSON.parse(rawInv);
+          const foundInv = invList.find(
+            (inv: any) =>
+              inv.status === 'accepted' &&
+              ((uEmail && inv.target_email?.toLowerCase() === uEmail) ||
+                (uId && inv.target_user_id === uId))
+          );
+          if (foundInv) return true;
+        }
+
+        // Cek auth account cache
+        const rawAcc = localStorage.getItem('uda_auth_account');
+        if (rawAcc) {
+          const parsed = JSON.parse(rawAcc);
+          if (parsed.plan_code === 'team' || parsed.team_member_brand_id) {
+            return true;
+          }
+        }
+      } catch (err) {}
+    }
+    return false;
+  }, [userRole, account?.plan_code, user?.id, user?.email, post.brand_id]);
+
+  const isFreePlan = !account || account.plan_code === 'free';
+  // Tipe konten Video dan Reels terbuka untuk Pro, Tim, serta seluruh anggota undangan tim
+  const isContentLocked = isFreePlan && !isTeamMember;
+
   const safeDate = (dateVal?: string | null): Date | null => {
     if (!dateVal) return null;
     const d = new Date(dateVal);
@@ -105,13 +187,13 @@ export default function PostEditorDetailPage() {
       return;
     }
 
-    const planCode = account?.plan_code || 'free';
-    const maxSingleFileMb = planCode === 'free' ? 10 : 50;
+    const effectivePlanCode = isTeamMember ? 'team' : (account?.plan_code || 'free');
+    const maxSingleFileMb = effectivePlanCode === 'free' ? 10 : 50;
 
     if (file.size > maxSingleFileMb * 1024 * 1024) {
       showError(
         'Ukuran Foto Terlalu Besar',
-        `Ukuran foto maksimal untuk Paket ${planCode.toUpperCase()} adalah ${maxSingleFileMb} MB.`
+        `Ukuran foto maksimal untuk Paket ${effectivePlanCode.toUpperCase()} adalah ${maxSingleFileMb} MB.`
       );
       return;
     }
@@ -130,10 +212,10 @@ export default function PostEditorDetailPage() {
       }, 0);
 
       const newFileMb = file.size / (1024 * 1024);
-      const maxStorageMb = planCode === 'team' ? 20480 : planCode === 'pro' ? 5120 : 200;
+      const maxStorageMb = effectivePlanCode === 'team' ? 20480 : effectivePlanCode === 'pro' ? 5120 : 200;
 
       if (currentUsedMb + newFileMb > maxStorageMb) {
-        if (planCode === 'free') {
+        if (effectivePlanCode === 'free') {
           showError(
             'Kapasitas Penyimpanan Penuh (Batas 200 MB)',
             `Akun Paket Gratis dibatasi total penyimpanan 200 MB (saat ini terpakai ${currentUsedMb.toFixed(1)} MB). Jika ingin tetap mengunggah postingan baru, Anda harus menghapus postingan lama yang sudah tidak dipakai lagi atau tingkatkan paket ke Pro / Tim.`
@@ -141,7 +223,7 @@ export default function PostEditorDetailPage() {
         } else {
           showError(
             'Kapasitas Penyimpanan Penuh',
-            `Batas penyimpanan untuk Paket ${planCode.toUpperCase()} (${maxStorageMb >= 1024 ? maxStorageMb / 1024 + ' GB' : maxStorageMb + ' MB'}) telah tercapai. Silakan hapus media atau postingan yang tidak digunakan lagi.`
+            `Batas penyimpanan untuk Paket ${effectivePlanCode.toUpperCase()} (${maxStorageMb >= 1024 ? maxStorageMb / 1024 + ' GB' : maxStorageMb + ' MB'}) telah tercapai. Silakan hapus media atau postingan yang tidak digunakan lagi.`
           );
         }
         return;
@@ -167,19 +249,15 @@ export default function PostEditorDetailPage() {
     setPost((prev) => ({ ...prev, media_url: '' }));
   };
 
-  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
-  const [isAccessDenied, setIsAccessDenied] = useState(false);
-  const [isLoadingPost, setIsLoadingPost] = useState(!isNew);
-
-  const isReadOnly = userRole === 'viewer';
-
   React.useEffect(() => {
     BrandService.getBrands(user?.id).then((bList) => {
       if (bList && bList.length > 0) {
         setBrands(bList);
         if (isNew) {
-          setPost((prev) => ({ ...prev, brand_id: bList[0].id }));
-          BrandService.getUserBrandRole(bList[0].id, user?.id).then((r) => setUserRole(r));
+          const activeBrandId = typeof window !== 'undefined' ? localStorage.getItem('uda_active_brand_id') : null;
+          const targetBrand = (activeBrandId && bList.find((b) => b.id === activeBrandId)) || bList[0];
+          setPost((prev) => ({ ...prev, brand_id: targetBrand.id }));
+          BrandService.getUserBrandRole(targetBrand.id, user?.id).then((r) => setUserRole(r));
         }
       }
     });
@@ -228,8 +306,6 @@ export default function PostEditorDetailPage() {
   const primaryPlatform = post.platforms[0] || 'instagram';
   const maxCaption = PLATFORMS[primaryPlatform]?.maxCaptionLength || 2200;
   const isOverLimit = post.caption.length > maxCaption;
-  const isFreePlan = !account || account.plan_code === 'free';
-
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -241,10 +317,10 @@ export default function PostEditorDetailPage() {
       return;
     }
 
-    if (isFreePlan && (post.content_type === 'video' || post.content_type === 'reels')) {
+    if (isContentLocked && (post.content_type === 'video' || post.content_type === 'reels')) {
       showError(
         'Tipe Konten Terkunci',
-        'Tipe konten Video dan Reels hanya tersedia untuk pelanggan paket Pro dan Tim. Silakan upgrade paket langganan Anda terlebih dahulu.'
+        'Tipe konten Video dan Reels hanya tersedia untuk pelanggan paket Pro, Tim, atau anggota tim kolaborator brand. Silakan upgrade paket langganan Anda terlebih dahulu.'
       );
       return;
     }
@@ -574,10 +650,10 @@ END:VCALENDAR`;
                 disabled={isReadOnly}
                 onChange={(e) => {
                   const val = e.target.value as any;
-                  if (isFreePlan && (val === 'video' || val === 'reels')) {
+                  if (isContentLocked && (val === 'video' || val === 'reels')) {
                     showError(
                       'Tipe Konten Terkunci',
-                      'Tipe konten Video dan Reels hanya tersedia untuk pelanggan paket Pro dan Tim. Silakan upgrade paket langganan Anda untuk membuka fitur ini.'
+                      'Tipe konten Video dan Reels hanya tersedia untuk pelanggan paket Pro, Tim, atau anggota tim kolaborator brand. Silakan upgrade paket langganan Anda untuk membuka fitur ini.'
                     );
                     return;
                   }
@@ -589,7 +665,7 @@ END:VCALENDAR`;
                 }}
               >
                 {CONTENT_TYPES.map((t) => {
-                  const isLocked = isFreePlan && (t.id === 'video' || t.id === 'reels');
+                  const isLocked = isContentLocked && (t.id === 'video' || t.id === 'reels');
                   return (
                     <option key={t.id} value={t.id} disabled={isLocked}>
                       {t.name} {isLocked ? '🔒 (Khusus Pro/Tim)' : ''}
@@ -1076,7 +1152,7 @@ END:VCALENDAR`;
             disabled={isSaving}
             style={{ width: '100%', padding: '12px 18px', fontSize: '0.95rem', justifyContent: 'center' }}
           >
-            {isSaving ? 'Menyimpan...' : isNew ? '🚀 Buat Postingan Sekarang' : '💾 Simpan Perubahan'}
+            {isSaving ? 'Menyimpan...' : isNew ? 'Buat Postingan Sekarang' : 'Simpan Perubahan'}
           </button>
         </div>
       )}

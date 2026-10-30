@@ -45,14 +45,16 @@ export default function GridInstagramPage() {
   const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
   const [selectedBrandId, setSelectedBrandId] = useState<string>("brand-1");
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:5">("1:1");
-
-  const isFreePlan = !account || account.plan_code === 'free';
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
 
   React.useEffect(() => {
     BrandService.getBrands(user?.id).then((bList) => {
       setBrands(bList || []);
       if (bList && bList.length > 0) {
-        setSelectedBrandId((prev) => (bList.some((b) => b.id === prev) ? prev : bList[0].id));
+        const activeBrandId = typeof window !== 'undefined' ? localStorage.getItem('uda_active_brand_id') : null;
+        const targetId = (activeBrandId && bList.some((b) => b.id === activeBrandId)) ? activeBrandId : bList[0].id;
+        setSelectedBrandId(targetId);
+        BrandService.getUserBrandRole(targetId, user?.id).then((r) => setUserRole(r));
       }
     });
 
@@ -79,6 +81,104 @@ export default function GridInstagramPage() {
     };
   }, [user?.id]);
 
+  React.useEffect(() => {
+    if (selectedBrandId && user?.id) {
+      BrandService.getUserBrandRole(selectedBrandId, user?.id).then((r) => setUserRole(r));
+    }
+  }, [selectedBrandId, user?.id]);
+
+  // Deteksi apakah pengguna merupakan anggota tim / undangan tim
+  const isTeamMember = React.useMemo(() => {
+    // 1. Role pada brand terpilih
+    if (userRole && ['editor', 'reviewer', 'viewer'].includes(userRole)) {
+      return true;
+    }
+    // 2. Paket akun aktif
+    if (account?.plan_code === 'team') {
+      return true;
+    }
+    // 3. Pengecekan data keanggotaan lokal
+    if (typeof window !== 'undefined') {
+      try {
+        const uId = user?.id;
+        const uEmail = user?.email?.toLowerCase();
+
+        // Cek data team membership
+        if (uId && localStorage.getItem('uda_team_membership_' + uId)) {
+          return true;
+        }
+
+        // Cek system role
+        if (uId) {
+          const sysRole = localStorage.getItem('uda_system_role_' + uId);
+          if (sysRole && ['Editor', 'Reviewer', 'Viewer'].includes(sysRole)) {
+            return true;
+          }
+        }
+
+        // Cek brand members lokal pada brand terpilih
+        if (selectedBrandId) {
+          const rawM = localStorage.getItem('uda_brand_members_' + selectedBrandId);
+          if (rawM) {
+            const mList = JSON.parse(rawM);
+            const found = mList.find(
+              (m: any) =>
+                (uId && (m.id === uId || m.user_id === uId)) ||
+                (uEmail && m.email?.toLowerCase() === uEmail)
+            );
+            if (found && found.role && found.role !== 'owner') {
+              return true;
+            }
+          }
+        }
+
+        // Cek apakah user adalah anggota tim pada salah satu brand yang tersedia
+        if (brands && brands.length > 0) {
+          for (const b of brands) {
+            const rawM = localStorage.getItem('uda_brand_members_' + b.id);
+            if (rawM) {
+              const mList = JSON.parse(rawM);
+              const found = mList.find(
+                (m: any) =>
+                  (uId && (m.id === uId || m.user_id === uId)) ||
+                  (uEmail && m.email?.toLowerCase() === uEmail)
+              );
+              if (found && found.role && found.role !== 'owner') {
+                return true;
+              }
+            }
+          }
+        }
+
+        // Cek undangan yang telah diterima
+        const rawInv = localStorage.getItem('uda_brand_invitations');
+        if (rawInv) {
+          const invList = JSON.parse(rawInv);
+          const foundInv = invList.find(
+            (inv: any) =>
+              inv.status === 'accepted' &&
+              ((uEmail && inv.target_email?.toLowerCase() === uEmail) ||
+                (uId && inv.target_user_id === uId))
+          );
+          if (foundInv) return true;
+        }
+
+        // Cek auth account cache
+        const rawAcc = localStorage.getItem('uda_auth_account');
+        if (rawAcc) {
+          const parsed = JSON.parse(rawAcc);
+          if (parsed.plan_code === 'team' || parsed.team_member_brand_id) {
+            return true;
+          }
+        }
+      } catch (err) {}
+    }
+    return false;
+  }, [userRole, account?.plan_code, user?.id, user?.email, selectedBrandId, brands]);
+
+  const isFreePlan = !account || account.plan_code === 'free';
+  const isLocked = isFreePlan && !isTeamMember;
+
   const fallbackBrand: DummyBrand = {
     id: "no-brand",
     owner_id: "",
@@ -104,8 +204,8 @@ export default function GridInstagramPage() {
         p.platforms.length === 0)
   );
 
-  // Jika Paket Gratis: Tampilkan Layar Terkunci Khusus Pro & Tim
-  if (isFreePlan) {
+  // Jika Paket Gratis & Bukan Anggota Tim: Tampilkan Layar Terkunci Khusus Pro & Tim
+  if (isLocked) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 860, margin: '0 auto', width: '100%' }}>
         <div>
