@@ -502,7 +502,7 @@ export default function GridInstagramPage() {
 
         {/* 3-Column Instagram Feed */}
         <div style={{ position: "relative" }}>
-          {isFreePlan && (
+          {isLocked && (
             <div
               style={{
                 position: "absolute",
