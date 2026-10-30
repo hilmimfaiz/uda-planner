@@ -762,10 +762,8 @@ export default function PengaturanBrandDetailPage() {
 
   const getCopyInviteUrl = (role: 'editor' | 'reviewer' | 'viewer', tokenVal: string) => {
     const siteUrl = getSiteUrl();
-    const inviterName = user?.user_metadata?.full_name || user?.email || 'Owner';
-    const brandAvatar = brand.avatar_url || '';
-    const brandOwnerId = brand.owner_id || user?.id || '';
-    return `${siteUrl}/undangan/${tokenVal}?brand=${brand.id}&name=${encodeURIComponent(brand.name)}&role=${role}&inviter=${encodeURIComponent(inviterName)}&avatar=${encodeURIComponent(brandAvatar)}&ownerId=${encodeURIComponent(brandOwnerId)}`;
+    const inviterName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Owner';
+    return `${siteUrl}/undangan/${tokenVal}?brand=${brand.id}&name=${encodeURIComponent(brand.name)}&role=${role}&inviter=${encodeURIComponent(inviterName)}`;
   };
 
   const handleCopyLinkExecute = async () => {
