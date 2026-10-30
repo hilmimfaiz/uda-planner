@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     const email = searchParams.get('email')?.trim().toLowerCase() || '';
     const userId = searchParams.get('userId')?.trim() || '';
     const brandId = searchParams.get('brandId')?.trim() || '';
+    const token = searchParams.get('token')?.trim() || '';
 
     const admin = createAdminClient();
     let invites: any[] = [];
@@ -35,7 +36,9 @@ export async function GET(req: NextRequest) {
     if (admin) {
       try {
         let query: any = (admin.from('invitations' as any) as any).select('*, brands(id, name, avatar_url, owner_id)');
-        if (brandId) {
+        if (token) {
+          query = query.eq('token', token);
+        } else if (brandId) {
           query = query.eq('brand_id', brandId);
         } else if (email) {
           query = query.ilike('email', email);
@@ -71,13 +74,17 @@ export async function GET(req: NextRequest) {
       const bEmail = (b.target_email || b.email || '').toLowerCase().trim();
       const bUserId = b.target_user_id || b.user_id || '';
       const bBrandId = b.brand_id || '';
+      const bToken = b.token || b.id || '';
 
+      const matchToken = token ? (bToken === token || b.id === token) : true;
       const matchBrand = brandId ? bBrandId === brandId : true;
       const matchUser = (email && bEmail === email) || (userId && bUserId === userId);
 
-      if (matchBrand && (brandId ? true : matchUser)) {
+      const isMatch = token ? matchToken : (matchBrand && (brandId ? true : matchUser));
+
+      if (isMatch) {
         const existingIdx = invites.findIndex(
-          (inv) => inv.id === b.id || (inv.brand_id === b.brand_id && (inv.email === bEmail || inv.target_email === bEmail))
+          (inv) => inv.id === b.id || (token && (inv.token === bToken || inv.id === b.id)) || (inv.brand_id === b.brand_id && bEmail && (inv.email === bEmail || inv.target_email === bEmail))
         );
         if (existingIdx >= 0) {
           invites[existingIdx] = {
@@ -116,10 +123,17 @@ export async function POST(req: NextRequest) {
       inviterId,
       inviterName,
       inviterEmail,
+      token: providedToken,
+      inviteId: providedInviteId,
+      isLinkInvite = false,
     } = body;
 
+    const isLink = Boolean(isLinkInvite || !targetEmail);
     const cleanEmail = (targetEmail || '').trim().toLowerCase();
-    if (!cleanEmail || !brandId) {
+    if (!brandId) {
+      return NextResponse.json({ success: false, error: 'Brand ID diperlukan.' }, { status: 400 });
+    }
+    if (!isLink && !cleanEmail) {
       return NextResponse.json({ success: false, error: 'Email tujuan dan brand ID diperlukan.' }, { status: 400 });
     }
 
@@ -138,10 +152,10 @@ export async function POST(req: NextRequest) {
 
     // 2. Resolve target user ID jika belum ada
     let resolvedTargetId = targetUserId || null;
-    let resolvedTargetName = targetName || cleanEmail.split('@')[0];
+    let resolvedTargetName = targetName || (cleanEmail ? cleanEmail.split('@')[0] : 'Calon Anggota');
     let resolvedTargetAvatar = targetAvatar || null;
 
-    if (admin && (!resolvedTargetId || !resolvedTargetId.includes('-'))) {
+    if (!isLink && cleanEmail && admin && (!resolvedTargetId || !resolvedTargetId.includes('-'))) {
       try {
         const { data: pData }: any = await (admin.from('profiles' as any) as any).select('id, full_name, avatar_url').ilike('email', cleanEmail).maybeSingle();
         if (pData?.id) {
@@ -155,7 +169,7 @@ export async function POST(req: NextRequest) {
     // 3. ATURAN 1-OWNER:
     // "Pengguna yang di undang oleh owner bisa diundang lagi lebih dari 1 brand oleh owner.
     // namun, ownernya hanya 1 saja dari paket langganannya tidak bisa owner yang berbeda jika masuk ke brand yang lain."
-    if (admin && resolvedTargetId) {
+    if (!isLink && cleanEmail && admin && resolvedTargetId) {
       try {
         const { data: existingMemberships }: any = await (admin.from('brand_members' as any) as any)
           .select('brand_id, brands(id, name, owner_id)')
@@ -179,23 +193,25 @@ export async function POST(req: NextRequest) {
     }
 
     // Cek juga dari database backup undangan yang sudah diterima
-    const backupInvites = loadBackupInvites();
-    const alreadyAcceptedAnotherOwner = backupInvites.some((inv: any) => {
-      const isSameUser = (inv.target_email || inv.email)?.toLowerCase() === cleanEmail || (resolvedTargetId && inv.target_user_id === resolvedTargetId);
-      const isAccepted = inv.status === 'accepted';
-      const isDifferentOwner = inv.owner_id && currentBrandOwnerId && inv.owner_id !== currentBrandOwnerId;
-      return isSameUser && isAccepted && isDifferentOwner;
-    });
+    if (!isLink && cleanEmail) {
+      const backupInvites = loadBackupInvites();
+      const alreadyAcceptedAnotherOwner = backupInvites.some((inv: any) => {
+        const isSameUser = (inv.target_email || inv.email)?.toLowerCase() === cleanEmail || (resolvedTargetId && inv.target_user_id === resolvedTargetId);
+        const isAccepted = inv.status === 'accepted';
+        const isDifferentOwner = inv.owner_id && currentBrandOwnerId && inv.owner_id !== currentBrandOwnerId;
+        return isSameUser && isAccepted && isDifferentOwner;
+      });
 
-    if (alreadyAcceptedAnotherOwner) {
-      return NextResponse.json({
-        success: false,
-        error: `Pengguna ini sudah terdaftar dalam tim dari Owner lain. Paket Langganan Tim hanya mengizinkan pengguna bergabung dengan 1 Owner.`,
-      }, { status: 400 });
+      if (alreadyAcceptedAnotherOwner) {
+        return NextResponse.json({
+          success: false,
+          error: `Pengguna ini sudah terdaftar dalam tim dari Owner lain. Paket Langganan Tim hanya mengizinkan pengguna bergabung dengan 1 Owner.`,
+        }, { status: 400 });
+      }
     }
 
-    const inviteId = `inv-${Date.now()}`;
-    const token = Math.random().toString(36).substring(2, 12);
+    const inviteId = providedInviteId || `inv-${Date.now()}`;
+    const token = providedToken || Math.random().toString(36).substring(2, 12);
     const createdAt = new Date().toISOString();
 
     const newInviteRecord = {
@@ -214,13 +230,14 @@ export async function POST(req: NextRequest) {
       invited_by: inviterId || null,
       inviter_name: inviterName || 'Owner',
       inviter_email: inviterEmail || '',
+      is_link_invite: isLink,
       status: 'pending',
       created_at: createdAt,
       expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
     };
 
     // 4. Simpan di Supabase database via admin client
-    if (admin) {
+    if (admin && cleanEmail) {
       try {
         await admin.from('invitations' as any).insert({
           brand_id: brandId,
@@ -228,6 +245,7 @@ export async function POST(req: NextRequest) {
           role,
           invited_by: inviterId,
           status: 'pending',
+          token,
         } as any);
 
         // Jika user terdaftar, masukkan ke tabel notifications Supabase
@@ -247,11 +265,16 @@ export async function POST(req: NextRequest) {
 
     // 5. Simpan di backup file server agar realtime antar browser
     const all = loadBackupInvites();
-    const filtered = all.filter((i) => !(i.brand_id === brandId && (i.target_email || i.email)?.toLowerCase() === cleanEmail));
+    const filtered = all.filter((i) => {
+      if (isLink) {
+        return i.token !== token && i.id !== inviteId;
+      }
+      return !(i.brand_id === brandId && (i.target_email || i.email)?.toLowerCase() === cleanEmail);
+    });
     filtered.unshift(newInviteRecord);
     saveBackupInvites(filtered);
 
-    return NextResponse.json({ success: true, invitation: newInviteRecord });
+    return NextResponse.json({ success: true, invitation: newInviteRecord, token });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -260,18 +283,21 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { inviteId, brandId, action, userId, userEmail, userName, role } = body;
+    const { inviteId, token, brandId, action, userId, userEmail, userName, role } = body;
 
     const admin = createAdminClient();
 
     if (action === 'accept') {
       // 1. Update status invitation di Supabase
-      if (admin && inviteId) {
+      if (admin && (inviteId || token)) {
         try {
-          await admin
-            .from('invitations' as any)
-            .update({ status: 'accepted' })
-            .eq('id', inviteId);
+          let q: any = admin.from('invitations' as any).update({ status: 'accepted' });
+          if (inviteId) {
+            q = q.eq('id', inviteId);
+          } else if (token) {
+            q = q.eq('token', token);
+          }
+          await q;
         } catch {}
       }
 
@@ -316,24 +342,31 @@ export async function PUT(req: NextRequest) {
       // Update backup server
       const all = loadBackupInvites();
       const updated = all.map((i) =>
-        i.id === inviteId || (i.brand_id === brandId && (i.target_email || i.email)?.toLowerCase() === userEmail?.toLowerCase())
-          ? { ...i, status: 'accepted', target_user_id: userId }
+        (inviteId && i.id === inviteId) ||
+        (token && (i.token === token || i.id === token)) ||
+        (i.brand_id === brandId && userEmail && (i.target_email || i.email)?.toLowerCase() === userEmail?.toLowerCase())
+          ? { ...i, status: 'accepted', target_user_id: userId, target_email: userEmail || i.target_email }
           : i
       );
       saveBackupInvites(updated);
     } else if (action === 'reject') {
-      if (admin && inviteId) {
+      if (admin && (inviteId || token)) {
         try {
-          await admin
-            .from('invitations' as any)
-            .update({ status: 'cancelled' })
-            .eq('id', inviteId);
+          let q: any = admin.from('invitations' as any).update({ status: 'cancelled' });
+          if (inviteId) {
+            q = q.eq('id', inviteId);
+          } else if (token) {
+            q = q.eq('token', token);
+          }
+          await q;
         } catch {}
       }
 
       const all = loadBackupInvites();
       const updated = all.map((i) =>
-        i.id === inviteId ? { ...i, status: 'cancelled' } : i
+        (inviteId && i.id === inviteId) || (token && (i.token === token || i.id === token))
+          ? { ...i, status: 'cancelled' }
+          : i
       );
       saveBackupInvites(updated);
     }

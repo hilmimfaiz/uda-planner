@@ -23,6 +23,10 @@ import {
   Phone,
   MessageCircle,
   AlertCircle,
+  Link2,
+  Edit3,
+  Eye,
+  CheckCircle2,
 } from 'lucide-react';
 import { DUMMY_BRANDS, DUMMY_PILLARS, DUMMY_MEMBERS, DummyBrand, DummyMember } from '@/lib/dummy-data';
 import { initialProfiles } from '@/lib/supabase/mock-data';
@@ -126,6 +130,12 @@ export default function PengaturanBrandDetailPage() {
   const [generatedInviteLink, setGeneratedInviteLink] = useState<string | null>(null);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [isSendingInvite, setIsSendingInvite] = useState<boolean>(false);
+
+  // Dedicated Copy Link Modal States
+  const [showCopyLinkModal, setShowCopyLinkModal] = useState<boolean>(false);
+  const [copyLinkRole, setCopyLinkRole] = useState<'editor' | 'reviewer' | 'viewer'>('editor');
+  const [copyLinkToken, setCopyLinkToken] = useState<string>('');
+  const [isCopyLinkCopied, setIsCopyLinkCopied] = useState<boolean>(false);
 
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
   const [isAccessDenied, setIsAccessDenied] = useState<boolean>(false);
@@ -742,13 +752,108 @@ export default function PengaturanBrandDetailPage() {
     });
   };
 
+  const openCopyLinkModal = (initialRole: 'editor' | 'reviewer' | 'viewer' = 'editor') => {
+    const newToken = Math.random().toString(36).substring(2, 12);
+    setCopyLinkRole(initialRole);
+    setCopyLinkToken(newToken);
+    setIsCopyLinkCopied(false);
+    setShowCopyLinkModal(true);
+  };
+
+  const getCopyInviteUrl = (role: 'editor' | 'reviewer' | 'viewer', tokenVal: string) => {
+    const siteUrl = getSiteUrl();
+    const inviterName = user?.user_metadata?.full_name || user?.email || 'Owner';
+    const brandAvatar = brand.avatar_url || '';
+    const brandOwnerId = brand.owner_id || user?.id || '';
+    return `${siteUrl}/undangan/${tokenVal}?brand=${brand.id}&name=${encodeURIComponent(brand.name)}&role=${role}&inviter=${encodeURIComponent(inviterName)}&avatar=${encodeURIComponent(brandAvatar)}&ownerId=${encodeURIComponent(brandOwnerId)}`;
+  };
+
+  const handleCopyLinkExecute = async () => {
+    const currentToken = copyLinkToken || Math.random().toString(36).substring(2, 12);
+    if (!copyLinkToken) setCopyLinkToken(currentToken);
+
+    const joinUrl = getCopyInviteUrl(copyLinkRole, currentToken);
+    const inviterName = user?.user_metadata?.full_name || user?.email || 'Owner';
+
+    try {
+      await navigator.clipboard.writeText(joinUrl);
+    } catch {
+      const textArea = document.createElement('textarea');
+      textArea.value = joinUrl;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+    }
+
+    setIsCopyLinkCopied(true);
+    setTimeout(() => setIsCopyLinkCopied(false), 3000);
+    playSuccessSound();
+
+    const roleName = copyLinkRole === 'editor' ? 'Editor' : copyLinkRole === 'reviewer' ? 'Reviewer' : 'Viewer';
+    showToast(`📋 Link undangan ${roleName} untuk brand "${brand.name}" berhasil disalin!`);
+
+    const newInvite = {
+      id: currentToken,
+      token: currentToken,
+      brand_id: brand.id,
+      brand_name: brand.name,
+      brand_avatar: brand.avatar_url,
+      owner_id: brand.owner_id || user?.id,
+      target_email: '',
+      target_name: 'Penerima Tautan',
+      role: copyLinkRole,
+      inviter_name: inviterName,
+      inviter_email: user?.email || '',
+      is_link_invite: true,
+      status: 'pending' as const,
+      created_at: new Date().toISOString(),
+    };
+
+    try {
+      const raw = localStorage.getItem('uda_brand_invitations');
+      const allInvites = raw ? JSON.parse(raw) : [];
+      const updated = [newInvite, ...allInvites.filter((i: any) => i.token !== currentToken)];
+      localStorage.setItem('uda_brand_invitations', JSON.stringify(updated));
+    } catch {}
+
+    try {
+      fetch('/api/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brandId: brand.id,
+          brandName: brand.name,
+          brandAvatar: brand.avatar_url,
+          role: copyLinkRole,
+          token: currentToken,
+          inviterId: user?.id,
+          inviterName,
+          inviterEmail: user?.email,
+          isLinkInvite: true,
+        }),
+      }).catch(() => {});
+    } catch {}
+  };
+
+  const handleShareLinkWhatsApp = () => {
+    const currentToken = copyLinkToken || Math.random().toString(36).substring(2, 12);
+    if (!copyLinkToken) setCopyLinkToken(currentToken);
+
+    const joinUrl = getCopyInviteUrl(copyLinkRole, currentToken);
+    const inviterName = user?.user_metadata?.full_name || user?.email || 'Owner';
+    const roleName = copyLinkRole === 'editor' ? 'Editor' : copyLinkRole === 'reviewer' ? 'Reviewer' : 'Viewer';
+
+    const message = `Halo! 🚀\n\nAnda diundang oleh *${inviterName}* untuk bergabung ke brand *${brand.name}* sebagai *${roleName.toUpperCase()}* di UdaPlanner.\n\nKlik tautan berikut untuk konfirmasi dan otomatis bergabung ke brand:\n${joinUrl}\n\nSetelah bergabung, paket akun Anda akan otomatis aktif dalam tim brand ${brand.name}. Terima kasih!`;
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+    playSuccessSound();
+    showToast('✅ Tautan undangan WhatsApp berhasil dibuka!');
+  };
+
   const handleGenerateInvite = (e: React.FormEvent) => {
     e.preventDefault();
-    const token = Math.random().toString(36).substring(2, 12);
-    const siteUrl = getSiteUrl();
-    const link = `${siteUrl}/undangan/${token}`;
-    setGeneratedInviteLink(link);
-    showToast('Link undangan berhasil dibuat!');
+    openCopyLinkModal(inviteRole);
   };
 
   if (isLoadingAuth) {
@@ -1384,21 +1489,33 @@ export default function PengaturanBrandDetailPage() {
                   </p>
                 </div>
                 {isBrandOwner && (
-                  <button
-                    className="btn-uda btn-uda-primary btn-uda-sm"
-                    disabled={members.filter((m) => m.role !== 'owner').length >= 10}
-                    onClick={() => {
-                      setShowInviteModal(true);
-                      setInviteEmail('');
-                      setSearchedUser(null);
-                      setSearchError(null);
-                      setGeneratedInviteLink(null);
-                    }}
-                    title={members.filter((m) => m.role !== 'owner').length >= 10 ? 'Batas kuota 10 anggota kolaborator tercapai' : 'Undang anggota baru'}
-                  >
-                    <Plus size={14} />
-                    <span>+ Undang Anggota</span>
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn-uda btn-uda-secondary btn-uda-sm"
+                      onClick={() => openCopyLinkModal('editor')}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
+                      title="Salin tautan undangan dengan pilihan role"
+                    >
+                      <Copy size={14} />
+                      <span>Salin Link Undangan</span>
+                    </button>
+                    <button
+                      className="btn-uda btn-uda-primary btn-uda-sm"
+                      disabled={members.filter((m) => m.role !== 'owner').length >= 10}
+                      onClick={() => {
+                        setShowInviteModal(true);
+                        setInviteEmail('');
+                        setSearchedUser(null);
+                        setSearchError(null);
+                        setGeneratedInviteLink(null);
+                      }}
+                      title={members.filter((m) => m.role !== 'owner').length >= 10 ? 'Batas kuota 10 anggota kolaborator tercapai' : 'Undang anggota baru'}
+                    >
+                      <Plus size={14} />
+                      <span>+ Undang Anggota</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -1913,51 +2030,20 @@ export default function PengaturanBrandDetailPage() {
                 </div>
               )}
 
-              {/* Alternatif: Link Undangan WhatsApp */}
-              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
-                {!generatedInviteLink ? (
-                  <button
-                    type="button"
-                    className="btn-uda btn-uda-secondary btn-uda-sm"
-                    style={{ width: '100%' }}
-                    onClick={(e) => handleGenerateInvite(e as any)}
-                  >
-                    Atau Buat Link Undangan Langsung (WA)
-                  </button>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ padding: 8, background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0', wordBreak: 'break-all', fontSize: '0.78rem' }}>
-                      {generatedInviteLink}
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        type="button"
-                        className="btn-uda btn-uda-secondary btn-uda-sm"
-                        style={{ flex: 1 }}
-                        onClick={() => {
-                          navigator.clipboard.writeText(generatedInviteLink);
-                          playSuccessSound();
-                          showToast('📋 Link undangan disalin!');
-                        }}
-                      >
-                        <Copy size={13} />
-                        <span>Salin Link</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-uda btn-uda-primary btn-uda-sm"
-                        style={{ flex: 1 }}
-                        onClick={() => {
-                          const msg = encodeURIComponent(`Halo! Anda diundang bergabung ke brand ${brand.name} di UdaPlanner:\n\n${generatedInviteLink}`);
-                          window.open(`https://wa.me/?text=${msg}`, '_blank');
-                        }}
-                      >
-                        <Share2 size={13} />
-                        <span>Kirim WA</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
+              {/* Alternatif: Salin Link Undangan dengan Pilihan Role */}
+              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
+                <button
+                  type="button"
+                  className="btn-uda btn-uda-secondary btn-uda-sm"
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 700 }}
+                  onClick={() => {
+                    setShowInviteModal(false);
+                    openCopyLinkModal(inviteRole);
+                  }}
+                >
+                  <Copy size={14} />
+                  <span>Salin Link Undangan Tim (Pilih Role)</span>
+                </button>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
@@ -1967,6 +2053,418 @@ export default function PengaturanBrandDetailPage() {
                   onClick={() => setShowInviteModal(false)}
                 >
                   Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL POPUP: SALIN LINK UNDANGAN TIM (PILIH ROLE & BIND KE BRAND) */}
+      {showCopyLinkModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.72)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+          onClick={() => setShowCopyLinkModal(false)}
+        >
+          <div
+            className="uda-card"
+            style={{
+              maxWidth: 540,
+              width: '100%',
+              padding: 0,
+              borderRadius: 20,
+              border: '2.5px solid #0f172a',
+              boxShadow: '8px 8px 0px #0f172a',
+              backgroundColor: '#ffffff',
+              overflow: 'hidden',
+              animation: 'fadeIn 0.2s ease-out',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header Modal */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '20px 24px',
+                borderBottom: '2px solid #0f172a',
+                background: '#f8fafc',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 12,
+                    background: '#dcfce7',
+                    color: '#15803d',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid #0f172a',
+                    boxShadow: '2px 2px 0px #0f172a',
+                  }}
+                >
+                  <Link2 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>
+                    Salin Link Undangan Tim
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
+                    Pilih hak akses (role) untuk anggota yang diundang
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCopyLinkModal(false)}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  border: '1.5px solid #cbd5e1',
+                  background: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {/* Brand Target Banner */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '12px 16px',
+                  borderRadius: 12,
+                  background: '#f0fdf4',
+                  border: '1.5px solid #86efac',
+                }}
+              >
+                <img
+                  src={
+                    brand.avatar_url ||
+                    `https://ui-avatars.com/api/?name=${encodeURIComponent(brand.name)}&background=16a34a&color=fff&bold=true`
+                  }
+                  alt={brand.name}
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 10,
+                    objectFit: 'cover',
+                    border: '1.5px solid #0f172a',
+                  }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: '0.98rem', fontWeight: 900, color: '#0f172a' }}>
+                      {brand.name}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        padding: '2px 8px',
+                        borderRadius: 999,
+                        background: '#16a34a',
+                        color: '#ffffff',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Brand Tujuan
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.78rem', color: '#166534', margin: '2px 0 0' }}>
+                    Penerima link akan langsung otomatis bergabung ke brand <strong>{brand.name}</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Role Selection Label */}
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    color: '#334155',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    marginBottom: 8,
+                  }}
+                >
+                  Pilih Role / Hak Akses:
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {/* Option 1: Editor */}
+                  <div
+                    onClick={() => {
+                      setCopyLinkRole('editor');
+                      setIsCopyLinkCopied(false);
+                      playNotificationSound();
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      border: copyLinkRole === 'editor' ? '2px solid #16a34a' : '1.5px solid #e2e8f0',
+                      background: copyLinkRole === 'editor' ? '#f0fdf4' : '#ffffff',
+                      boxShadow: copyLinkRole === 'editor' ? '3px 3px 0px #16a34a' : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        border: copyLinkRole === 'editor' ? '6px solid #16a34a' : '2px solid #94a3b8',
+                        background: '#ffffff',
+                        marginTop: 2,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <span style={{ fontSize: '0.92rem', fontWeight: 900, color: '#0f172a' }}>
+                          Editor
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            padding: '1px 8px',
+                            borderRadius: 6,
+                            background: '#dcfce7',
+                            color: '#15803d',
+                            border: '1px solid #bbf7d0',
+                          }}
+                        >
+                          Bisa Buat &amp; Edit Konten
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0, lineHeight: 1.4 }}>
+                        Dapat membuat draft postingan baru, mengedit jadwal, mengunggah media, dan mengajukan konten untuk disetujui.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Option 2: Reviewer */}
+                  <div
+                    onClick={() => {
+                      setCopyLinkRole('reviewer');
+                      setIsCopyLinkCopied(false);
+                      playNotificationSound();
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      border: copyLinkRole === 'reviewer' ? '2px solid #f59e0b' : '1.5px solid #e2e8f0',
+                      background: copyLinkRole === 'reviewer' ? '#fffbeb' : '#ffffff',
+                      boxShadow: copyLinkRole === 'reviewer' ? '3px 3px 0px #f59e0b' : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        border: copyLinkRole === 'reviewer' ? '6px solid #f59e0b' : '2px solid #94a3b8',
+                        background: '#ffffff',
+                        marginTop: 2,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <span style={{ fontSize: '0.92rem', fontWeight: 900, color: '#0f172a' }}>
+                          Reviewer
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            padding: '1px 8px',
+                            borderRadius: 6,
+                            background: '#fef3c7',
+                            color: '#b45309',
+                            border: '1px solid #fde68a',
+                          }}
+                        >
+                          Menyetujui &amp; Revisi
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0, lineHeight: 1.4 }}>
+                        Dapat memeriksa postingan tim, menyetujui (approve) publikasi, atau meminta revisi sebelum diposting.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Option 3: Viewer */}
+                  <div
+                    onClick={() => {
+                      setCopyLinkRole('viewer');
+                      setIsCopyLinkCopied(false);
+                      playNotificationSound();
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      border: copyLinkRole === 'viewer' ? '2px solid #3b82f6' : '1.5px solid #e2e8f0',
+                      background: copyLinkRole === 'viewer' ? '#eff6ff' : '#ffffff',
+                      boxShadow: copyLinkRole === 'viewer' ? '3px 3px 0px #3b82f6' : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        border: copyLinkRole === 'viewer' ? '6px solid #3b82f6' : '2px solid #94a3b8',
+                        background: '#ffffff',
+                        marginTop: 2,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <span style={{ fontSize: '0.92rem', fontWeight: 900, color: '#0f172a' }}>
+                          Viewer
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            padding: '1px 8px',
+                            borderRadius: 6,
+                            background: '#dbeafe',
+                            color: '#1d4ed8',
+                            border: '1px solid #bfdbfe',
+                          }}
+                        >
+                          Lihat Saja (Read-Only)
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0, lineHeight: 1.4 }}>
+                        Hanya memiliki hak untuk melihat kalender dan preview postingan tanpa dapat mengedit atau menyetujui.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Link Preview Box */}
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.76rem',
+                    fontWeight: 800,
+                    color: '#64748b',
+                    marginBottom: 6,
+                  }}
+                >
+                  PREVIEW LINK UNDANGAN:
+                </label>
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    background: '#f8fafc',
+                    border: '1.5px solid #cbd5e1',
+                    fontSize: '0.75rem',
+                    color: '#334155',
+                    wordBreak: 'break-all',
+                    fontFamily: 'monospace',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {getCopyInviteUrl(copyLinkRole, copyLinkToken || 'token-undangan')}
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button
+                  type="button"
+                  className="btn-uda btn-uda-primary"
+                  onClick={handleCopyLinkExecute}
+                  style={{
+                    flex: 1.2,
+                    height: 46,
+                    fontSize: '0.92rem',
+                    fontWeight: 900,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
+                >
+                  {isCopyLinkCopied ? (
+                    <>
+                      <Check size={18} />
+                      <span>✓ Link Berhasil Disalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={18} />
+                      <span>Salin Link Undangan</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-uda btn-uda-secondary"
+                  onClick={handleShareLinkWhatsApp}
+                  style={{
+                    flex: 1,
+                    height: 46,
+                    fontSize: '0.88rem',
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                  }}
+                  title="Bagikan undangan via WhatsApp"
+                >
+                  <Share2 size={16} />
+                  <span>Kirim ke WA</span>
                 </button>
               </div>
             </div>

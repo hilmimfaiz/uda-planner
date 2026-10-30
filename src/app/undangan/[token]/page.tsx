@@ -22,9 +22,11 @@ export default function UndanganAnggotaPage() {
   const [isJoining, setIsJoining] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [inviteData, setInviteData] = useState<{
+    id?: string;
     brand_id: string;
     brand_name: string;
     brand_avatar?: string;
+    owner_id?: string;
     role: string;
     inviter_name: string;
     target_email?: string;
@@ -37,67 +39,108 @@ export default function UndanganAnggotaPage() {
 
       let found: any = null;
 
+      // Cek query params terlebih dahulu untuk prioritas data link yang dibagikan
+      const qBrandId = searchParams.get('brand');
+      const qBrandName = searchParams.get('name') || searchParams.get('brand_name');
+      const qRole = searchParams.get('role');
+      const qInviter = searchParams.get('inviter');
+      const qAvatar = searchParams.get('avatar');
+      const qOwnerId = searchParams.get('ownerId');
+      const qTarget = searchParams.get('target');
+
+      if (qBrandId && qBrandName) {
+        found = {
+          brand_id: qBrandId,
+          brand_name: qBrandName,
+          brand_avatar: qAvatar || undefined,
+          owner_id: qOwnerId || undefined,
+          role: qRole || 'editor',
+          inviter_name: qInviter || 'Pemilik Brand',
+          target_email: qTarget || undefined,
+        };
+      }
+
       // Cek di localStorage 'uda_brand_invitations'
       if (typeof window !== 'undefined') {
         try {
           const raw = localStorage.getItem('uda_brand_invitations');
           if (raw) {
             const list = JSON.parse(raw);
-            found = list.find((i: any) => i.id === token || i.token === token);
+            const match = list.find((i: any) => i.id === token || i.token === token);
+            if (match) {
+              found = {
+                id: match.id,
+                brand_id: match.brand_id || found?.brand_id,
+                brand_name: match.brand_name || found?.brand_name || 'Brand',
+                brand_avatar: match.brand_avatar || found?.brand_avatar,
+                owner_id: match.owner_id || found?.owner_id,
+                role: match.role || found?.role || 'editor',
+                inviter_name: match.inviter_name || found?.inviter_name || 'Pemilik Brand',
+                target_email: match.target_email || found?.target_email,
+              };
+            }
           }
         } catch {}
       }
 
-      // Cek di Supabase database jika belum ketemu
-      if (!found && supabase && token) {
+      // Cek ke API /api/invitations (server file backup)
+      if (token) {
+        try {
+          const res = await fetch(`/api/invitations?token=${token}`);
+          const resJson = await res.json();
+          if (resJson.success && resJson.invitations?.length > 0) {
+            const match = resJson.invitations[0];
+            found = {
+              id: match.id,
+              brand_id: match.brand_id || found?.brand_id,
+              brand_name: match.brand_name || found?.brand_name || 'Brand',
+              brand_avatar: match.brand_avatar || found?.brand_avatar,
+              owner_id: match.owner_id || found?.owner_id,
+              role: match.role || found?.role || 'editor',
+              inviter_name: match.inviter_name || found?.inviter_name || 'Pemilik Brand',
+              target_email: match.target_email || match.email || found?.target_email,
+            };
+          }
+        } catch (err) {}
+      }
+
+      // Cek di Supabase database jika belum lengkap
+      if (supabase && token) {
         try {
           const { data: dbInv } = await (supabase.from('invitations' as any) as any)
-            .select('*, brands(id, name, avatar_url)')
+            .select('*, brands(id, name, avatar_url, owner_id)')
             .eq('token', token)
             .maybeSingle();
 
           if (dbInv) {
             found = {
+              id: dbInv.id,
               brand_id: dbInv.brand_id,
-              brand_name: dbInv.brands?.name || 'Brand UdaPlanner',
-              brand_avatar: dbInv.brands?.avatar_url,
-              role: dbInv.role || 'editor',
+              brand_name: dbInv.brands?.name || found?.brand_name || 'Brand UdaPlanner',
+              brand_avatar: dbInv.brands?.avatar_url || found?.brand_avatar,
+              owner_id: dbInv.brands?.owner_id || found?.owner_id,
+              role: dbInv.role || found?.role || 'editor',
               inviter_name: 'Pemilik Brand',
-              target_email: dbInv.email,
+              target_email: dbInv.email || found?.target_email,
             };
           }
         } catch {}
       }
 
-      // Cek query params sebagai fallback tautan langsung WhatsApp
-      const qBrandId = searchParams.get('brand');
-      const qBrandName = searchParams.get('name') || searchParams.get('brand_name');
-      const qRole = searchParams.get('role');
-      const qInviter = searchParams.get('inviter');
-      const qTarget = searchParams.get('target');
-
+      // Fallback query params jika belum ditemukan sebelumnya
       if (!found && qBrandId) {
         found = {
           brand_id: qBrandId,
           brand_name: qBrandName || 'Brand Kolaborasi',
+          brand_avatar: qAvatar || undefined,
+          owner_id: qOwnerId || undefined,
           role: qRole || 'editor',
-          inviter_name: qInviter || 'Brand Owner',
+          inviter_name: qInviter || 'Pemilik Brand',
           target_email: qTarget || undefined,
         };
       }
 
-      if (found) {
-        setInviteData(found);
-      } else {
-        // Fallback default info jika token custom
-        setInviteData({
-          brand_id: qBrandId || 'brand-default',
-          brand_name: qBrandName || 'Brand Kolaborasi UdaPlanner',
-          role: qRole || 'editor',
-          inviter_name: qInviter || 'Brand Owner',
-        });
-      }
-
+      setInviteData(found);
       setIsLoading(false);
     };
 
@@ -116,9 +159,45 @@ export default function UndanganAnggotaPage() {
 
     try {
       // 1. Tambahkan ke brand members (Supabase & LocalStorage)
-      await MemberService.addMember(inviteData.brand_id, currentUserId, finalRole as any);
+      try {
+        await MemberService.addMember(inviteData.brand_id, currentUserId, finalRole as any);
+      } catch (errM) {}
 
+      // 2. Simpan brand ke uda_custom_brands di localStorage penerima agar langsung muncul di workspace & daftar brand mereka
       if (typeof window !== 'undefined') {
+        try {
+          const rawBrands = localStorage.getItem('uda_custom_brands');
+          let customBrands: any[] = [];
+          if (rawBrands) customBrands = JSON.parse(rawBrands);
+
+          const existingBrandIdx = customBrands.findIndex((b: any) => b.id === inviteData.brand_id);
+          const brandRecord = {
+            id: inviteData.brand_id,
+            owner_id: inviteData.owner_id || 'brand-owner',
+            name: inviteData.brand_name,
+            handle: inviteData.brand_name.toLowerCase().replace(/[^a-z0-9]+/g, ''),
+            platforms: ['instagram', 'tiktok', 'facebook'],
+            color: '#16A34A',
+            avatar_url:
+              inviteData.brand_avatar ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(inviteData.brand_name)}&background=16a34a&color=fff&bold=true`,
+            require_approval: false,
+            is_archived: false,
+            post_count_this_month: 0,
+          };
+
+          if (existingBrandIdx >= 0) {
+            customBrands[existingBrandIdx] = { ...customBrands[existingBrandIdx], ...brandRecord };
+          } else {
+            customBrands.unshift(brandRecord);
+          }
+          localStorage.setItem('uda_custom_brands', JSON.stringify(customBrands));
+
+          // Set active brand ke brand yang baru saja diterima
+          localStorage.setItem('uda_active_brand_id', inviteData.brand_id);
+          localStorage.setItem('uda_active_brand_name', inviteData.brand_name);
+        } catch (bErr) {}
+
         const localKey = 'uda_brand_members_' + inviteData.brand_id;
         let existingMembers: any[] = [];
         try {
@@ -137,12 +216,17 @@ export default function UndanganAnggotaPage() {
           role: finalRole,
         };
 
-        if (!existingMembers.some((m) => m.email?.toLowerCase() === currentUserEmail.toLowerCase())) {
+        const existingMemberIdx = existingMembers.findIndex(
+          (m) => (m.id && m.id === currentUserId) || (m.email && m.email.toLowerCase() === currentUserEmail.toLowerCase())
+        );
+        if (existingMemberIdx >= 0) {
+          existingMembers[existingMemberIdx] = { ...existingMembers[existingMemberIdx], ...newMember };
+        } else {
           existingMembers.push(newMember);
-          localStorage.setItem(localKey, JSON.stringify(existingMembers));
         }
+        localStorage.setItem(localKey, JSON.stringify(existingMembers));
 
-        // 2. Simpan status keanggotaan TIM
+        // 3. Simpan status keanggotaan TIM
         const teamInfo = {
           brand_id: inviteData.brand_id,
           brand_name: inviteData.brand_name,
@@ -152,7 +236,7 @@ export default function UndanganAnggotaPage() {
         };
         localStorage.setItem('uda_team_membership_' + currentUserId, JSON.stringify(teamInfo));
 
-        // 3. Update cache akun lokal & role sistem
+        // 4. Update cache akun lokal & role sistem
         const rawAcc = localStorage.getItem('uda_auth_account');
         let accObj: any = rawAcc ? JSON.parse(rawAcc) : {};
         accObj = {
@@ -183,14 +267,32 @@ export default function UndanganAnggotaPage() {
           const list = JSON.parse(rawInv);
           const updated = list.map((inv: any) =>
             inv.token === token || inv.id === token || (inv.brand_id === inviteData.brand_id && inv.target_email?.toLowerCase() === currentUserEmail.toLowerCase())
-              ? { ...inv, status: 'accepted', target_user_id: currentUserId }
+              ? { ...inv, status: 'accepted', target_user_id: currentUserId, target_email: currentUserEmail }
               : inv
           );
           localStorage.setItem('uda_brand_invitations', JSON.stringify(updated));
         }
       }
 
-      // 4. Update tabel accounts di Supabase menjadi paket 'team'
+      // 5. Update backup di server via API PUT /api/invitations
+      try {
+        await fetch('/api/invitations', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            inviteId: inviteData.id || token,
+            token,
+            brandId: inviteData.brand_id,
+            action: 'accept',
+            userId: currentUserId,
+            userEmail: currentUserEmail,
+            userName: currentUserName,
+            role: finalRole,
+          }),
+        });
+      } catch (apiErr) {}
+
+      // 6. Update tabel accounts di Supabase menjadi paket 'team'
       if (supabase && user?.id) {
         try {
           await (supabase.from('accounts' as any) as any)
@@ -208,6 +310,7 @@ export default function UndanganAnggotaPage() {
       // Dispatch event realtime
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('uda_account_updated', { detail: { planCode: 'team' } }));
+        window.dispatchEvent(new CustomEvent('uda_brand_switched', { detail: { brandId: inviteData.brand_id } }));
         window.dispatchEvent(new Event('storage'));
       }
 
@@ -231,6 +334,27 @@ export default function UndanganAnggotaPage() {
         <div style={{ textAlign: 'center', color: '#64748b' }}>
           <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 12px', color: '#16a34a' }} />
           <p style={{ fontWeight: 700 }}>Memuat informasi undangan tim...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!inviteData) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 50%, #f8fafc 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div className="uda-card" style={{ maxWidth: 460, width: '100%', padding: 36, textAlign: 'center', borderRadius: 20, border: '2.5px solid #0f172a', boxShadow: '8px 8px 0px #0f172a', backgroundColor: '#ffffff' }}>
+          <div style={{ width: 64, height: 64, borderRadius: 16, background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '2px solid #0f172a', boxShadow: '3px 3px 0px #0f172a' }}>
+            <Building size={32} />
+          </div>
+          <h1 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0f172a', marginBottom: 10 }}>
+            Tautan Undangan Tidak Valid
+          </h1>
+          <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: 24 }}>
+            Tautan undangan ini tidak ditemukan, sudah kedaluwarsa, atau dibatalkan oleh pemilik brand. Silakan hubungi pemilik brand untuk meminta tautan undangan baru.
+          </p>
+          <Link href="/app" className="btn-uda btn-uda-primary" style={{ width: '100%', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 44, fontWeight: 800 }}>
+            Kembali ke Dashboard
+          </Link>
         </div>
       </div>
     );
