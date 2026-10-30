@@ -156,42 +156,58 @@ export class BrandService {
     let finalUserId = userId;
     let userEmail = '';
 
-    if (supabase && (!finalUserId || !isUuid(finalUserId))) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.id) {
-          finalUserId = user.id;
-          userEmail = user.email || '';
-        }
-      } catch {}
-    }
-
-    if (!finalUserId && typeof window !== 'undefined') {
+    // Pastikan userEmail dan finalUserId terisi secara lengkap dari Supabase maupun localStorage
+    if (typeof window !== 'undefined') {
       try {
         const rawAuth = localStorage.getItem('uda_auth_profile');
         if (rawAuth) {
           const parsed = JSON.parse(rawAuth);
-          finalUserId = parsed.id;
-          userEmail = parsed.email || '';
+          if (!finalUserId) finalUserId = parsed.id;
+          if (!userEmail && parsed.email) userEmail = parsed.email;
+        }
+        const rawUser = localStorage.getItem('uda_auth_user');
+        if (rawUser) {
+          const parsedU = JSON.parse(rawUser);
+          if (!finalUserId) finalUserId = parsedU.id;
+          if (!userEmail && parsedU.email) userEmail = parsedU.email;
         }
       } catch {}
     }
 
-    if (!finalUserId) return null;
+    if (supabase && (!finalUserId || !userEmail)) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          if (!finalUserId) finalUserId = user.id;
+          if (!userEmail && user.email) userEmail = user.email;
+        }
+      } catch {}
+    }
+
+    // Dapatkan referensi nama brand untuk pencocokan cadangan jika ID brand adalah alias/dummy
+    let targetBrandName = '';
+    const storedBrands = typeof window !== 'undefined' ? getStoredCustomBrands() : [];
+    const matchedBrand = storedBrands.find((b) => b.id === brandId) || DUMMY_BRANDS.find((b) => b.id === brandId);
+    if (matchedBrand) {
+      targetBrandName = matchedBrand.name;
+    }
 
     // 1. Cek kepemilikan Owner langsung di Supabase
     if (supabase && isUuid(brandId) && isUuid(finalUserId)) {
       try {
         const { data: brand } = await (supabase.from('brands' as any) as any)
-          .select('owner_id')
+          .select('owner_id, name')
           .eq('id', brandId)
           .maybeSingle();
 
-        if (brand && brand.owner_id === finalUserId) {
-          return 'owner';
+        if (brand) {
+          if (brand.name && !targetBrandName) targetBrandName = brand.name;
+          if (brand.owner_id === finalUserId) {
+            return 'owner';
+          }
         }
 
-        // Cek tabel brand_members di database
+        // Cek tabel brand_members di database Supabase
         const { data: member } = await (supabase.from('brand_members' as any) as any)
           .select('role')
           .eq('brand_id', brandId)
@@ -199,51 +215,131 @@ export class BrandService {
           .maybeSingle();
 
         if (member && member.role) {
-          return member.role as 'editor' | 'reviewer' | 'viewer';
+          return member.role.toLowerCase() as 'editor' | 'reviewer' | 'viewer';
         }
       } catch (err) {
         console.warn('BrandService.getUserBrandRole db lookup notice:', err);
       }
     }
 
-    // 2. Cek di penyimpanan lokal (custom brands & brand members)
+    // 2. Cek di penyimpanan lokal: custom brands kepemilikan Owner
     if (typeof window !== 'undefined') {
       try {
-        const stored = getStoredCustomBrands();
-        const b = stored.find((item) => item.id === brandId);
+        const b = storedBrands.find((item) => item.id === brandId);
         if (b && b.owner_id === finalUserId) {
           return 'owner';
         }
 
-        // Cek anggota tim lokal
+        // 3. Cek keanggotaan tim dari 'uda_team_membership_[userId]' & 'uda_team_membership'
+        const teamKeys = [
+          finalUserId ? 'uda_team_membership_' + finalUserId : null,
+          'uda_team_membership',
+        ].filter(Boolean) as string[];
+
+        for (const key of teamKeys) {
+          const rawTeam = localStorage.getItem(key);
+          if (rawTeam) {
+            const team = JSON.parse(rawTeam);
+            const isMatch =
+              team.brand_id === brandId ||
+              (targetBrandName && team.brand_name && targetBrandName.toLowerCase() === team.brand_name.toLowerCase()) ||
+              (team.brand_name && matchedBrand && matchedBrand.name.toLowerCase() === team.brand_name.toLowerCase());
+
+            if (isMatch && team.role) {
+              return team.role.toLowerCase() as 'editor' | 'reviewer' | 'viewer';
+            }
+          }
+        }
+
+        // 4. Cek anggota tim lokal di key 'uda_brand_members_' + brandId
         const rawMembers = localStorage.getItem('uda_brand_members_' + brandId);
         if (rawMembers) {
           const membersList = JSON.parse(rawMembers);
           const match = membersList.find((m: any) =>
             (finalUserId && (m.id === finalUserId || m.user_id === finalUserId)) ||
-            (userEmail && m.email?.toLowerCase() === userEmail.toLowerCase())
+            (userEmail && m.email && m.email.toLowerCase() === userEmail.toLowerCase())
           );
           if (match && match.role) {
-            return match.role as 'owner' | 'editor' | 'reviewer' | 'viewer';
+            return match.role.toLowerCase() as 'owner' | 'editor' | 'reviewer' | 'viewer';
           }
         }
 
-        // Cek undangan yang sudah diterima di 'uda_brand_invitations'
+        // 5. Cek undangan tim yang relevan di 'uda_brand_invitations'
         const rawInvites = localStorage.getItem('uda_brand_invitations');
         if (rawInvites) {
           const invitesList = JSON.parse(rawInvites);
-          const acceptedMatch = invitesList.find(
-            (inv: any) =>
-              inv.brand_id === brandId &&
-              inv.status === 'accepted' &&
-              ((userEmail && inv.target_email?.toLowerCase() === userEmail.toLowerCase()) ||
-               (finalUserId && inv.target_user_id === finalUserId))
-          );
+          const acceptedMatch = invitesList.find((inv: any) => {
+            const isUser =
+              (userEmail && inv.target_email && inv.target_email.toLowerCase() === userEmail.toLowerCase()) ||
+              (userEmail && inv.email && inv.email.toLowerCase() === userEmail.toLowerCase()) ||
+              (finalUserId && inv.target_user_id === finalUserId);
+
+            if (!isUser) return false;
+
+            const isBrand =
+              inv.brand_id === brandId ||
+              (targetBrandName && inv.brand_name && targetBrandName.toLowerCase() === inv.brand_name.toLowerCase()) ||
+              (inv.brand_name && matchedBrand && matchedBrand.name.toLowerCase() === inv.brand_name.toLowerCase());
+
+            return isBrand && (inv.status === 'accepted' || inv.status === 'pending' || !inv.status);
+          });
+
           if (acceptedMatch && acceptedMatch.role) {
-            return acceptedMatch.role as 'editor' | 'reviewer' | 'viewer';
+            return acceptedMatch.role.toLowerCase() as 'editor' | 'reviewer' | 'viewer';
           }
         }
-      } catch {}
+
+        // 6. Cek informasi cache akun tim di 'uda_auth_account'
+        const rawAcc = localStorage.getItem('uda_auth_account');
+        if (rawAcc) {
+          const acc = JSON.parse(rawAcc);
+          if (acc.plan_code === 'team') {
+            const isBrandMatch =
+              acc.team_member_brand_id === brandId ||
+              (targetBrandName && acc.team_member_brand_name && targetBrandName.toLowerCase() === acc.team_member_brand_name.toLowerCase()) ||
+              (!acc.team_member_brand_id && !acc.team_member_brand_name);
+
+            if (isBrandMatch) {
+              const sysRole = finalUserId ? localStorage.getItem('uda_system_role_' + finalUserId) : null;
+              const r = sysRole || acc.team_role || acc.role;
+              if (r && ['owner', 'editor', 'reviewer', 'viewer'].includes(r.toLowerCase())) {
+                return r.toLowerCase() as 'owner' | 'editor' | 'reviewer' | 'viewer';
+              }
+            }
+          }
+        }
+
+        // 7. Cek seluruh key uda_brand_members_* jika brand ID mengalami penyesuaian
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('uda_brand_members_')) {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const mList = JSON.parse(raw);
+              const found = mList.find((m: any) =>
+                (finalUserId && (m.id === finalUserId || m.user_id === finalUserId)) ||
+                (userEmail && m.email && m.email.toLowerCase() === userEmail.toLowerCase())
+              );
+              if (found && found.role) {
+                const keyBrandId = k.replace('uda_brand_members_', '');
+                if (keyBrandId === brandId || !brandId.startsWith('brand-')) {
+                  return found.role.toLowerCase() as 'owner' | 'editor' | 'reviewer' | 'viewer';
+                }
+              }
+            }
+          }
+        }
+
+        // 8. Fallback peran sistem tim jika pengguna memiliki peran tersimpan
+        if (finalUserId) {
+          const sysRole = localStorage.getItem('uda_system_role_' + finalUserId);
+          if (sysRole && ['owner', 'editor', 'reviewer', 'viewer'].includes(sysRole.toLowerCase())) {
+            return sysRole.toLowerCase() as 'owner' | 'editor' | 'reviewer' | 'viewer';
+          }
+        }
+      } catch (err) {
+        console.warn('BrandService.getUserBrandRole local lookup error:', err);
+      }
     }
 
     return null;
@@ -366,6 +462,99 @@ export class BrandService {
         brandMap.set(c.id, c);
       }
     });
+
+    // 4. Sertakan brand dimana pengguna terdaftar sebagai anggota tim via undangan lokal/team membership
+    if (typeof window !== 'undefined') {
+      try {
+        // Dari uda_team_membership_
+        const teamKeys = [
+          finalOwnerId ? 'uda_team_membership_' + finalOwnerId : null,
+          'uda_team_membership',
+        ].filter(Boolean) as string[];
+
+        for (const tKey of teamKeys) {
+          const rawTeam = localStorage.getItem(tKey);
+          if (rawTeam) {
+            const team = JSON.parse(rawTeam);
+            if (team.brand_id && !brandMap.has(team.brand_id)) {
+              const dummyMatch = DUMMY_BRANDS.find((d) => d.id === team.brand_id || d.name.toLowerCase() === team.brand_name?.toLowerCase());
+              if (dummyMatch) {
+                brandMap.set(dummyMatch.id, dummyMatch);
+              } else {
+                brandMap.set(team.brand_id, {
+                  id: team.brand_id,
+                  owner_id: 'owner',
+                  name: team.brand_name || 'Brand Tim',
+                  handle: (team.brand_name || 'brandtim').toLowerCase().replace(/[^a-z0-9]+/g, ''),
+                  platforms: ['instagram'],
+                  color: '#16A34A',
+                  avatar_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
+                  require_approval: true,
+                  is_archived: false,
+                  post_count_this_month: 0,
+                });
+              }
+            }
+          }
+        }
+
+        // Dari uda_brand_invitations
+        const rawInv = localStorage.getItem('uda_brand_invitations');
+        if (rawInv) {
+          const invList = JSON.parse(rawInv);
+          invList.forEach((inv: any) => {
+            const isUser =
+              (currentUserEmail && (inv.target_email?.toLowerCase() === currentUserEmail.toLowerCase() || inv.email?.toLowerCase() === currentUserEmail.toLowerCase())) ||
+              (finalOwnerId && inv.target_user_id === finalOwnerId);
+
+            if (isUser && (inv.status === 'accepted' || inv.status === 'pending' || !inv.status)) {
+              if (inv.brand_id && !brandMap.has(inv.brand_id)) {
+                const dummyMatch = DUMMY_BRANDS.find((d) => d.id === inv.brand_id || d.name.toLowerCase() === inv.brand_name?.toLowerCase());
+                if (dummyMatch) {
+                  brandMap.set(dummyMatch.id, dummyMatch);
+                } else {
+                  brandMap.set(inv.brand_id, {
+                    id: inv.brand_id,
+                    owner_id: 'owner',
+                    name: inv.brand_name || 'Brand Tim',
+                    handle: (inv.brand_name || 'brandtim').toLowerCase().replace(/[^a-z0-9]+/g, ''),
+                    platforms: ['instagram'],
+                    color: '#16A34A',
+                    avatar_url: inv.brand_avatar || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
+                    require_approval: true,
+                    is_archived: false,
+                    post_count_this_month: 0,
+                  });
+                }
+              }
+            }
+          });
+        }
+
+        // Dari seluruh key uda_brand_members_*
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('uda_brand_members_')) {
+            const bId = k.replace('uda_brand_members_', '');
+            if (!brandMap.has(bId)) {
+              const rawM = localStorage.getItem(k);
+              if (rawM) {
+                const mList = JSON.parse(rawM);
+                if (mList.some((m: any) =>
+                  (finalOwnerId && (m.id === finalOwnerId || m.user_id === finalOwnerId)) ||
+                  (currentUserEmail && m.email && m.email.toLowerCase() === currentUserEmail.toLowerCase())
+                )) {
+                  const dummyMatch = DUMMY_BRANDS.find((d) => d.id === bId);
+                  if (dummyMatch) {
+                    brandMap.set(dummyMatch.id, dummyMatch);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+    }
 
     return Array.from(brandMap.values());
   }
