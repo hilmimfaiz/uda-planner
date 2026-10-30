@@ -31,31 +31,36 @@ const kalenderTourSteps: TourStep[] = [
   {
     targetId: "tour-calendar-header",
     title: "Kalender Perencanaan Konten",
-    description: "Atur, pantau, dan jadwalkan semua konten media sosial dalam satu tampilan kalender yang interaktif.",
+    description:
+      "Atur, pantau, dan jadwalkan semua konten media sosial dalam satu tampilan kalender yang interaktif.",
     placement: "bottom",
   },
   {
     targetId: "tour-calendar-modes",
     title: "Mode Tampilan Fleksibel",
-    description: "Beralih dengan mudah antara mode Bulan (ikhtisar menyeluruh), Minggu (fokus mingguan), atau Agenda (daftar runut waktu).",
+    description:
+      "Beralih dengan mudah antara mode Bulan (ikhtisar menyeluruh), Minggu (fokus mingguan), atau Agenda (daftar runut waktu).",
     placement: "bottom",
   },
   {
     targetId: "tour-calendar-nav",
     title: "Navigasi Bulan & Filter",
-    description: "Pindah antar bulan dengan cepat, kembali ke 'Hari Ini', serta filter konten berdasarkan Brand atau Status publikasi.",
+    description:
+      "Pindah antar bulan dengan cepat, kembali ke 'Hari Ini', serta filter konten berdasarkan Brand atau Status publikasi.",
     placement: "bottom",
   },
   {
     targetId: "tour-calendar-grid",
     title: "Grid Kalender Interaktif",
-    description: "Klik tanggal mana saja untuk membuat postingan baru di tanggal tersebut, atau drag & drop kartu postingan untuk mengubah jadwal secara instan.",
+    description:
+      "Klik tanggal mana saja untuk membuat postingan baru di tanggal tersebut, atau drag & drop kartu postingan untuk mengubah jadwal secara instan.",
     placement: "top",
   },
   {
     targetId: "tour-calendar-unscheduled",
     title: "Postingan Belum Terjadwal",
-    description: "Daftar ide dan draft yang belum memiliki tanggal. Anda dapat menariknya (drag) langsung ke tanggal target di grid kalender!",
+    description:
+      "Daftar ide dan draft yang belum memiliki tanggal. Anda dapat menariknya (drag) langsung ke tanggal target di grid kalender!",
     placement: "left",
   },
 ];
@@ -90,16 +95,16 @@ export default function KalenderPage() {
       setBrands(data || []);
     });
 
-    window.addEventListener('uda_post_updated', loadPosts);
-    window.addEventListener('uda_post_created', loadPosts);
-    window.addEventListener('uda_post_deleted', loadPosts);
-    window.addEventListener('storage', loadPosts);
+    window.addEventListener("uda_post_updated", loadPosts);
+    window.addEventListener("uda_post_created", loadPosts);
+    window.addEventListener("uda_post_deleted", loadPosts);
+    window.addEventListener("storage", loadPosts);
 
     return () => {
-      window.removeEventListener('uda_post_updated', loadPosts);
-      window.removeEventListener('uda_post_created', loadPosts);
-      window.removeEventListener('uda_post_deleted', loadPosts);
-      window.removeEventListener('storage', loadPosts);
+      window.removeEventListener("uda_post_updated", loadPosts);
+      window.removeEventListener("uda_post_created", loadPosts);
+      window.removeEventListener("uda_post_deleted", loadPosts);
+      window.removeEventListener("storage", loadPosts);
     };
   }, [user?.id]);
 
@@ -131,10 +136,15 @@ export default function KalenderPage() {
     return { monday, sunday: weekDays[6], weekDays };
   };
 
-  const { monday: weekStart, sunday: weekEnd, weekDays } = getWeekRange(currentDate);
+  const {
+    monday: weekStart,
+    sunday: weekEnd,
+    weekDays,
+  } = getWeekRange(currentDate);
 
   // Handlers untuk navigasi tanggal yang sinkron dengan viewMode (Bulan / Minggu)
   const handlePrev = () => {
+    setSelectedDate(null);
     const next = new Date(currentDate);
     if (viewMode === "minggu") {
       next.setDate(next.getDate() - 7);
@@ -145,6 +155,7 @@ export default function KalenderPage() {
   };
 
   const handleNext = () => {
+    setSelectedDate(null);
     const next = new Date(currentDate);
     if (viewMode === "minggu") {
       next.setDate(next.getDate() + 7);
@@ -155,13 +166,16 @@ export default function KalenderPage() {
   };
 
   const handleToday = () => {
+    setSelectedDate(null);
     setCurrentDate(new Date());
   };
 
   // Label judul periode aktif
   let navTitle = "";
   if (viewMode === "minggu") {
-    const startMonth = weekStart.toLocaleDateString("id-ID", { month: "short" });
+    const startMonth = weekStart.toLocaleDateString("id-ID", {
+      month: "short",
+    });
     const endMonth = weekEnd.toLocaleDateString("id-ID", { month: "short" });
     const yearStr = weekEnd.getFullYear();
     if (weekStart.getMonth() === weekEnd.getMonth()) {
@@ -227,7 +241,9 @@ export default function KalenderPage() {
       ),
     );
 
-    await PostService.updatePost(postId, { scheduled_at: newScheduled.toISOString() });
+    await PostService.updatePost(postId, {
+      scheduled_at: newScheduled.toISOString(),
+    });
 
     setUndoPostState({ id: postId, oldDate });
     const formatted = newScheduled.toLocaleDateString("id-ID", {
@@ -253,13 +269,24 @@ export default function KalenderPage() {
           : p,
       ),
     );
-    await PostService.updatePost(undoPostState.id, { scheduled_at: undoPostState.oldDate });
+    await PostService.updatePost(undoPostState.id, {
+      scheduled_at: undoPostState.oldDate,
+    });
     setToastMessage("Perubahan jadwal berhasil diurungkan.");
     setUndoPostState(null);
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div
+      className="uda-calendar-page"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+        width: "100%",
+        minWidth: 0,
+      }}
+    >
       {/* Toast Notifikasi dengan tombol Urungkan */}
       {toastMessage && (
         <div
@@ -341,7 +368,10 @@ export default function KalenderPage() {
           {(["bulan", "minggu", "agenda"] as const).map((mode) => (
             <button
               key={mode}
-              onClick={() => setViewMode(mode)}
+              onClick={() => {
+                setSelectedDate(null);
+                setViewMode(mode);
+              }}
               style={{
                 padding: "6px 14px",
                 borderRadius: 6,
@@ -381,7 +411,9 @@ export default function KalenderPage() {
             <button
               className="btn-uda btn-uda-secondary btn-uda-sm"
               onClick={handlePrev}
-              title={viewMode === "minggu" ? "Minggu Sebelumnya" : "Bulan Sebelumnya"}
+              title={
+                viewMode === "minggu" ? "Minggu Sebelumnya" : "Bulan Sebelumnya"
+              }
             >
               <ChevronLeft size={16} />
             </button>
@@ -399,7 +431,11 @@ export default function KalenderPage() {
             <button
               className="btn-uda btn-uda-secondary btn-uda-sm"
               onClick={handleNext}
-              title={viewMode === "minggu" ? "Minggu Selanjutnya" : "Bulan Selanjutnya"}
+              title={
+                viewMode === "minggu"
+                  ? "Minggu Selanjutnya"
+                  : "Bulan Selanjutnya"
+              }
             >
               <ChevronRight size={16} />
             </button>
@@ -442,7 +478,14 @@ export default function KalenderPage() {
 
             {/* Indikator Filter Aktif & Tombol Reset */}
             {isFilterActive && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  flexShrink: 0,
+                }}
+              >
                 <span
                   style={{
                     fontSize: "0.76rem",
@@ -503,12 +546,35 @@ export default function KalenderPage() {
             /* Mode Agenda (Daftar per hari) */
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {scheduledPosts.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "48px 20px", color: "#64748b" }}>
-                  <CalendarIcon size={40} style={{ color: "#94a3b8", margin: "0 auto 12px" }} />
-                  <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "48px 20px",
+                    color: "#64748b",
+                  }}
+                >
+                  <CalendarIcon
+                    size={40}
+                    style={{ color: "#94a3b8", margin: "0 auto 12px" }}
+                  />
+                  <h3
+                    style={{
+                      fontSize: "1.05rem",
+                      fontWeight: 800,
+                      color: "#0f172a",
+                      marginBottom: 6,
+                    }}
+                  >
                     Tidak Ada Postingan Terjadwal
                   </h3>
-                  <p style={{ fontSize: "0.85rem", color: "#64748b", maxWidth: 400, margin: "0 auto 16px" }}>
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "#64748b",
+                      maxWidth: 400,
+                      margin: "0 auto 16px",
+                    }}
+                  >
                     {isFilterActive
                       ? "Tidak ada postingan yang sesuai dengan filter yang Anda terapkan."
                       : "Belum ada postingan yang memiliki tanggal jadwal tayang."}
@@ -520,7 +586,11 @@ export default function KalenderPage() {
                         setFilterStatus("all");
                       }}
                       className="btn-uda btn-uda-secondary btn-uda-sm"
-                      style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
                     >
                       <RotateCcw size={14} />
                       <span>Reset Filter</span>
@@ -546,8 +616,12 @@ export default function KalenderPage() {
                         transition: "all 0.15s ease",
                       }}
                       onClick={() => router.push(`/app/postingan/${post.id}`)}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f1f5f9")}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f8fafc")}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor = "#f1f5f9")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "#f8fafc")
+                      }
                     >
                       <div>
                         <div
@@ -617,7 +691,7 @@ export default function KalenderPage() {
                   const dayPosts = scheduledPosts.filter(
                     (p) =>
                       p.scheduled_at &&
-                      new Date(p.scheduled_at).toDateString() === dayDateStr
+                      new Date(p.scheduled_at).toDateString() === dayDateStr,
                   );
                   const dayName = dayDate.toLocaleDateString("id-ID", {
                     weekday: "short",
@@ -627,6 +701,7 @@ export default function KalenderPage() {
                   return (
                     <div
                       key={dayIdx}
+                      className="calendar-week-day"
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault();
@@ -711,19 +786,20 @@ export default function KalenderPage() {
                       >
                         {dayPosts.map((post) => {
                           const brand = brands.find(
-                            (b) => b.id === post.brand_id
+                            (b) => b.id === post.brand_id,
                           );
                           const statusMeta = POST_STATUSES[post.status];
                           const schedTime = post.scheduled_at
                             ? new Date(post.scheduled_at).toLocaleTimeString(
                                 "id-ID",
-                                { hour: "2-digit", minute: "2-digit" }
+                                { hour: "2-digit", minute: "2-digit" },
                               )
                             : "";
 
                           return (
                             <div
                               key={post.id}
+                              className="calendar-week-post"
                               draggable
                               onDragStart={(e) => {
                                 e.stopPropagation();
@@ -806,7 +882,7 @@ export default function KalenderPage() {
                             onClick={(e) => {
                               e.stopPropagation();
                               router.push(
-                                `/app/postingan/baru?date=${dayDate.toISOString()}`
+                                `/app/postingan/baru?date=${dayDate.toISOString()}`,
                               );
                             }}
                             style={{
@@ -1218,6 +1294,167 @@ export default function KalenderPage() {
           </div>
         </div>
       </div>
+
+      <style jsx global>{`
+        .uda-calendar-page .calendar-layout {
+          display: grid !important;
+          grid-template-columns: minmax(0, 1fr) !important;
+          gap: 20px;
+          width: 100%;
+          min-width: 0;
+          align-items: start;
+        }
+
+        .uda-calendar-page .calendar-layout > * {
+          min-width: 0;
+          max-width: 100%;
+          box-sizing: border-box;
+        }
+
+        .uda-calendar-page .calendar-scroll-container {
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          overflow-x: auto;
+          padding-bottom: 10px;
+        }
+
+        /* Laptop: tujuh hari berjajar ke samping. */
+        .uda-calendar-page .calendar-week-grid {
+          display: grid !important;
+          grid-template-columns: repeat(7, minmax(150px, 1fr)) !important;
+          gap: 10px;
+          min-width: 1110px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .uda-calendar-page .calendar-week-day {
+          min-width: 0;
+          box-sizing: border-box;
+        }
+
+        .uda-calendar-page .calendar-week-day > div:first-child {
+          flex-direction: column !important;
+          align-items: flex-start !important;
+          justify-content: flex-start !important;
+          gap: 6px;
+          min-height: 60px;
+        }
+
+        .uda-calendar-page .calendar-week-day > div:first-child > span {
+          white-space: nowrap;
+        }
+
+        .uda-calendar-page .calendar-week-post {
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          overflow: hidden;
+          padding: 10px !important;
+          border-radius: 9px !important;
+        }
+
+        .uda-calendar-page .calendar-week-post > div:first-child {
+          flex-direction: column !important;
+          align-items: flex-start !important;
+          gap: 5px;
+          margin-bottom: 8px !important;
+        }
+
+        .uda-calendar-page .calendar-week-post > div:first-child > span {
+          max-width: 100%;
+          box-sizing: border-box;
+          white-space: normal;
+          overflow-wrap: anywhere;
+        }
+
+        .uda-calendar-page .calendar-week-post > div:nth-child(2) {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+          overflow-wrap: anywhere;
+          line-height: 1.4 !important;
+        }
+
+        .uda-calendar-page .calendar-week-post > div:nth-child(3) {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .uda-calendar-page .calendar-nav-bar,
+        .uda-calendar-page .calendar-nav-left,
+        .uda-calendar-page .calendar-nav-filters {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 10px;
+          min-width: 0;
+        }
+
+        .uda-calendar-page .calendar-nav-bar {
+          justify-content: space-between;
+        }
+
+        .uda-calendar-page .calendar-nav-left h2 {
+          white-space: normal !important;
+          overflow-wrap: anywhere;
+        }
+
+        .uda-calendar-page .calendar-filter-select {
+          max-width: 100%;
+          min-width: 0;
+        }
+
+        /* HP: tujuh hari tersusun ke bawah. */
+        @media (max-width: 640px) {
+          .uda-calendar-page .calendar-week-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+            min-width: 0 !important;
+            width: 100% !important;
+          }
+
+          .uda-calendar-page .calendar-week-day {
+            min-height: 180px !important;
+            width: 100%;
+          }
+
+          .uda-calendar-page .calendar-week-day > div:first-child {
+            min-height: auto;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+          }
+
+          .uda-calendar-page .calendar-nav-left {
+            width: 100%;
+          }
+
+          .uda-calendar-page .calendar-nav-left h2 {
+            font-size: 0.95rem !important;
+          }
+
+          .uda-calendar-page .calendar-nav-filters {
+            width: 100%;
+          }
+
+          .uda-calendar-page .calendar-filter-select {
+            flex: 1 1 130px;
+            width: 100%;
+          }
+
+          .uda-calendar-page #tour-calendar-modes {
+            width: 100%;
+            box-sizing: border-box;
+          }
+
+          .uda-calendar-page #tour-calendar-modes button {
+            flex: 1;
+          }
+        }
+      `}</style>
 
       <GuidedTour steps={kalenderTourSteps} tourKey="uda_tour_kalender" />
     </div>
