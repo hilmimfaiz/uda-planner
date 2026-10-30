@@ -272,6 +272,51 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const currentAvatarUrl = profile?.avatar_url || localAvatar;
 
+  // Deteksi keanggotaan tim pengguna (undangan tim)
+  const isTeamMember = React.useMemo(() => {
+    if (account?.plan_code === 'team') return true;
+    if (typeof window !== 'undefined') {
+      try {
+        const uId = user?.id;
+        const uEmail = user?.email?.toLowerCase();
+
+        if (uId && localStorage.getItem('uda_team_membership_' + uId)) {
+          return true;
+        }
+
+        const sysRole = uId ? localStorage.getItem('uda_system_role_' + uId) : null;
+        if (sysRole && ['Editor', 'Reviewer', 'Viewer'].includes(sysRole)) {
+          return true;
+        }
+
+        const rawAcc = localStorage.getItem('uda_auth_account');
+        if (rawAcc) {
+          const parsed = JSON.parse(rawAcc);
+          if (parsed.plan_code === 'team' || parsed.team_member_brand_id) {
+            return true;
+          }
+        }
+
+        const rawInv = localStorage.getItem('uda_brand_invitations');
+        if (rawInv) {
+          const invList = JSON.parse(rawInv);
+          if (
+            invList.some(
+              (inv: any) =>
+                inv.status === 'accepted' &&
+                ((uEmail && inv.target_email?.toLowerCase() === uEmail) || (uId && inv.target_user_id === uId))
+            )
+          ) {
+            return true;
+          }
+        }
+      } catch (e) {}
+    }
+    return false;
+  }, [account?.plan_code, user?.id, user?.email]);
+
+  const effectivePlan = isTeamMember ? 'team' : (account?.plan_code || 'free');
+
   if (!isLoading && user && isAdmin) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
@@ -304,7 +349,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 ? pathname === '/app'
                 : pathname.startsWith(item.href);
             const Icon = item.icon;
-            const isGridLocked = item.href === '/app/grid' && (!account || account.plan_code === 'free');
+            const isGridLocked = item.href === '/app/grid' && effectivePlan === 'free';
 
             return (
               <Link
@@ -341,7 +386,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Link
             href="/app/langganan"
             className={`nav-item-btn ${pathname === '/app/langganan' ? 'active' : ''}`}
-            title={`Langganan (${account?.plan_code?.toUpperCase() || 'FREE'})`}
+            title={`Langganan (${effectivePlan.toUpperCase()})`}
           >
             <CreditCard size={17} />
             <span>Langganan</span>
@@ -351,22 +396,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 fontSize: '0.7rem',
                 padding: '2px 6px',
                 background:
-                  account?.plan_code === 'team'
+                  effectivePlan === 'team'
                     ? '#f5f3ff'
-                    : account?.plan_code === 'pro'
+                    : effectivePlan === 'pro'
                     ? '#f0fdf4'
                     : '#f1f5f9',
                 color:
-                  account?.plan_code === 'team'
+                  effectivePlan === 'team'
                     ? '#7c3aed'
-                    : account?.plan_code === 'pro'
+                    : effectivePlan === 'pro'
                     ? '#16a34a'
                     : '#64748b',
                 borderRadius: 4,
                 fontWeight: 800,
               }}
             >
-              {account?.plan_code?.toUpperCase() || 'FREE'}
+              {effectivePlan.toUpperCase()}
             </span>
           </Link>
 
@@ -742,7 +787,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     {displayName}
                   </div>
                   <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                    Paket: <span style={{ fontWeight: 800, color: '#16a34a' }}>{account?.plan_code?.toUpperCase() || 'FREE'}</span>
+                    Paket: <span style={{ fontWeight: 800, color: effectivePlan === 'team' ? '#7c3aed' : '#16a34a' }}>{effectivePlan.toUpperCase()}</span>
                   </div>
                 </div>
               </div>

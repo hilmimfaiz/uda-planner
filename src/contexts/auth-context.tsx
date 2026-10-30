@@ -294,6 +294,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (e) {}
         }
 
+        // Cek juga keanggotaan brand_members atau undangan tim aktif
+        if (currentUser.id && (resolvedPlan === 'free' || !resolvedPlan)) {
+          let isTeamMember = false;
+          if (supabase) {
+            try {
+              const { data: dbMembers } = await (supabase.from('brand_members' as any) as any)
+                .select('id, role')
+                .eq('user_id', currentUser.id)
+                .limit(1);
+              if (dbMembers && dbMembers.length > 0) {
+                isTeamMember = true;
+              }
+            } catch (e) {}
+          }
+          if (!isTeamMember && typeof window !== 'undefined') {
+            try {
+              const uId = currentUser.id;
+              const uEmail = currentUser.email?.toLowerCase();
+              if (uId && localStorage.getItem('uda_team_membership_' + uId)) {
+                isTeamMember = true;
+              }
+              const sysRole = uId ? localStorage.getItem('uda_system_role_' + uId) : null;
+              if (sysRole && ['Editor', 'Reviewer', 'Viewer'].includes(sysRole)) {
+                isTeamMember = true;
+              }
+              const rawInv = localStorage.getItem('uda_brand_invitations');
+              if (rawInv) {
+                const invList = JSON.parse(rawInv);
+                if (
+                  invList.some(
+                    (inv: any) =>
+                      inv.status === 'accepted' &&
+                      ((uEmail && inv.target_email?.toLowerCase() === uEmail) || (uId && inv.target_user_id === uId))
+                  )
+                ) {
+                  isTeamMember = true;
+                }
+              }
+            } catch (e) {}
+          }
+          if (isTeamMember) {
+            resolvedPlan = 'team';
+            if (supabase && accRes?.data?.id) {
+              try {
+                await (supabase.from('accounts' as any) as any)
+                  .update({ plan_code: 'team', updated_at: new Date().toISOString() })
+                  .eq('id', accRes.data.id);
+              } catch (e) {}
+            }
+          }
+        }
+
         finalAccount = {
           id: accRes.data.id,
           user_id: accRes.data.user_id,
@@ -350,6 +402,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               fallbackUntil = new Date(Date.now() + dDays * 86400000).toISOString();
             }
           } catch (e) {}
+        }
+
+        // Cek juga keanggotaan brand_members atau undangan tim untuk fallbackPlan
+        if (currentUser.id && (fallbackPlan === 'free' || !fallbackPlan)) {
+          let isTeamMember = false;
+          if (supabase) {
+            try {
+              const { data: dbMembers } = await (supabase.from('brand_members' as any) as any)
+                .select('id, role')
+                .eq('user_id', currentUser.id)
+                .limit(1);
+              if (dbMembers && dbMembers.length > 0) {
+                isTeamMember = true;
+              }
+            } catch (e) {}
+          }
+          if (!isTeamMember && typeof window !== 'undefined') {
+            try {
+              const uId = currentUser.id;
+              const uEmail = currentUser.email?.toLowerCase();
+              if (uId && localStorage.getItem('uda_team_membership_' + uId)) {
+                isTeamMember = true;
+              }
+              const sysRole = uId ? localStorage.getItem('uda_system_role_' + uId) : null;
+              if (sysRole && ['Editor', 'Reviewer', 'Viewer'].includes(sysRole)) {
+                isTeamMember = true;
+              }
+              const rawInv = localStorage.getItem('uda_brand_invitations');
+              if (rawInv) {
+                const invList = JSON.parse(rawInv);
+                if (
+                  invList.some(
+                    (inv: any) =>
+                      inv.status === 'accepted' &&
+                      ((uEmail && inv.target_email?.toLowerCase() === uEmail) || (uId && inv.target_user_id === uId))
+                  )
+                ) {
+                  isTeamMember = true;
+                }
+              }
+            } catch (e) {}
+          }
+          if (isTeamMember) {
+            fallbackPlan = 'team';
+          }
         }
 
         const newAccount = {
