@@ -108,11 +108,24 @@ export class PostService {
               };
             });
 
-          const dbIds = new Set(dbPosts.map((p) => p.id));
+          const dbPostsMap = new Map<string, DummyPost>();
+          dbPosts.forEach((p) => dbPostsMap.set(p.id, p));
+
+          // Pertahankan update terbaru dari stored (localStorage) pada postingan yang cocok
+          stored.forEach((st) => {
+            if (dbPostsMap.has(st.id)) {
+              const currentDb = dbPostsMap.get(st.id)!;
+              dbPostsMap.set(st.id, {
+                ...currentDb,
+                ...st,
+              });
+            }
+          });
+
           const combined = [
-            ...dbPosts,
-            ...stored.filter((st) => !dbIds.has(st.id)),
-            ...localPosts.filter((lp) => accessibleBrandIds.has(lp.brand_id) && !dbIds.has(lp.id) && !stored.some((st) => st.id === lp.id)),
+            ...Array.from(dbPostsMap.values()),
+            ...stored.filter((st) => !dbPostsMap.has(st.id)),
+            ...localPosts.filter((lp) => accessibleBrandIds.has(lp.brand_id) && !dbPostsMap.has(lp.id) && !stored.some((st) => st.id === lp.id)),
           ];
 
           return this.filterPostsLocally(combined, filters);
@@ -421,6 +434,17 @@ export class PostService {
         }
       } catch (err) {
         console.warn('PostService.updatePost db error:', err);
+      }
+
+      // Sinkronkan ke server endpoint PATCH /api/posts agar bypass RLS jika akun adalah anggota tim
+      if (typeof window !== 'undefined') {
+        try {
+          fetch('/api/posts', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, ...updates }),
+          }).catch((err) => console.warn('PATCH /api/posts sync notice:', err));
+        } catch {}
       }
     }
 

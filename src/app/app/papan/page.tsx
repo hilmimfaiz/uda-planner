@@ -157,26 +157,18 @@ export default function PapanKanbanPage() {
     }
 
     // 2. Role: Reviewer
-    // Aturan ketat:
-    // - Dari 'Menunggu Review' HANYA bisa geser ke 'Siap Posting'
-    // - Dari 'Siap Posting' HANYA bisa geser ke 'Sudah Posting'
-    // - Tidak dapat menggeser dari atau ke status lainnya
+    // Reviewer memiliki hak penuh untuk menyetujui postingan ke 'Siap Posting' dan mempublikasikan ke 'Sudah Posting'.
+    // Serta dapat mengembalikan postingan ke 'Draft' atau 'Menunggu Review' jika butuh perbaikan.
     if (userRole === "reviewer") {
-      if (post.status === "review") {
-        if (targetStatus !== "siap") {
-          playErrorSound();
-          showToast("⚠️ Peran Reviewer: Dari 'Menunggu Review', aksi hanya dapat digeser ke kolom 'Siap Posting'.");
-          return;
-        }
-      } else if (post.status === "siap") {
-        if (targetStatus !== "terposting") {
-          playErrorSound();
-          showToast("⚠️ Peran Reviewer: Dari 'Siap Posting', aksi hanya dapat digeser ke kolom 'Sudah Posting'.");
-          return;
-        }
+      if (targetStatus === "siap") {
+        // Diizinkan: Menyetujui postingan ke 'Siap Posting'
+      } else if (targetStatus === "terposting") {
+        // Diizinkan: Mempublikasikan postingan ke 'Sudah Posting'
+      } else if (targetStatus === "draft" || targetStatus === "review") {
+        // Diizinkan: Mengembalikan alur kerja untuk revisi
       } else {
         playErrorSound();
-        showToast("⚠️ Peran Reviewer: Anda hanya memiliki akses geser dari 'Menunggu Review' ke 'Siap Posting' dan dari 'Siap Posting' ke 'Sudah Posting'.");
+        showToast("⚠️ Peran Reviewer: Anda dapat menyetujui postingan ke 'Siap Posting' atau mempublikasikan ke 'Sudah Posting'.");
         return;
       }
     }
@@ -591,13 +583,12 @@ export default function PapanKanbanPage() {
                     );
                     const postRole = userRolesByBrand[post.brand_id];
                     const isViewer = postRole === "viewer";
-                    const isReviewerNonMovable = postRole === "reviewer" && post.status !== "review" && post.status !== "siap";
-                    const isDraggable = !isViewer && !isReviewerNonMovable;
+                    const isDraggable = !isViewer;
 
                     const cardTooltip = isViewer
                       ? "Mode Viewer: Hanya dapat melihat postingan (Read-Only)"
-                      : isReviewerNonMovable
-                      ? "Peran Reviewer: Hanya dapat menggeser dari 'Menunggu Review' (ke Siap Posting) dan 'Siap Posting' (ke Sudah Posting)"
+                      : postRole === "reviewer"
+                      ? "Peran Reviewer: Geser ke 'Siap Posting' untuk menyetujui atau ke 'Sudah Posting' untuk mempublikasikan"
                       : undefined;
 
                     return (
@@ -609,13 +600,8 @@ export default function PapanKanbanPage() {
                         onDragStart={(e) => {
                           if (!isDraggable) {
                             e.preventDefault();
-                            if (isViewer) {
-                              playErrorSound();
-                              showToast("👁️ Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat (Read-Only).");
-                            } else if (isReviewerNonMovable) {
-                              playErrorSound();
-                              showToast("⚠️ Peran Reviewer: Anda hanya dapat memproses kartu di kolom 'Menunggu Review' dan 'Siap Posting'.");
-                            }
+                            playErrorSound();
+                            showToast("👁️ Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat (Read-Only).");
                             return;
                           }
                           e.dataTransfer.setData("text/plain", post.id);
@@ -632,7 +618,7 @@ export default function PapanKanbanPage() {
                           display: "flex",
                           flexDirection: "column",
                           gap: 8,
-                          opacity: !isDraggable && isViewer ? 0.95 : 1,
+                          opacity: isViewer ? 0.95 : 1,
                         }}
                       >
                         {/* Brand Chip, Badge Viewer & Waktu */}

@@ -69,6 +69,26 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Post ID is required' }, { status: 400 });
     }
 
+    const { createAdminClient } = await import('@/lib/supabase/server');
+    const adminSupabase = createAdminClient();
+    if (adminSupabase && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      try {
+        const dbUpdates: any = {};
+        if (updates.status !== undefined) dbUpdates.status = updates.status;
+        if (updates.posted_at !== undefined) dbUpdates.posted_at = updates.posted_at;
+        if (updates.title !== undefined) dbUpdates.title = updates.title;
+        if (updates.caption !== undefined) dbUpdates.caption = updates.caption;
+        if (updates.scheduled_at !== undefined) dbUpdates.scheduled_at = updates.scheduled_at;
+        dbUpdates.updated_at = new Date().toISOString();
+
+        await (adminSupabase.from('posts' as any) as any)
+          .update(dbUpdates)
+          .eq('id', id);
+      } catch (adminErr) {
+        console.warn('Admin PATCH posts notice:', adminErr);
+      }
+    }
+
     const updated = await PostService.updatePost(id, updates);
     return NextResponse.json({ success: true, data: updated });
   } catch (error: any) {
