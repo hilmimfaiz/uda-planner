@@ -3492,5 +3492,186 @@ tr:last-child td {
   }
 }
 
+/* ===== PERBAIKAN MOBILE (taruh paling bawah file) ===== */
+
+/* Input tidak melebihi kontainer */
+input, select, textarea { max-width: 100%; }
+
+@media (max-width: 991px) {
+  /* Bottom nav ikut safe-area */
+  .mobile-bottom-nav {
+    height: calc(66px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Satu aturan padding konten (menggantikan semua yang bertumpuk) */
+  .app-content-body {
+    padding: 16px clamp(10px, 3.5vw, 18px)
+             calc(112px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .admin-content-body {
+    padding: 16px clamp(10px, 3.5vw, 18px)
+             calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Tombol mengambang: di atas nav, ukuran lebih kecil */
+  .whatsapp-floating-container {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 12px !important;
+    transform: scale(0.88);
+    transform-origin: bottom right;
+  }
+  .guided-tour-floating-trigger {
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 12px !important;
+  }
+
+  /* Strip tab admin lama: pakai topbar + bottom nav saja */
+  .admin-mobile-nav { display: none !important; }
+}
 
 
+.kanban-filter-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+.kanban-filter-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.kanban-filter-field label { font-size: 0.78rem; font-weight: 800; color: var(--text-secondary); }
+.kanban-filter-field select { width: 100%; padding: 10px 12px; font-size: 0.9rem; }
+
+@media (max-width: 420px) {
+  .kanban-filter-bar { grid-template-columns: 1fr; }
+}
+
+.kanban-tabs {
+  display: flex; gap: 8px; overflow-x: auto;
+  padding: 4px 2px 10px; scrollbar-width: none;
+}
+.kanban-tabs::-webkit-scrollbar { display: none; }
+.kanban-tab {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border: 2px solid var(--border-color); border-radius: 999px;
+  background: #fff; font-weight: 800; font-size: 0.84rem; cursor: pointer;
+  box-shadow: 2px 2px 0 var(--border-color);
+}
+.kanban-tab.active { background: var(--primary); color: #fff; }
+.kanban-tab .count { background: #e2e8f0; color: #0f172a; border-radius: 999px; padding: 0 7px; font-size: 0.72rem; }
+.kanban-tab.active .count { background: #fff; }
+
+/* ===== Papan Kanban: filter, tab, kolom tunggal ===== */
+
+/* ---------- DESKTOP & TABLET (di atas 640px) ---------- */
+@media (min-width: 641px) {
+  .kanban-page-header {
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+  .kanban-page-header > div:first-child {
+    flex: 1 1 380px;
+    min-width: 320px;
+  }
+  .kanban-filter-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-left: auto;
+    flex: 0 1 auto;
+  }
+  .kanban-filter-field {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .kanban-filter-field label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #475569;
+    white-space: nowrap;
+  }
+  .kanban-select {
+    padding: 6px 12px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    background: #fff;
+    color: #0f172a;
+    cursor: pointer;
+    width: auto;
+    max-width: 220px;
+  }
+  .kanban-toast { position: fixed; bottom: 24px; right: 24px; }
+}
+
+/* ---------- TAB STATUS (hanya dirender di HP) ---------- */
+.kanban-tabs {
+  display: flex; gap: 8px; overflow-x: auto;
+  padding: 4px 2px 12px; scrollbar-width: none;
+}
+.kanban-tabs::-webkit-scrollbar { display: none; }
+.kanban-tab {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border: 2px solid #0f172a; border-radius: 999px;
+  background: #fff; color: #0f172a; font-weight: 800; font-size: 0.84rem;
+  box-shadow: 2px 2px 0 #0f172a; cursor: pointer; font-family: inherit;
+}
+.kanban-tab .dot { width: 8px; height: 8px; border-radius: 50%; }
+.kanban-tab .count {
+  background: #e2e8f0; color: #0f172a; border-radius: 999px;
+  padding: 0 7px; font-size: 0.72rem;
+}
+.kanban-tab.active { background: #16a34a; color: #fff; }
+.kanban-tab.active .count { background: #fff; }
+
+/* ---------- HP (640px ke bawah) ---------- */
+@media (max-width: 640px) {
+  .kanban-filter-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+  }
+  .kanban-filter-field {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    min-width: 0;
+  }
+  .kanban-filter-field label {
+    font-size: 0.78rem; font-weight: 700; color: #475569;
+  }
+  .kanban-select {
+    width: 100%; max-width: none; padding: 10px 12px;
+    font-size: 0.9rem; font-weight: 800;
+    background: #fff; color: #0f172a; cursor: pointer;
+  }
+  .kanban-move-select { padding: 8px 10px; font-size: 0.85rem; }
+  .kanban-role-badge { grid-column: 1 / -1; }
+
+  .kanban-board-wrapper { display: block !important; overflow: visible !important; padding-bottom: 16px !important; }
+  .kanban-board-column {
+    width: 100%; min-width: 0 !important; max-width: none !important;
+    min-height: 0 !important; padding: 12px !important; gap: 10px !important;
+  }
+  .kanban-col-header-title { font-size: 0.9rem !important; }
+  .kanban-col-header-badge { font-size: 0.75rem !important; padding: 2px 7px !important; }
+  .kanban-empty-placeholder { padding: 28px 8px !important; font-size: 0.82rem !important; }
+  .kanban-card-item { padding: 12px !important; gap: 8px !important; }
+  .kanban-card-title { font-size: 0.92rem !important; }
+  .kanban-card-brand-chip { font-size: 0.72rem !important; padding: 2px 6px !important; }
+
+  .kanban-toast {
+    position: fixed;
+    bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+    left: 12px; right: 12px; text-align: center;
+  }
+}
+
+@media (max-width: 420px) {
+  .kanban-filter-bar { grid-template-columns: 1fr; }
+}
