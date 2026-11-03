@@ -44,6 +44,7 @@ export interface DummyPost {
   posted_at: string | null;
   posted_url: string | null;
   media_url?: string;
+  media_urls?: string[];
   aspect_ratio?: '1:1' | '4:5';
   comments_count: number;
 }

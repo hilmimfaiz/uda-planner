@@ -24,26 +24,33 @@ import { PostService } from "@/services/post.service";
 import { BrandService } from "@/services/brand.service";
 import { useAuth } from "@/contexts/auth-context";
 import { GuidedTour, TourStep } from "@/components/guided-tour";
-import { playSuccessSound, playErrorSound, playNotificationSound } from "@/lib/audio-effects";
+import {
+  playSuccessSound,
+  playErrorSound,
+  playNotificationSound,
+} from "@/lib/audio-effects";
 import { addAppNotification } from "@/lib/notification-manager";
 
 const papanTourSteps: TourStep[] = [
   {
     targetId: "tour-papan-header",
     title: "Papan Status Konten (Kanban)",
-    description: "Pantau pipeline produksi konten tim Anda dari tahap pencetusan ide hingga konten berhasil dipublikasikan.",
+    description:
+      "Pantau pipeline produksi konten tim Anda dari tahap pencetusan ide hingga konten berhasil dipublikasikan.",
     placement: "bottom",
   },
   {
     targetId: "tour-papan-board",
     title: "5 Tahap Alur Kerja",
-    description: "Konten dikelompokkan ke dalam 5 status: Ide, Draft, Menunggu Review, Siap Posting, dan Sudah Posting. Setiap kolom menghitung total konten secara real-time.",
+    description:
+      "Konten dikelompokkan ke dalam 5 status: Ide, Draft, Menunggu Review, Siap Posting, dan Sudah Posting. Setiap kolom menghitung total konten secara real-time.",
     placement: "bottom",
   },
   {
     targetId: "tour-papan-card",
     title: "Interaksi Kartu & Drag-and-Drop",
-    description: "Tarik (drag) kartu postingan ke kolom lain untuk memindahkan status alur kerja seketika. Klik kartu untuk melihat atau mengedit detail lengkap.",
+    description:
+      "Tarik (drag) kartu postingan ke kolom lain untuk memindahkan status alur kerja seketika. Klik kartu untuk melihat atau mengedit detail lengkap.",
     placement: "right",
   },
 ];
@@ -54,7 +61,9 @@ export default function PapanKanbanPage() {
   const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
   const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
   const [selectedBrandId, setSelectedBrandId] = useState<string>("all");
-  const [userRolesByBrand, setUserRolesByBrand] = useState<Record<string, 'owner' | 'editor' | 'reviewer' | 'viewer' | null>>({});
+  const [userRolesByBrand, setUserRolesByBrand] = useState<
+    Record<string, "owner" | "editor" | "reviewer" | "viewer" | null>
+  >({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [itemsPerPage, setItemsPerPage] = useState<number>(3);
   const [pageByColumn, setPageByColumn] = useState<Record<string, number>>({
@@ -65,13 +74,31 @@ export default function PapanKanbanPage() {
     terposting: 1,
   });
 
+  type ColId = "ide" | "draft" | "review" | "siap" | "terposting";
+  const [activeStatus, setActiveStatus] = useState<ColId>("ide");
+  const [isMobile, setIsMobile] = useState(false);
+
+  React.useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  const resetPages = () =>
+    setPageByColumn({ ide: 1, draft: 1, review: 1, siap: 1, terposting: 1 });
+
   React.useEffect(() => {
     const loadBrandsAndRoles = () => {
       BrandService.getBrands(user?.id).then(async (bList) => {
         const list = bList || [];
         setBrands(list);
 
-        const rolesMap: Record<string, 'owner' | 'editor' | 'reviewer' | 'viewer' | null> = {};
+        const rolesMap: Record<
+          string,
+          "owner" | "editor" | "reviewer" | "viewer" | null
+        > = {};
         for (const b of list) {
           rolesMap[b.id] = await BrandService.getUserBrandRole(b.id, user?.id);
         }
@@ -93,20 +120,20 @@ export default function PapanKanbanPage() {
       loadPosts();
     };
 
-    window.addEventListener('uda_post_updated', loadPosts);
-    window.addEventListener('uda_post_created', loadPosts);
-    window.addEventListener('uda_post_deleted', loadPosts);
-    window.addEventListener('uda_team_updated', handleDataChange);
-    window.addEventListener('storage', handleDataChange);
-    window.addEventListener('focus', handleDataChange);
+    window.addEventListener("uda_post_updated", loadPosts);
+    window.addEventListener("uda_post_created", loadPosts);
+    window.addEventListener("uda_post_deleted", loadPosts);
+    window.addEventListener("uda_team_updated", handleDataChange);
+    window.addEventListener("storage", handleDataChange);
+    window.addEventListener("focus", handleDataChange);
 
     return () => {
-      window.removeEventListener('uda_post_updated', loadPosts);
-      window.removeEventListener('uda_post_created', loadPosts);
-      window.removeEventListener('uda_post_deleted', loadPosts);
-      window.removeEventListener('uda_team_updated', handleDataChange);
-      window.removeEventListener('storage', handleDataChange);
-      window.removeEventListener('focus', handleDataChange);
+      window.removeEventListener("uda_post_updated", loadPosts);
+      window.removeEventListener("uda_post_created", loadPosts);
+      window.removeEventListener("uda_post_deleted", loadPosts);
+      window.removeEventListener("uda_team_updated", handleDataChange);
+      window.removeEventListener("storage", handleDataChange);
+      window.removeEventListener("focus", handleDataChange);
     };
   }, [user?.id]);
 
@@ -120,15 +147,21 @@ export default function PapanKanbanPage() {
     title: string;
     color: string;
   }> = [
-      { id: "ide", title: "Ide", color: "#94A3B8" },
-      { id: "draft", title: "Draft", color: "#3B82F6" },
-      { id: "review", title: "Menunggu Review", color: "#F59E0B" },
-      { id: "siap", title: "Siap Posting", color: "#16A34A" },
-      { id: "terposting", title: "Sudah Posting", color: "#475569" },
-    ];
+    { id: "ide", title: "Ide", color: "#94A3B8" },
+    { id: "draft", title: "Draft", color: "#3B82F6" },
+    { id: "review", title: "Menunggu Review", color: "#F59E0B" },
+    { id: "siap", title: "Siap Posting", color: "#16A34A" },
+    { id: "terposting", title: "Sudah Posting", color: "#475569" },
+  ];
 
   // Role pengguna untuk brand yang sedang difilter
-  const currentFilteredRole = selectedBrandId !== "all" ? userRolesByBrand[selectedBrandId] : null;
+  const currentFilteredRole =
+    selectedBrandId !== "all" ? userRolesByBrand[selectedBrandId] : null;
+
+  const filteredPosts =
+    selectedBrandId === "all"
+      ? posts
+      : posts.filter((p) => p.brand_id === selectedBrandId);
 
   // Handle Drag & Drop Between Columns dengan Validasi Role Tim
   const handleDropToColumn = async (
@@ -141,18 +174,24 @@ export default function PapanKanbanPage() {
     if (post.status === targetStatus) return;
 
     const brand = brands.find((b) => b.id === post.brand_id);
-    const userRole = userRolesByBrand[post.brand_id] ?? (await BrandService.getUserBrandRole(post.brand_id, user?.id));
+    const userRole =
+      userRolesByBrand[post.brand_id] ??
+      (await BrandService.getUserBrandRole(post.brand_id, user?.id));
 
     if (!userRole) {
       playErrorSound();
-      showToast("⛔ Akses ditolak: Anda tidak memiliki akses ke brand postingan ini.");
+      showToast(
+        "⛔ Akses ditolak: Anda tidak memiliki akses ke brand postingan ini.",
+      );
       return;
     }
 
     // 1. Role: Viewer (Hanya Read-Only, Tidak Ada Aksi Geser Apapun)
     if (userRole === "viewer") {
       playErrorSound();
-      showToast("👁️ Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat dan tidak dapat melakukan aksi geser apapun di kanban.");
+      showToast(
+        "👁️ Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat dan tidak dapat melakukan aksi geser apapun di kanban.",
+      );
       return;
     }
 
@@ -168,7 +207,9 @@ export default function PapanKanbanPage() {
         // Diizinkan: Mengembalikan alur kerja untuk revisi
       } else {
         playErrorSound();
-        showToast("⚠️ Peran Reviewer: Anda dapat menyetujui postingan ke 'Siap Posting' atau mempublikasikan ke 'Sudah Posting'.");
+        showToast(
+          "⚠️ Peran Reviewer: Anda dapat menyetujui postingan ke 'Siap Posting' atau mempublikasikan ke 'Sudah Posting'.",
+        );
         return;
       }
     }
@@ -187,19 +228,25 @@ export default function PapanKanbanPage() {
           // Diizinkan: Mengembalikan ke alur pengerjaan jika memerlukan revisi
         } else {
           playErrorSound();
-          showToast("⚠️ Peran Editor: Dari 'Siap Posting', Anda dapat memindahkannya ke 'Sudah Posting' atau mengembalikannya ke draft alur kerja.");
+          showToast(
+            "⚠️ Peran Editor: Dari 'Siap Posting', Anda dapat memindahkannya ke 'Sudah Posting' atau mengembalikannya ke draft alur kerja.",
+          );
           return;
         }
       } else {
         // Status awal belum 'siap' (misal: ide, draft, review)
         if (targetStatus === "siap") {
           playErrorSound();
-          showToast("⚠️ Peran Editor: Menyetujui postingan ke 'Siap Posting' hanya dapat dilakukan oleh Reviewer atau Owner setelah proses review.");
+          showToast(
+            "⚠️ Peran Editor: Menyetujui postingan ke 'Siap Posting' hanya dapat dilakukan oleh Reviewer atau Owner setelah proses review.",
+          );
           return;
         }
         if (targetStatus === "terposting") {
           playErrorSound();
-          showToast("⚠️ Peran Editor: Postingan harus disetujui (Siap Posting) oleh Reviewer terlebih dahulu sebelum dapat dipindahkan ke 'Sudah Posting'.");
+          showToast(
+            "⚠️ Peran Editor: Postingan harus disetujui (Siap Posting) oleh Reviewer terlebih dahulu sebelum dapat dipindahkan ke 'Sudah Posting'.",
+          );
           return;
         }
         // Perpindahan antar 'ide', 'draft', dan 'review' diizinkan untuk Editor
@@ -209,9 +256,7 @@ export default function PapanKanbanPage() {
     // 4. Role: Owner (Akses Penuh Tanpa Batasan)
 
     const postedAt =
-      targetStatus === "terposting"
-        ? new Date().toISOString()
-        : post.posted_at;
+      targetStatus === "terposting" ? new Date().toISOString() : post.posted_at;
 
     const updated = posts.map((p) => {
       if (p.id === postId) {
@@ -226,13 +271,17 @@ export default function PapanKanbanPage() {
 
     setPosts(updated);
     try {
-      await PostService.updatePost(postId, {
-        status: targetStatus,
-        posted_at: postedAt,
-      }, user?.id);
+      await PostService.updatePost(
+        postId,
+        {
+          status: targetStatus,
+          posted_at: postedAt,
+        },
+        user?.id,
+      );
     } catch (err: any) {
       playErrorSound();
-      showToast(`⛔ ${err.message || 'Gagal memperbarui status'}`);
+      showToast(`⛔ ${err.message || "Gagal memperbarui status"}`);
       PostService.getPosts({}, user?.id).then((data) => {
         if (data) setPosts(data);
       });
@@ -241,18 +290,23 @@ export default function PapanKanbanPage() {
 
     // Notifikasi sistem dan toast kustom sesuai perubahan
     let notifMsg = `Status dipindahkan ke: ${POST_STATUSES[targetStatus].label}`;
-    if (userRole === 'reviewer' && targetStatus === 'siap') {
+    if (userRole === "reviewer" && targetStatus === "siap") {
       notifMsg = `✅ Review Selesai: Postingan disetujui dan dipindahkan ke 'Siap Posting'.`;
-    } else if (targetStatus === 'terposting') {
+    } else if (targetStatus === "terposting") {
       notifMsg = `🚀 Konten Dipublikasikan: Postingan berhasil dipindahkan ke 'Sudah Posting'.`;
-    } else if (targetStatus === 'review') {
+    } else if (targetStatus === "review") {
       notifMsg = `📬 Menunggu Review: Postingan diajukan untuk ditinjau oleh Reviewer.`;
     } else {
       notifMsg = `✅ Status Diperbarui: Postingan dipindahkan ke '${POST_STATUSES[targetStatus].label}'.`;
     }
 
     addAppNotification({
-      type: targetStatus === 'review' ? 'review_request' : targetStatus === 'siap' ? 'review_approved' : 'status_change',
+      type:
+        targetStatus === "review"
+          ? "review_request"
+          : targetStatus === "siap"
+            ? "review_approved"
+            : "status_change",
       title: `Status: ${POST_STATUSES[targetStatus].label}`,
       message: `Postingan "${post.title}" dipindahkan ke kolom "${POST_STATUSES[targetStatus].label}".`,
       link: `/app/postingan/${post.id}`,
@@ -266,10 +320,8 @@ export default function PapanKanbanPage() {
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {toastMessage && (
         <div
+          className="kanban-toast"
           style={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
             background: "#0f172a",
             color: "#f8fafc",
             padding: "12px 18px",
@@ -286,6 +338,7 @@ export default function PapanKanbanPage() {
 
       <div
         id="tour-papan-header"
+        className="kanban-page-header"
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -305,40 +358,16 @@ export default function PapanKanbanPage() {
         </div>
 
         {/* Filter Brand & Pengaturan Konten per Kolom */}
-        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          {/* Dropdown Filter Brand */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <label
-              htmlFor="kanban-filter-brand"
-              style={{ fontSize: "0.82rem", fontWeight: 700, color: "#475569" }}
-            >
-              Filter Brand:
-            </label>
+        <div className="kanban-filter-bar">
+          <div className="kanban-filter-field">
+            <label htmlFor="kanban-filter-brand">Filter Brand:</label>
             <select
               id="kanban-filter-brand"
+              className="kanban-select"
               value={selectedBrandId}
               onChange={(e) => {
                 setSelectedBrandId(e.target.value);
-                setPageByColumn({
-                  ide: 1,
-                  draft: 1,
-                  review: 1,
-                  siap: 1,
-                  terposting: 1,
-                });
-              }}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 8,
-                border: "2px solid #0f172a",
-                boxShadow: "2px 2px 0px #0f172a",
-                fontSize: "0.82rem",
-                fontWeight: 800,
-                backgroundColor: "#ffffff",
-                color: "#0f172a",
-                cursor: "pointer",
-                outline: "none",
-                maxWidth: 220,
+                resetPages();
               }}
             >
               <option value="all">Semua Brand ({brands.length})</option>
@@ -350,9 +379,9 @@ export default function PapanKanbanPage() {
             </select>
           </div>
 
-          {/* Badge Role Tim saat brand spesifik dipilih */}
           {selectedBrandId !== "all" && currentFilteredRole && (
             <div
+              className="kanban-role-badge"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -363,17 +392,29 @@ export default function PapanKanbanPage() {
                 fontWeight: 800,
                 border: "1.5px solid",
                 borderColor:
-                  currentFilteredRole === "owner" ? "#8b5cf6" :
-                  currentFilteredRole === "reviewer" ? "#f59e0b" :
-                  currentFilteredRole === "editor" ? "#10b981" : "#94a3b8",
+                  currentFilteredRole === "owner"
+                    ? "#8b5cf6"
+                    : currentFilteredRole === "reviewer"
+                      ? "#f59e0b"
+                      : currentFilteredRole === "editor"
+                        ? "#10b981"
+                        : "#94a3b8",
                 backgroundColor:
-                  currentFilteredRole === "owner" ? "#f5f3ff" :
-                  currentFilteredRole === "reviewer" ? "#fffbeb" :
-                  currentFilteredRole === "editor" ? "#ecfdf5" : "#f1f5f9",
+                  currentFilteredRole === "owner"
+                    ? "#f5f3ff"
+                    : currentFilteredRole === "reviewer"
+                      ? "#fffbeb"
+                      : currentFilteredRole === "editor"
+                        ? "#ecfdf5"
+                        : "#f1f5f9",
                 color:
-                  currentFilteredRole === "owner" ? "#6d28d9" :
-                  currentFilteredRole === "reviewer" ? "#b45309" :
-                  currentFilteredRole === "editor" ? "#047857" : "#475569",
+                  currentFilteredRole === "owner"
+                    ? "#6d28d9"
+                    : currentFilteredRole === "reviewer"
+                      ? "#b45309"
+                      : currentFilteredRole === "editor"
+                        ? "#047857"
+                        : "#475569",
               }}
               title={`Peran Anda pada brand ini: ${currentFilteredRole.toUpperCase()}`}
             >
@@ -386,38 +427,15 @@ export default function PapanKanbanPage() {
             </div>
           )}
 
-          {/* Pengaturan Jumlah Konten per Halaman Tiap Kolom */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <label
-              htmlFor="kanban-per-page"
-              style={{ fontSize: "0.82rem", fontWeight: 700, color: "#475569" }}
-            >
-              Konten per kolom:
-            </label>
+          <div className="kanban-filter-field">
+            <label htmlFor="kanban-per-page">Konten per kolom:</label>
             <select
               id="kanban-per-page"
+              className="kanban-select"
               value={itemsPerPage}
               onChange={(e) => {
                 setItemsPerPage(Number(e.target.value));
-                setPageByColumn({
-                  ide: 1,
-                  draft: 1,
-                  review: 1,
-                  siap: 1,
-                  terposting: 1,
-                });
-              }}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 8,
-                border: "2px solid #0f172a",
-                boxShadow: "2px 2px 0px #0f172a",
-                fontSize: "0.82rem",
-                fontWeight: 800,
-                backgroundColor: "#ffffff",
-                color: "#0f172a",
-                cursor: "pointer",
-                outline: "none",
+                resetPages();
               }}
             >
               <option value={3}>3 per halaman</option>
@@ -447,8 +465,35 @@ export default function PapanKanbanPage() {
         >
           <span style={{ fontSize: "1.1rem" }}>👁️</span>
           <span>
-            <strong>Mode Akses Lihat Saja (Viewer):</strong> Anda dapat memantau alur status kanban brand ini dalam mode Read-Only. Pemindahan kartu alur kerja hanya dapat dilakukan oleh Editor, Reviewer, atau Owner.
+            <strong>Mode Akses Lihat Saja (Viewer):</strong> Anda dapat memantau
+            alur status kanban brand ini dalam mode Read-Only. Pemindahan kartu
+            alur kerja hanya dapat dilakukan oleh Editor, Reviewer, atau Owner.
           </span>
+        </div>
+      )}
+
+      {/* Tab status (khusus HP) */}
+      {isMobile && (
+        <div className="kanban-tabs" role="tablist">
+          {columns.map((col) => {
+            const count = filteredPosts.filter(
+              (p) => p.status === col.id,
+            ).length;
+            return (
+              <button
+                key={col.id}
+                type="button"
+                role="tab"
+                aria-selected={activeStatus === col.id}
+                className={`kanban-tab ${activeStatus === col.id ? "active" : ""}`}
+                onClick={() => setActiveStatus(col.id)}
+              >
+                <span className="dot" style={{ background: col.color }} />
+                {col.title}
+                <span className="count">{count}</span>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -467,18 +512,18 @@ export default function PapanKanbanPage() {
           }}
         />
         {columns.map((col, idx) => {
+          if (isMobile && col.id !== activeStatus) return null;
           const isRow1 = idx < 3; // 0 (ide), 1 (draft), 2 (review) -> Baris Atas 3 Kolom
-          // Terapkan filter brand pada daftar postingan
-          const filteredPosts = selectedBrandId === "all"
-            ? posts
-            : posts.filter((p) => p.brand_id === selectedBrandId);
           const colPosts = filteredPosts.filter((p) => p.status === col.id);
-          const totalPages = Math.max(1, Math.ceil(colPosts.length / itemsPerPage));
+          const totalPages = Math.max(
+            1,
+            Math.ceil(colPosts.length / itemsPerPage),
+          );
           const currentPage = pageByColumn[col.id] || 1;
           const safeCurrentPage = Math.min(currentPage, totalPages);
           const paginatedPosts = colPosts.slice(
             (safeCurrentPage - 1) * itemsPerPage,
-            safeCurrentPage * itemsPerPage
+            safeCurrentPage * itemsPerPage,
           );
 
           return (
@@ -575,9 +620,7 @@ export default function PapanKanbanPage() {
                   </div>
                 ) : (
                   paginatedPosts.map((post, postIdx) => {
-                    const brand = brands.find(
-                      (b) => b.id === post.brand_id,
-                    );
+                    const brand = brands.find((b) => b.id === post.brand_id);
                     const assignee = DUMMY_MEMBERS.find(
                       (m) => m.id === post.assignee_id,
                     );
@@ -588,20 +631,28 @@ export default function PapanKanbanPage() {
                     const cardTooltip = isViewer
                       ? "Mode Viewer: Hanya dapat melihat postingan (Read-Only)"
                       : postRole === "reviewer"
-                      ? "Peran Reviewer: Geser ke 'Siap Posting' untuk menyetujui atau ke 'Sudah Posting' untuk mempublikasikan"
-                      : undefined;
+                        ? "Peran Reviewer: Geser ke 'Siap Posting' untuk menyetujui atau ke 'Sudah Posting' untuk mempublikasikan"
+                        : undefined;
 
                     return (
                       <div
                         key={post.id}
-                        id={col.id === "ide" && postIdx === 0 && safeCurrentPage === 1 ? "tour-papan-card" : undefined}
+                        id={
+                          col.id === "ide" &&
+                          postIdx === 0 &&
+                          safeCurrentPage === 1
+                            ? "tour-papan-card"
+                            : undefined
+                        }
                         className="kanban-card-item"
                         draggable={isDraggable}
                         onDragStart={(e) => {
                           if (!isDraggable) {
                             e.preventDefault();
                             playErrorSound();
-                            showToast("👁️ Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat (Read-Only).");
+                            showToast(
+                              "👁️ Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat (Read-Only).",
+                            );
                             return;
                           }
                           e.dataTransfer.setData("text/plain", post.id);
@@ -630,7 +681,14 @@ export default function PapanKanbanPage() {
                             gap: 6,
                           }}
                         >
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              flexWrap: "wrap",
+                            }}
+                          >
                             {brand && (
                               <span
                                 className="kanban-card-brand-chip"
@@ -662,12 +720,18 @@ export default function PapanKanbanPage() {
                               </span>
                             )}
                           </div>
-                          <span style={{ fontSize: "0.7rem", color: "#64748b", flexShrink: 0 }}>
+                          <span
+                            style={{
+                              fontSize: "0.7rem",
+                              color: "#64748b",
+                              flexShrink: 0,
+                            }}
+                          >
                             {post.scheduled_at
                               ? new Date(post.scheduled_at).toLocaleDateString(
-                                "id-ID",
-                                { day: "numeric", month: "short" },
-                              )
+                                  "id-ID",
+                                  { day: "numeric", month: "short" },
+                                )
                               : "Belum dijadwalkan"}
                           </span>
                         </div>
@@ -748,6 +812,44 @@ export default function PapanKanbanPage() {
                             </div>
                           )}
                         </div>
+
+                        {isMobile && !isViewer && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: "0.78rem",
+                                fontWeight: 700,
+                                color: "#64748b",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              Pindah ke:
+                            </span>
+                            <select
+                              className="kanban-select kanban-move-select"
+                              value={post.status}
+                              onChange={(e) =>
+                                handleDropToColumn(
+                                  e.target.value as ColId,
+                                  post.id,
+                                )
+                              }
+                            >
+                              {columns.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.title}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
                     );
                   })
@@ -783,9 +885,13 @@ export default function PapanKanbanPage() {
                       height: 26,
                       borderRadius: 6,
                       border: "1.5px solid #0f172a",
-                      backgroundColor: safeCurrentPage <= 1 ? "#f1f5f9" : "#ffffff",
-                      color: safeCurrentPage <= 1 ? "#cbd5e1" : "#0f172a",
-                      boxShadow: safeCurrentPage <= 1 ? "none" : "1.5px 1.5px 0px #0f172a",
+                      backgroundColor:
+                        safeCurrentPage <= 1 ? "#f1f5f9" : "#ffffff",
+                      color: safeCurrentPage <= 1 ? "#94a3b8" : "#0f172a",
+                      boxShadow:
+                        safeCurrentPage <= 1
+                          ? "none"
+                          : "1.5px 1.5px 0px #0f172a",
                       cursor: safeCurrentPage <= 1 ? "not-allowed" : "pointer",
                       transition: "all 0.15s ease",
                     }}
@@ -804,8 +910,12 @@ export default function PapanKanbanPage() {
                       gap: 4,
                     }}
                   >
-                    <span>Hlm {safeCurrentPage}/{totalPages}</span>
-                    <span style={{ color: "#94a3b8", fontWeight: 600 }}>({colPosts.length})</span>
+                    <span>
+                      Hlm {safeCurrentPage}/{totalPages}
+                    </span>
+                    <span style={{ color: "#94a3b8", fontWeight: 600 }}>
+                      ({colPosts.length})
+                    </span>
                   </span>
 
                   <button
@@ -825,10 +935,18 @@ export default function PapanKanbanPage() {
                       height: 26,
                       borderRadius: 6,
                       border: "1.5px solid #0f172a",
-                      backgroundColor: safeCurrentPage >= totalPages ? "#f1f5f9" : "#ffffff",
-                      color: safeCurrentPage >= totalPages ? "#cbd5e1" : "#0f172a",
-                      boxShadow: safeCurrentPage >= totalPages ? "none" : "1.5px 1.5px 0px #0f172a",
-                      cursor: safeCurrentPage >= totalPages ? "not-allowed" : "pointer",
+                      backgroundColor:
+                        safeCurrentPage >= totalPages ? "#f1f5f9" : "#ffffff",
+                      color:
+                        safeCurrentPage >= totalPages ? "#94a3b8" : "#0f172a",
+                      boxShadow:
+                        safeCurrentPage >= totalPages
+                          ? "none"
+                          : "1.5px 1.5px 0px #0f172a",
+                      cursor:
+                        safeCurrentPage >= totalPages
+                          ? "not-allowed"
+                          : "pointer",
                       transition: "all 0.15s ease",
                     }}
                     title="Halaman berikutnya"
