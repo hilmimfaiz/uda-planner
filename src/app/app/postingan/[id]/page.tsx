@@ -9,18 +9,20 @@ import {
   Share2,
   CheckCircle2,
   AlertCircle,
-  MessageSquare,
   Sparkles,
   ArrowLeft,
   Trash2,
-  FileCheck,
   UploadCloud,
   Image as ImageIcon,
   X,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  Plus,
 } from 'lucide-react';
 import { compressImageToBase64 } from '@/lib/image-upload';
-import { DUMMY_POSTS, DUMMY_BRANDS, DUMMY_PILLARS, DUMMY_MEMBERS, DUMMY_SNIPPETS, DummyPost, DummyBrand, DummySnippet } from '@/lib/dummy-data';
+import { DUMMY_BRANDS, DUMMY_SNIPPETS, DummyPost, DummyBrand, DummySnippet } from '@/lib/dummy-data';
 import { PLATFORMS, CONTENT_TYPES, POST_STATUSES } from '@/lib/platforms';
 import { PostService } from '@/services/post.service';
 import { BrandService } from '@/services/brand.service';
@@ -29,6 +31,8 @@ import { useAuth } from '@/contexts/auth-context';
 import { useModal } from '@/contexts/modal-context';
 import { GuidedTour, TourStep } from '@/components/guided-tour';
 import { addAppNotification } from '@/lib/notification-manager';
+
+const MAX_CAROUSEL_IMAGES = 10;
 
 export default function PostEditorDetailPage() {
   const params = useParams();
@@ -54,11 +58,18 @@ export default function PostEditorDetailPage() {
     posted_at: null,
     posted_url: null,
     media_url: '',
+    media_urls: [],
     aspect_ratio: '1:1',
     comments_count: 0,
   };
 
-  const [post, setPost] = useState<DummyPost>(defaultNewPost);
+  const [post, setPost] = useState<DummyPost>(() => {
+    if (!isNew && rawId) {
+      const cached = PostService.getCachedPosts().find((p) => p.id === rawId);
+      if (cached) return cached;
+    }
+    return defaultNewPost;
+  });
   const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
   const [snippets, setSnippets] = useState<DummySnippet[]>(DUMMY_SNIPPETS);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -66,40 +77,48 @@ export default function PostEditorDetailPage() {
   const [revisionNote, setRevisionNote] = useState('');
   const [showBankSnippetModal, setShowBankSnippetModal] = useState(false);
   const [snippetTab, setSnippetTab] = useState<'all' | 'caption' | 'hashtag'>('all');
-  const [showPostedUrlModal, setShowPostedUrlModal] = useState(false);
-  const [postedUrlInput, setPostedUrlInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>('owner');
   const [isAccessDenied, setIsAccessDenied] = useState(false);
-  const [isLoadingPost, setIsLoadingPost] = useState(!isNew);
+  const [isLoadingPost, setIsLoadingPost] = useState(false);
 
   const isReadOnly = userRole === 'viewer';
 
+  // Daftar gambar konten (mendukung single image maupun multi-image Carousel hingga 10 gambar)
+  const mediaList: string[] = React.useMemo(() => {
+    if (Array.isArray(post.media_urls) && post.media_urls.length > 0) {
+      return post.media_urls.filter((u) => typeof u === 'string' && u.trim().length > 0);
+    }
+    if (post.media_url && post.media_url.trim().length > 0) {
+      return [post.media_url.trim()];
+    }
+    return [];
+  }, [post.media_urls, post.media_url]);
+
+  const safeSlideIndex = mediaList.length > 0 ? Math.min(activeSlideIndex, mediaList.length - 1) : 0;
+  const isCarouselMode = post.content_type === 'carousel';
+
   // Deteksi apakah pengguna merupakan anggota undangan tim
   const isTeamMember = React.useMemo(() => {
-    // 1. Berdasarkan role aktif brand
     if (userRole && ['editor', 'reviewer', 'viewer'].includes(userRole)) {
       return true;
     }
-    // 2. Berdasarkan plan akun aktif
     if (account?.plan_code === 'team') {
       return true;
     }
-    // 3. Pengecekan data keanggotaan lokal
     if (typeof window !== 'undefined') {
       try {
         const uId = user?.id;
         const uEmail = user?.email?.toLowerCase();
 
-        // Cek data team membership
         if (uId && localStorage.getItem('uda_team_membership_' + uId)) {
           return true;
         }
 
-        // Cek system role
         if (uId) {
           const sysRole = localStorage.getItem('uda_system_role_' + uId);
           if (sysRole && ['Editor', 'Reviewer', 'Viewer'].includes(sysRole)) {
@@ -107,7 +126,6 @@ export default function PostEditorDetailPage() {
           }
         }
 
-        // Cek brand members lokal pada brand saat ini
         const bId = post.brand_id;
         if (bId) {
           const rawM = localStorage.getItem('uda_brand_members_' + bId);
@@ -124,7 +142,6 @@ export default function PostEditorDetailPage() {
           }
         }
 
-        // Cek undangan yang telah diterima
         const rawInv = localStorage.getItem('uda_brand_invitations');
         if (rawInv) {
           const invList = JSON.parse(rawInv);
@@ -136,22 +153,12 @@ export default function PostEditorDetailPage() {
           );
           if (foundInv) return true;
         }
-
-        // Cek auth account cache
-        const rawAcc = localStorage.getItem('uda_auth_account');
-        if (rawAcc) {
-          const parsed = JSON.parse(rawAcc);
-          if (parsed.plan_code === 'team' || parsed.team_member_brand_id) {
-            return true;
-          }
-        }
       } catch (err) {}
     }
     return false;
   }, [userRole, account?.plan_code, user?.id, user?.email, post.brand_id]);
 
   const isFreePlan = !account || account.plan_code === 'free';
-  // Tipe konten Video dan Reels terbuka untuk Pro, Tim, serta seluruh anggota undangan tim
   const isContentLocked = isFreePlan && !isTeamMember;
 
   const safeDate = (dateVal?: string | null): Date | null => {
@@ -179,63 +186,83 @@ export default function PostEditorDetailPage() {
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
 
-    if (!file.type.startsWith('image/')) {
+    const files = Array.from(fileList);
+    const invalidFile = files.find((f) => !f.type.startsWith('image/'));
+    if (invalidFile) {
       showError('Format Tidak Didukung', 'Harap unggah file foto dengan format gambar (JPG, PNG, atau WebP).');
+      if (e.target) e.target.value = '';
       return;
     }
 
     const effectivePlanCode = isTeamMember ? 'team' : (account?.plan_code || 'free');
     const maxSingleFileMb = effectivePlanCode === 'free' ? 10 : 50;
 
-    if (file.size > maxSingleFileMb * 1024 * 1024) {
+    const oversizedFile = files.find((f) => f.size > maxSingleFileMb * 1024 * 1024);
+    if (oversizedFile) {
       showError(
         'Ukuran Foto Terlalu Besar',
-        `Ukuran foto maksimal untuk Paket ${effectivePlanCode.toUpperCase()} adalah ${maxSingleFileMb} MB.`
+        `Ukuran tiap foto maksimal untuk Paket ${effectivePlanCode.toUpperCase()} adalah ${maxSingleFileMb} MB.`
       );
+      if (e.target) e.target.value = '';
       return;
     }
 
-    // Hitung total penggunaan storage saat ini dari seluruh postingan
-    try {
-      const allPosts = await PostService.getPosts({}, user?.id);
-      const currentUsedMb = (allPosts || []).reduce((acc, p) => {
-        if (p.id !== post.id && p.media_url) {
-          const bytes = p.media_url.startsWith('data:')
-            ? Math.round(p.media_url.length * 0.75)
-            : 3 * 1024 * 1024;
-          return acc + bytes / (1024 * 1024);
-        }
-        return acc;
-      }, 0);
-
-      const newFileMb = file.size / (1024 * 1024);
-      const maxStorageMb = effectivePlanCode === 'team' ? 20480 : effectivePlanCode === 'pro' ? 5120 : 200;
-
-      if (currentUsedMb + newFileMb > maxStorageMb) {
-        if (effectivePlanCode === 'free') {
-          showError(
-            'Kapasitas Penyimpanan Penuh (Batas 200 MB)',
-            `Akun Paket Gratis dibatasi total penyimpanan 200 MB (saat ini terpakai ${currentUsedMb.toFixed(1)} MB). Jika ingin tetap mengunggah postingan baru, Anda harus menghapus postingan lama yang sudah tidak dipakai lagi atau tingkatkan paket ke Pro / Tim.`
-          );
-        } else {
-          showError(
-            'Kapasitas Penyimpanan Penuh',
-            `Batas penyimpanan untuk Paket ${effectivePlanCode.toUpperCase()} (${maxStorageMb >= 1024 ? maxStorageMb / 1024 + ' GB' : maxStorageMb + ' MB'}) telah tercapai. Silakan hapus media atau postingan yang tidak digunakan lagi.`
-          );
-        }
+    // Jika mode Carousel: bisa upload hingga maksimal 10 gambar
+    if (isCarouselMode) {
+      const remainingSlots = MAX_CAROUSEL_IMAGES - mediaList.length;
+      if (remainingSlots <= 0) {
+        showError(
+          'Batas Maksimal Carousel (10 Foto)',
+          'Anda telah mencapai batas maksimal 10 foto untuk 1 postingan Carousel. Hapus salah satu slide jika ingin mengganti foto.'
+        );
+        if (e.target) e.target.value = '';
         return;
       }
-    } catch (quotaErr) {
-      console.warn('Storage quota check notice:', quotaErr);
+
+      const filesToProcess = files.slice(0, remainingSlots);
+      if (files.length > remainingSlots) {
+        showToast(`⚠️ Maksimal 10 gambar untuk Carousel. ${filesToProcess.length} foto pertama berhasil ditambahkan.`);
+      }
+
+      setIsUploadingImage(true);
+      try {
+        const compressedBatch = await Promise.all(
+          filesToProcess.map((file) => compressImageToBase64(file, 760, 760, 0.78))
+        );
+        const updatedUrls = [...mediaList, ...compressedBatch].slice(0, MAX_CAROUSEL_IMAGES);
+        setPost((prev) => ({
+          ...prev,
+          media_urls: updatedUrls,
+          media_url: updatedUrls[0] || '',
+        }));
+        setActiveSlideIndex(updatedUrls.length - 1);
+        showSuccess(
+          'Slide Carousel Berhasil Ditambahkan!',
+          `${compressedBatch.length} foto berhasil diunggah (Total: ${updatedUrls.length}/${MAX_CAROUSEL_IMAGES} slide). Anda dapat menggeser slide pada Pratinjau Feed.`
+        );
+      } catch (err: any) {
+        showError('Gagal Memproses Foto Carousel', err.message || 'Terjadi kesalahan saat memproses gambar.');
+      } finally {
+        setIsUploadingImage(false);
+        if (e.target) e.target.value = '';
+      }
+      return;
     }
 
+    // Mode non-Carousel (1 foto utama)
+    const file = files[0];
     setIsUploadingImage(true);
     try {
       const base64 = await compressImageToBase64(file, 800, 800, 0.8);
-      setPost((prev) => ({ ...prev, media_url: base64 }));
+      setPost((prev) => ({
+        ...prev,
+        media_url: base64,
+        media_urls: [base64],
+      }));
+      setActiveSlideIndex(0);
       showSuccess('Foto Berhasil Diunggah!', 'Foto konten telah diperbarui dan langsung disinkronkan ke pratinjau feed.');
     } catch (err: any) {
       showError('Gagal Memproses Foto', err.message || 'Terjadi kesalahan saat memproses gambar.');
@@ -246,7 +273,18 @@ export default function PostEditorDetailPage() {
   };
 
   const handleRemoveImage = () => {
-    setPost((prev) => ({ ...prev, media_url: '' }));
+    setPost((prev) => ({ ...prev, media_url: '', media_urls: [] }));
+    setActiveSlideIndex(0);
+  };
+
+  const handleRemoveSingleSlide = (idxToRemove: number) => {
+    const nextUrls = mediaList.filter((_, i) => i !== idxToRemove);
+    setPost((prev) => ({
+      ...prev,
+      media_urls: nextUrls,
+      media_url: nextUrls[0] || '',
+    }));
+    setActiveSlideIndex((prevIdx) => Math.max(0, Math.min(prevIdx, nextUrls.length - 1)));
   };
 
   React.useEffect(() => {
@@ -257,7 +295,7 @@ export default function PostEditorDetailPage() {
           const activeBrandId = typeof window !== 'undefined' ? localStorage.getItem('uda_active_brand_id') : null;
           const targetBrand = (activeBrandId && bList.find((b) => b.id === activeBrandId)) || bList[0];
           setPost((prev) => ({ ...prev, brand_id: targetBrand.id }));
-          BrandService.getUserBrandRole(targetBrand.id, user?.id).then((r) => setUserRole(r));
+          BrandService.getUserBrandRole(targetBrand.id, user?.id).then((r) => setUserRole(r || 'owner'));
         }
       }
     });
@@ -267,14 +305,17 @@ export default function PostEditorDetailPage() {
     });
 
     if (!isNew && rawId) {
-      setIsLoadingPost(true);
+      const cached = PostService.getCachedPosts().find((p) => p.id === rawId);
+      if (!cached) {
+        setIsLoadingPost(true);
+      }
       PostService.getPostById(rawId, user?.id).then(async (existingPost) => {
         if (!existingPost) {
-          setIsAccessDenied(true);
+          if (!cached) setIsAccessDenied(true);
         } else {
           setPost(existingPost);
           const r = await BrandService.getUserBrandRole(existingPost.brand_id, user?.id);
-          setUserRole(r);
+          setUserRole(r || 'owner');
         }
         setIsLoadingPost(false);
       });
@@ -302,7 +343,6 @@ export default function PostEditorDetailPage() {
       text: '#475569',
     };
 
-  // Character limit validation
   const primaryPlatform = post.platforms[0] || 'instagram';
   const maxCaption = PLATFORMS[primaryPlatform]?.maxCaptionLength || 2200;
   const isOverLimit = post.caption.length > maxCaption;
@@ -325,29 +365,40 @@ export default function PostEditorDetailPage() {
       return;
     }
 
+    const finalMediaUrls = isCarouselMode
+      ? mediaList.slice(0, MAX_CAROUSEL_IMAGES)
+      : mediaList.length > 0
+      ? [mediaList[0]]
+      : [];
+    const finalPayload: DummyPost = {
+      ...post,
+      media_urls: finalMediaUrls,
+      media_url: finalMediaUrls[0] || '',
+    };
+
     setIsSaving(true);
     try {
       if (isNew) {
         const created = await PostService.createPost({
-          ...post,
+          ...finalPayload,
           user_id: user?.id,
         });
         setPost(created);
         showSuccess(
           'Postingan Berhasil Dibuat!',
-          `Postingan "${created.title}" telah berhasil disimpan ke database dan tersinkron.`,
+          `Postingan "${created.title}" telah berhasil disimpan ke database dan tersinkron ke Kalender & Grid Instagram.`,
           () => {
             router.push(`/app/postingan/${created.id}`);
           }
         );
       } else {
-        const updated = await PostService.updatePost(post.id, post);
+        const updated = await PostService.updatePost(post.id, finalPayload);
         if (updated) {
           setPost(updated);
         }
         showSuccess(
           'Perubahan Berhasil Disimpan!',
-          `Semua perubahan pada postingan "${post.title}" telah tersinkron dan diperbarui di database.`
+          `Semua perubahan pada postingan "${post.title}" telah tersinkron dan diperbarui di database serta Grid Instagram.`
         );
       }
     } catch (err: any) {
@@ -371,14 +422,12 @@ export default function PostEditorDetailPage() {
     });
   };
 
-  // 1-Click Copy Caption + Hashtag
   const handleCopyCaptionAndHashtags = () => {
     const combined = `${post.caption}\n\n${post.hashtags}`.trim();
     navigator.clipboard.writeText(combined);
     showToast('📋 Caption dan hashtag berhasil disalin ke clipboard!');
   };
 
-  // Google Calendar Link generator
   const handleAddToGoogleCalendar = () => {
     const title = encodeURIComponent(post.title);
     const details = encodeURIComponent(
@@ -392,7 +441,6 @@ export default function PostEditorDetailPage() {
     window.open(gcalUrl, '_blank');
   };
 
-  // Download .ics file
   const handleDownloadICS = () => {
     const sDate = safeDate(post.scheduled_at);
     const dtStart = sDate ? sDate.toISOString().replace(/-|:|\.\d\d\d/g, '') : '';
@@ -420,7 +468,6 @@ END:VCALENDAR`;
     showToast('📅 File .ics kalender berhasil diunduh!');
   };
 
-  // Bagikan ke WhatsApp
   const handleShareToWhatsApp = () => {
     const sDate = safeDate(post.scheduled_at);
     const text = encodeURIComponent(
@@ -429,7 +476,6 @@ END:VCALENDAR`;
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
-  // Langkah Panduan Interaktif Editor Postingan
   const postinganTourSteps: TourStep[] = [
     {
       targetId: 'tour-editor-header',
@@ -440,7 +486,7 @@ END:VCALENDAR`;
     {
       targetId: 'tour-editor-form',
       title: 'Formulir Konten & Jadwal',
-      description: 'Tentukan judul internal, pilih akun brand bisnis, tipe format konten (Feed, Carousel, Reels, Story), serta jadwalkan tanggal dan jam tayang.',
+      description: 'Tentukan judul internal, pilih akun brand bisnis, tipe format konten (Feed, Carousel hingga 10 gambar, Reels, Story), serta jadwalkan tanggal dan jam tayang.',
       placement: 'right',
     },
     {
@@ -452,7 +498,7 @@ END:VCALENDAR`;
     {
       targetId: 'tour-editor-preview',
       title: 'Pratinjau Visual Sosmed',
-      description: 'Lihat simulasi visual postingan persis seperti saat tampil di feed media sosial Anda sebelum benar-benar dipublikasikan.',
+      description: 'Lihat simulasi visual postingan persis seperti saat tampil di feed media sosial Anda (termasuk geser slide Carousel) sebelum benar-benar dipublikasikan.',
       placement: 'left',
     },
     {
@@ -467,7 +513,7 @@ END:VCALENDAR`;
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: 10, color: '#64748b' }}>
         <Loader2 className="animate-spin" size={24} style={{ color: '#16a34a' }} />
-        <span style={{ fontWeight: 600 }}>Memverifikasi hak akses postingan...</span>
+        <span style={{ fontWeight: 600 }}>Memuat detail postingan...</span>
       </div>
     );
   }
@@ -493,10 +539,8 @@ END:VCALENDAR`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* GUIDED TOUR POSTINGAN */}
       <GuidedTour steps={postinganTourSteps} tourKey="uda_tour_postingan" />
 
-      {/* Toast Notification */}
       {toastMessage && (
         <div
           style={{
@@ -517,7 +561,6 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {/* Banner Khusus Mode Viewer */}
       {isReadOnly && (
         <div
           style={{
@@ -591,7 +634,7 @@ END:VCALENDAR`;
         </div>
       </div>
 
-      {/* 2-Kolom Layout Responsif (Desktop 2-Kolom, Mobile/Tablet 1-Kolom) */}
+      {/* 2-Kolom Layout Responsif */}
       <div className="post-editor-layout-grid">
         {/* KOLOM KIRI: FORM EDITOR */}
         <div id="tour-editor-form" className="uda-card post-editor-card" style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%', boxSizing: 'border-box' }}>
@@ -676,7 +719,7 @@ END:VCALENDAR`;
             </div>
           </div>
 
-          {/* Centang Platform Publikasi (Berdasarkan Platform Brand) */}
+          {/* Centang Platform Publikasi */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
@@ -713,7 +756,7 @@ END:VCALENDAR`;
                           if (!newPlts.includes(plt)) newPlts.push(plt);
                         } else {
                           newPlts = newPlts.filter((p) => p !== plt);
-                          if (newPlts.length === 0) newPlts = [plt]; // minimal 1
+                          if (newPlts.length === 0) newPlts = [plt];
                         }
                         setPost({ ...post, platforms: newPlts });
                       }}
@@ -748,11 +791,31 @@ END:VCALENDAR`;
             />
           </div>
 
-          {/* Kolom Unggah Foto / Media Konten */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Unggah Foto / Media Konten</label>
-              {!isReadOnly && post.media_url && (
+          {/* Kolom Unggah Foto / Media Konten (Mendukung Multi-Upload Carousel Maks 10 Gambar) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
+                  {isCarouselMode ? 'Unggah Foto Carousel (Maks. 10 Gambar)' : 'Unggah Foto / Media Konten'}
+                </label>
+                {isCarouselMode && (
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      background: mediaList.length >= MAX_CAROUSEL_IMAGES ? '#fee2e2' : '#dcfce7',
+                      color: mediaList.length >= MAX_CAROUSEL_IMAGES ? '#dc2626' : '#15803d',
+                      border: '1px solid currentColor',
+                    }}
+                  >
+                    {mediaList.length} / {MAX_CAROUSEL_IMAGES} Slide
+                  </span>
+                )}
+              </div>
+
+              {!isReadOnly && mediaList.length > 0 && (
                 <button
                   type="button"
                   onClick={handleRemoveImage}
@@ -769,7 +832,7 @@ END:VCALENDAR`;
                   }}
                 >
                   <Trash2 size={13} />
-                  <span>Hapus Foto</span>
+                  <span>{isCarouselMode ? 'Hapus Semua Slide' : 'Hapus Foto'}</span>
                 </button>
               )}
             </div>
@@ -778,16 +841,186 @@ END:VCALENDAR`;
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              multiple={isCarouselMode}
               style={{ display: 'none' }}
               onChange={handleImageChange}
             />
 
-            {post.media_url ? (
+            {isCarouselMode ? (
+              /* Tampilan Upload & Galeri Slide untuk Tipe Konten Carousel */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {mediaList.length > 0 && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(74px, 1fr))',
+                      gap: 8,
+                      padding: 10,
+                      background: '#f8fafc',
+                      borderRadius: 10,
+                      border: '1px solid #e2e8f0',
+                    }}
+                  >
+                    {mediaList.map((imgUrl, idx) => {
+                      const isActive = idx === safeSlideIndex;
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => setActiveSlideIndex(idx)}
+                          style={{
+                            position: 'relative',
+                            aspectRatio: '1 / 1',
+                            borderRadius: 8,
+                            overflow: 'hidden',
+                            border: isActive ? '2.5px solid #16a34a' : '1.5px solid #cbd5e1',
+                            boxShadow: isActive ? '0 0 0 2px rgba(22, 163, 74, 0.2)' : 'none',
+                            cursor: 'pointer',
+                            background: '#0f172a',
+                          }}
+                          title={`Klik untuk melihat Slide ${idx + 1} di Pratinjau`}
+                        >
+                          <img
+                            src={imgUrl}
+                            alt={`Slide ${idx + 1}`}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                          <span
+                            style={{
+                              position: 'absolute',
+                              bottom: 4,
+                              left: 4,
+                              background: 'rgba(15, 23, 42, 0.85)',
+                              color: '#ffffff',
+                              fontSize: '0.62rem',
+                              fontWeight: 800,
+                              padding: '1px 5px',
+                              borderRadius: 4,
+                            }}
+                          >
+                            #{idx + 1}
+                          </span>
+                          {!isReadOnly && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveSingleSlide(idx);
+                              }}
+                              style={{
+                                position: 'absolute',
+                                top: 3,
+                                right: 3,
+                                width: 20,
+                                height: 20,
+                                borderRadius: '50%',
+                                background: 'rgba(220, 38, 38, 0.92)',
+                                color: '#ffffff',
+                                border: 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                padding: 0,
+                              }}
+                              title={`Hapus Slide ${idx + 1}`}
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Tombol Tambah Slide jika masih < 10 */}
+                    {!isReadOnly && mediaList.length < MAX_CAROUSEL_IMAGES && (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploadingImage}
+                        style={{
+                          aspectRatio: '1 / 1',
+                          borderRadius: 8,
+                          border: '2px dashed #16a34a',
+                          background: '#f0fdf4',
+                          color: '#15803d',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 2,
+                          cursor: 'pointer',
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                        }}
+                      >
+                        <Plus size={18} />
+                        <span>Tambah</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {(!isReadOnly && mediaList.length < MAX_CAROUSEL_IMAGES) && (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{
+                      border: '2px dashed #cbd5e1',
+                      borderRadius: 10,
+                      padding: mediaList.length > 0 ? '14px 16px' : '20px 16px',
+                      backgroundColor: '#f8fafc',
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = '#16a34a';
+                      e.currentTarget.style.backgroundColor = '#f0fdf4';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = '#cbd5e1';
+                      e.currentTarget.style.backgroundColor = '#f8fafc';
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: '50%',
+                        background: '#dcfce7',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#15803d',
+                      }}
+                    >
+                      <Layers size={20} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
+                        {isUploadingImage
+                          ? 'Sedang Memproses Foto Carousel...'
+                          : mediaList.length > 0
+                          ? `Klik untuk Tambah Foto Slide Baru (${mediaList.length}/${MAX_CAROUSEL_IMAGES})`
+                          : 'Klik untuk Pilih Beberapa Foto Sekaligus (Maks. 10 Gambar)'}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                        Anda dapat memilih lebih dari 1 foto sekaligus untuk diunggah ke slide Carousel
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : mediaList.length > 0 ? (
               <div className="post-editor-media-preview-card">
                 <div className="post-editor-media-preview-left">
                   <div className="post-editor-media-thumb">
                     <img
-                      src={post.media_url}
+                      src={mediaList[0]}
                       alt="Foto Konten"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
@@ -954,39 +1187,206 @@ END:VCALENDAR`;
 
         {/* KOLOM KANAN: PRATINJAU SOSMED & KARTU AKSI */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* Pratinjau Sosmed (Feed Mockup) */}
+          {/* Pratinjau Sosmed (Feed Mockup dengan Slider Carousel Interaktif) */}
           <div id="tour-editor-preview" className="uda-card post-editor-card" style={{ padding: 18 }}>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: 12, color: '#0f172a' }}>
-              Pratinjau Feed Media Sosial
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                Pratinjau Feed Media Sosial
+              </h3>
+              {(isCarouselMode || mediaList.length > 1) && mediaList.length > 0 && (
+                <span
+                  style={{
+                    fontSize: '0.74rem',
+                    fontWeight: 800,
+                    color: '#15803d',
+                    background: '#dcfce7',
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                  }}
+                >
+                  Slide {safeSlideIndex + 1} dari {mediaList.length}
+                </span>
+              )}
+            </div>
 
             <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: '#ffffff' }}>
               {/* Header Feed */}
-              <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #f1f5f9' }}>
-                <img
-                  src={brand.avatar_url}
-                  alt=""
-                  style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
-                />
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>@{brand.handle}</div>
-                  <div style={{ fontSize: '0.68rem', color: '#64748b' }}>Postingan Terjadwal</div>
+              <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <img
+                    src={brand.avatar_url}
+                    alt=""
+                    style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>@{brand.handle}</div>
+                    <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                      {isCarouselMode ? 'Postingan Carousel' : 'Postingan Terjadwal'}
+                    </div>
+                  </div>
                 </div>
+                {isCarouselMode && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.7rem',
+                      fontWeight: 800,
+                      color: '#0f172a',
+                      background: '#f1f5f9',
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                    }}
+                  >
+                    <Layers size={12} />
+                    <span>Carousel</span>
+                  </span>
+                )}
               </div>
 
-              {/* Gambar Feed Tersinkron */}
+              {/* Gambar Feed Tersinkron + Navigasi Geser Slide Carousel */}
               <div
                 className="post-editor-feed-img-wrap"
                 style={{
+                  position: 'relative',
                   aspectRatio: post.content_type === 'reels' || post.content_type === 'story' ? '9 / 16' : '1 / 1',
                 }}
               >
-                {post.media_url ? (
-                  <img
-                    src={post.media_url}
-                    alt="Pratinjau Foto Feed"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
+                {mediaList.length > 0 ? (
+                  <>
+                    <img
+                      src={mediaList[safeSlideIndex]}
+                      alt={`Pratinjau Slide ${safeSlideIndex + 1}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.2s ease' }}
+                    />
+
+                    {/* Badge Counter Slide di Pojok Kanan Atas */}
+                    {(isCarouselMode || mediaList.length > 1) && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 10,
+                          right: 10,
+                          background: 'rgba(15, 23, 42, 0.78)',
+                          color: '#ffffff',
+                          fontSize: '0.74rem',
+                          fontWeight: 800,
+                          padding: '4px 10px',
+                          borderRadius: 999,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          backdropFilter: 'blur(4px)',
+                        }}
+                      >
+                        <Layers size={12} />
+                        <span>{safeSlideIndex + 1}/{mediaList.length}</span>
+                      </div>
+                    )}
+
+                    {/* Tombol Geser Kiri & Kanan jika ada > 1 gambar */}
+                    {mediaList.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveSlideIndex((prev) => (prev > 0 ? prev - 1 : mediaList.length - 1));
+                          }}
+                          style={{
+                            position: 'absolute',
+                            left: 10,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: 34,
+                            height: 34,
+                            borderRadius: '50%',
+                            background: 'rgba(255, 255, 255, 0.92)',
+                            color: '#0f172a',
+                            border: '1.5px solid #0f172a',
+                            boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            zIndex: 5,
+                          }}
+                          title="Slide Sebelumnya"
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveSlideIndex((prev) => (prev < mediaList.length - 1 ? prev + 1 : 0));
+                          }}
+                          style={{
+                            position: 'absolute',
+                            right: 10,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: 34,
+                            height: 34,
+                            borderRadius: '50%',
+                            background: 'rgba(255, 255, 255, 0.92)',
+                            color: '#0f172a',
+                            border: '1.5px solid #0f172a',
+                            boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            zIndex: 5,
+                          }}
+                          title="Slide Berikutnya"
+                        >
+                          <ChevronRight size={18} />
+                        </button>
+
+                        {/* Indikator Titik (Dots) Slide Carousel di Bawah Gambar */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            bottom: 10,
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            background: 'rgba(15, 23, 42, 0.6)',
+                            padding: '5px 10px',
+                            borderRadius: 999,
+                            backdropFilter: 'blur(4px)',
+                          }}
+                        >
+                          {mediaList.map((_, dotIdx) => (
+                            <button
+                              key={dotIdx}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveSlideIndex(dotIdx);
+                              }}
+                              style={{
+                                width: dotIdx === safeSlideIndex ? 16 : 7,
+                                height: 7,
+                                borderRadius: 999,
+                                background: dotIdx === safeSlideIndex ? '#22c55e' : 'rgba(255,255,255,0.65)',
+                                border: 'none',
+                                padding: 0,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                              }}
+                              title={`Ke Slide ${dotIdx + 1}`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
                 ) : (
                   <div
                     onClick={() => {
@@ -1005,7 +1405,11 @@ END:VCALENDAR`;
                   >
                     <ImageIcon size={40} />
                     <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>Belum ada foto yang diunggah</span>
-                    {!isReadOnly && <span style={{ fontSize: '0.74rem', color: '#16a34a', fontWeight: 700 }}>Klik untuk unggah foto</span>}
+                    {!isReadOnly && (
+                      <span style={{ fontSize: '0.74rem', color: '#16a34a', fontWeight: 700 }}>
+                        {isCarouselMode ? 'Klik untuk unggah hingga 10 foto Carousel' : 'Klik untuk unggah foto'}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -1143,7 +1547,7 @@ END:VCALENDAR`;
         </div>
       </div>
 
-      {/* Tombol Simpan/Buat Cepat untuk Mobile agar mudah dijangkau satu tangan */}
+      {/* Tombol Simpan/Buat Cepat untuk Mobile */}
       {!isReadOnly && (
         <div className="post-editor-mobile-bottom-submit">
           <button
@@ -1216,7 +1620,7 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {/* MODAL: SISIPKAN DARI BANK KONTEN (DENGAN PEMISAHAN TAB TEMPLATE CAPTION & KUMPULAN HASHTAG) */}
+      {/* MODAL: SISIPKAN DARI BANK KONTEN */}
       {showBankSnippetModal && (
         <div
           style={{
@@ -1244,7 +1648,6 @@ END:VCALENDAR`;
               </button>
             </div>
 
-            {/* Filter Tabs: Semua, Template Caption, Kumpulan Hashtag */}
             <div style={{ display: 'flex', gap: 6, marginBottom: 16, borderBottom: '1px solid #e2e8f0', paddingBottom: 10, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <button
                 type="button"

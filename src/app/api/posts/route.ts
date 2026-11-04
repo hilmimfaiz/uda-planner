@@ -33,7 +33,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const accountId = body.accountId || 'acc-001';
 
-    // Validate monthly post quota
     const quotaCheck = await QuotaService.canCreatePost(accountId);
     if (!quotaCheck.allowed) {
       return NextResponse.json({ success: false, error: quotaCheck.message }, { status: 403 });
@@ -52,6 +51,7 @@ export async function POST(req: NextRequest) {
       status: body.status || 'draft',
       user_id: body.user_id,
       media_url: body.media_url,
+      media_urls: body.media_urls,
       notes: body.notes,
     });
 
@@ -78,7 +78,15 @@ export async function PATCH(req: NextRequest) {
         if (updates.posted_at !== undefined) dbUpdates.posted_at = updates.posted_at;
         if (updates.title !== undefined) dbUpdates.title = updates.title;
         if (updates.caption !== undefined) dbUpdates.caption = updates.caption;
+        if (updates.content_type !== undefined) dbUpdates.content_type = updates.content_type;
         if (updates.scheduled_at !== undefined) dbUpdates.scheduled_at = updates.scheduled_at;
+        if (updates.notes !== undefined || updates.media_url !== undefined || updates.media_urls !== undefined) {
+          dbUpdates.notes = PostService.embedMediaInNotes(
+            updates.notes,
+            updates.media_url,
+            updates.media_urls
+          );
+        }
         dbUpdates.updated_at = new Date().toISOString();
 
         await (adminSupabase.from('posts' as any) as any)

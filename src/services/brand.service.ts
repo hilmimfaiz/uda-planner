@@ -31,6 +31,34 @@ const saveCustomBrands = (brands: DummyBrand[]) => {
 let localBrands: DummyBrand[] = [...DUMMY_BRANDS];
 
 export class BrandService {
+  /**
+   * Mengambil daftar brand secara sinkron (instan) dari cache lokal tanpa menunggu network
+   */
+  static getCachedBrands(ownerId?: string): DummyBrand[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      let finalOwnerId = ownerId;
+      if (!finalOwnerId) {
+        const rawAuth = localStorage.getItem('uda_auth_profile');
+        if (rawAuth) finalOwnerId = JSON.parse(rawAuth)?.id;
+      }
+      if (finalOwnerId) {
+        const rawUserBrands = localStorage.getItem(`uda_cached_brands_${finalOwnerId}`);
+        if (rawUserBrands) {
+          const parsed = JSON.parse(rawUserBrands);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+      const stored = getStoredCustomBrands();
+      if (finalOwnerId) {
+        return stored.filter((b) => b.owner_id === finalOwnerId);
+      }
+      return stored;
+    } catch {
+      return [];
+    }
+  }
+
   static async getRealBrandId(requestedId?: string, fallbackUserId?: string): Promise<string> {
     if (requestedId && isUuid(requestedId)) {
       return requestedId;
@@ -63,7 +91,6 @@ export class BrandService {
       }
     }
 
-    // Periksa local storage custom brands jika ada yang uuid
     const custom = getStoredCustomBrands();
     const foundCustom = custom.find((b) => isUuid(b.id));
     if (foundCustom) return foundCustom.id;
@@ -84,7 +111,6 @@ export class BrandService {
 
       if (!finalUserId || !isUuid(finalUserId)) return null;
 
-      // Cek apakah sudah ada brand di Supabase
       const { data: existing } = await supabase
         .from('brands' as any)
         .select('*')
@@ -107,7 +133,6 @@ export class BrandService {
         };
       }
 
-      // Buat default brand di Supabase
       const insertPayload = {
         owner_id: finalUserId,
         name: 'UdaCoding',
@@ -156,7 +181,6 @@ export class BrandService {
     let finalUserId = userId;
     let userEmail = '';
 
-    // Pastikan userEmail dan finalUserId terisi secara lengkap dari Supabase maupun localStorage
     if (typeof window !== 'undefined') {
       try {
         const rawAuth = localStorage.getItem('uda_auth_profile');
@@ -184,7 +208,6 @@ export class BrandService {
       } catch {}
     }
 
-    // Dapatkan referensi nama brand untuk pencocokan cadangan jika ID brand adalah alias/dummy
     let targetBrandName = '';
     const storedBrands = typeof window !== 'undefined' ? getStoredCustomBrands() : [];
     const matchedBrand = storedBrands.find((b) => b.id === brandId) || DUMMY_BRANDS.find((b) => b.id === brandId);
@@ -192,14 +215,21 @@ export class BrandService {
       targetBrandName = matchedBrand.name;
     }
 
-    // 1. Cek kepemilikan Owner langsung di Supabase
+    // Cek di penyimpanan lokal terlebih dahulu jika sudah pasti milik owner (sangat cepat)
+    if (typeof window !== 'undefined' && finalUserId) {
+      const cachedOwned = this.getCachedBrands(finalUserId).find((b) => b.id === brandId && b.owner_id === finalUserId);
+      if (cachedOwned) return 'owner';
+    }
+
+    // 1. Cek kepemilikan Owner & brand_members secara PARALEL di Supabase
     if (supabase && isUuid(brandId) && isUuid(finalUserId)) {
       try {
-        const { data: brand } = await (supabase.from('brands' as any) as any)
-          .select('owner_id, name')
-          .eq('id', brandId)
-          .maybeSingle();
+        const [brandRes, memberRes] = await Promise.all([
+          (supabase.from('brands' as any) as any).select('owner_id, name').eq('id', brandId).maybeSingle(),
+          (supabase.from('brand_members' as any) as any).select('role').eq('brand_id', brandId).eq('user_id', finalUserId).maybeSingle(),
+        ]);
 
+        const brand = brandRes?.data;
         if (brand) {
           if (brand.name && !targetBrandName) targetBrandName = brand.name;
           if (brand.owner_id === finalUserId) {
@@ -207,13 +237,7 @@ export class BrandService {
           }
         }
 
-        // Cek tabel brand_members di database Supabase
-        const { data: member } = await (supabase.from('brand_members' as any) as any)
-          .select('role')
-          .eq('brand_id', brandId)
-          .eq('user_id', finalUserId)
-          .maybeSingle();
-
+        const member = memberRes?.data;
         if (member && member.role) {
           return member.role.toLowerCase() as 'editor' | 'reviewer' | 'viewer';
         }
@@ -222,7 +246,7 @@ export class BrandService {
       }
     }
 
-    // 2. Cek di penyimpanan lokal: custom brands kepemilikan Owner
+    // 2. Cek di penyimpanan lokal
     if (typeof window !== 'undefined') {
       try {
         const b = storedBrands.find((item) => item.id === brandId);
@@ -230,7 +254,6 @@ export class BrandService {
           return 'owner';
         }
 
-        // 3. Cek keanggotaan tim dari 'uda_team_membership_[userId]' & 'uda_team_membership'
         const teamKeys = [
           finalUserId ? 'uda_team_membership_' + finalUserId : null,
           'uda_team_membership',
@@ -251,7 +274,6 @@ export class BrandService {
           }
         }
 
-        // 4. Cek anggota tim lokal di key 'uda_brand_members_' + brandId
         const rawMembers = localStorage.getItem('uda_brand_members_' + brandId);
         if (rawMembers) {
           const membersList = JSON.parse(rawMembers);
@@ -264,7 +286,6 @@ export class BrandService {
           }
         }
 
-        // 5. Cek undangan tim yang relevan di 'uda_brand_invitations'
         const rawInvites = localStorage.getItem('uda_brand_invitations');
         if (rawInvites) {
           const invitesList = JSON.parse(rawInvites);
@@ -289,27 +310,6 @@ export class BrandService {
           }
         }
 
-        // 6. Cek informasi cache akun tim di 'uda_auth_account'
-        const rawAcc = localStorage.getItem('uda_auth_account');
-        if (rawAcc) {
-          const acc = JSON.parse(rawAcc);
-          if (acc.plan_code === 'team') {
-            const isBrandMatch =
-              acc.team_member_brand_id === brandId ||
-              (targetBrandName && acc.team_member_brand_name && targetBrandName.toLowerCase() === acc.team_member_brand_name.toLowerCase()) ||
-              (!acc.team_member_brand_id && !acc.team_member_brand_name);
-
-            if (isBrandMatch) {
-              const sysRole = finalUserId ? localStorage.getItem('uda_system_role_' + finalUserId) : null;
-              const r = sysRole || acc.team_role || acc.role;
-              if (r && ['owner', 'editor', 'reviewer', 'viewer'].includes(r.toLowerCase())) {
-                return r.toLowerCase() as 'owner' | 'editor' | 'reviewer' | 'viewer';
-              }
-            }
-          }
-        }
-
-        // 7. Cek seluruh key uda_brand_members_* jika brand ID mengalami penyesuaian
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
           if (k && k.startsWith('uda_brand_members_')) {
@@ -330,7 +330,6 @@ export class BrandService {
           }
         }
 
-        // 8. Fallback peran sistem tim jika pengguna memiliki peran tersimpan
         if (finalUserId) {
           const sysRole = localStorage.getItem('uda_system_role_' + finalUserId);
           if (sysRole && ['owner', 'editor', 'reviewer', 'viewer'].includes(sysRole.toLowerCase())) {
@@ -352,26 +351,25 @@ export class BrandService {
     let finalOwnerId = ownerId;
     let currentUserEmail = '';
 
-    if (supabase && (!finalOwnerId || !isUuid(finalOwnerId))) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        finalOwnerId = user?.id;
-        currentUserEmail = user?.email || '';
-      } catch {}
-    }
-
-    if (!finalOwnerId && typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
       try {
         const rawAuth = localStorage.getItem('uda_auth_profile');
         if (rawAuth) {
           const parsed = JSON.parse(rawAuth);
-          finalOwnerId = parsed.id;
+          if (!finalOwnerId) finalOwnerId = parsed.id;
           currentUserEmail = parsed.email || '';
         }
       } catch {}
     }
 
-    // Jika sama sekali tidak ada pengguna yang login, jangan kembalikan brand apapun
+    if (supabase && (!finalOwnerId || !isUuid(finalOwnerId))) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) finalOwnerId = user.id;
+        if (user?.email) currentUserEmail = user.email;
+      } catch {}
+    }
+
     if (!finalOwnerId) {
       return [];
     }
@@ -380,14 +378,19 @@ export class BrandService {
 
     if (supabase && isUuid(finalOwnerId)) {
       try {
-        // 1. Ambil brand yang dimiliki sendiri (Owner)
-        const { data: ownedData, error: ownedErr } = await (supabase.from('brands' as any) as any)
-          .select('*')
-          .eq('owner_id', finalOwnerId)
-          .order('created_at', { ascending: false });
+        // Jalankan query owned brands dan brand_members secara PARALEL
+        const [ownedRes, memberRes] = await Promise.all([
+          (supabase.from('brands' as any) as any)
+            .select('*')
+            .eq('owner_id', finalOwnerId)
+            .order('created_at', { ascending: false }),
+          (supabase.from('brand_members' as any) as any)
+            .select('brand_id, role')
+            .eq('user_id', finalOwnerId),
+        ]);
 
-        if (!ownedErr && ownedData) {
-          ownedData.forEach((b: any) => {
+        if (!ownedRes.error && ownedRes.data) {
+          ownedRes.data.forEach((b: any) => {
             brandMap.set(b.id, {
               id: b.id,
               owner_id: b.owner_id || finalOwnerId,
@@ -403,13 +406,10 @@ export class BrandService {
           });
         }
 
-        // 2. Ambil brand dimana pengguna menjadi anggota tim (Editor, Reviewer, Viewer)
-        const { data: memberData, error: memberErr } = await (supabase.from('brand_members' as any) as any)
-          .select('brand_id, role')
-          .eq('user_id', finalOwnerId);
-
-        if (!memberErr && memberData && memberData.length > 0) {
-          const joinedBrandIds = memberData.map((m: any) => m.brand_id).filter(Boolean);
+        if (!memberRes.error && memberRes.data && memberRes.data.length > 0) {
+          const joinedBrandIds = memberRes.data
+            .map((m: any) => m.brand_id)
+            .filter((id: string) => Boolean(id) && !brandMap.has(id));
           if (joinedBrandIds.length > 0) {
             const { data: joinedBrands, error: joinedErr } = await (supabase.from('brands' as any) as any)
               .select('*')
@@ -440,7 +440,6 @@ export class BrandService {
       }
     }
 
-    // 3. Sertakan brand lokal HANYA jika dimiliki pengguna atau terdaftar sebagai anggota tim
     storedCustom.forEach((c) => {
       let isAccessible = c.owner_id === finalOwnerId;
       if (!isAccessible && typeof window !== 'undefined') {
@@ -463,10 +462,8 @@ export class BrandService {
       }
     });
 
-    // 4. Sertakan brand dimana pengguna terdaftar sebagai anggota tim via undangan lokal/team membership
     if (typeof window !== 'undefined') {
       try {
-        // Dari uda_team_membership_
         const teamKeys = [
           finalOwnerId ? 'uda_team_membership_' + finalOwnerId : null,
           'uda_team_membership',
@@ -498,7 +495,6 @@ export class BrandService {
           }
         }
 
-        // Dari uda_brand_invitations
         const rawInv = localStorage.getItem('uda_brand_invitations');
         if (rawInv) {
           const invList = JSON.parse(rawInv);
@@ -530,40 +526,22 @@ export class BrandService {
             }
           });
         }
-
-        // Dari seluruh key uda_brand_members_*
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && k.startsWith('uda_brand_members_')) {
-            const bId = k.replace('uda_brand_members_', '');
-            if (!brandMap.has(bId)) {
-              const rawM = localStorage.getItem(k);
-              if (rawM) {
-                const mList = JSON.parse(rawM);
-                if (mList.some((m: any) =>
-                  (finalOwnerId && (m.id === finalOwnerId || m.user_id === finalOwnerId)) ||
-                  (currentUserEmail && m.email && m.email.toLowerCase() === currentUserEmail.toLowerCase())
-                )) {
-                  const dummyMatch = DUMMY_BRANDS.find((d) => d.id === bId);
-                  if (dummyMatch) {
-                    brandMap.set(dummyMatch.id, dummyMatch);
-                  }
-                }
-              }
-            }
-          }
-        }
       } catch {}
     }
 
-    return Array.from(brandMap.values());
+    const finalBrands = Array.from(brandMap.values());
+    if (typeof window !== 'undefined' && finalOwnerId && finalBrands.length > 0) {
+      try {
+        localStorage.setItem(`uda_cached_brands_${finalOwnerId}`, JSON.stringify(finalBrands));
+      } catch {}
+    }
+    return finalBrands;
   }
 
   static async getBrandById(id: string, userId?: string): Promise<DummyBrand | null> {
     const supabase = createClient();
     const role = await this.getUserBrandRole(id, userId);
 
-    // Jika pengguna tidak memiliki peran (bukan owner dan bukan anggota tim), tolak akses!
     if (!role) {
       return null;
     }
@@ -644,14 +622,13 @@ export class BrandService {
 
     if (supabase && effectiveOwnerId && isUuid(effectiveOwnerId)) {
       try {
-        // Cek apakah pengguna adalah anggota tim undangan yang bukan pemilik brand
-        const { data: memberRows } = await (supabase.from('brand_members' as any) as any)
-          .select('brand_id, role')
-          .eq('user_id', effectiveOwnerId);
+        const [memberRes, ownedRes] = await Promise.all([
+          (supabase.from('brand_members' as any) as any).select('brand_id, role').eq('user_id', effectiveOwnerId),
+          (supabase.from('brands' as any) as any).select('id').eq('owner_id', effectiveOwnerId),
+        ]);
 
-        const { data: ownedBrands } = await (supabase.from('brands' as any) as any)
-          .select('id')
-          .eq('owner_id', effectiveOwnerId);
+        const memberRows = memberRes?.data;
+        const ownedBrands = ownedRes?.data;
 
         const isCollaboratorOnly =
           (!ownedBrands || ownedBrands.length === 0) &&
@@ -693,8 +670,6 @@ export class BrandService {
           const currentStored = getStoredCustomBrands();
           saveCustomBrands([created, ...currentStored.filter((b) => b.id !== created.id)]);
           return created;
-        } else if (error) {
-          console.error('BrandService.createBrand Supabase insert error:', error.message, error.details);
         }
       } catch (err) {
         console.warn('BrandService.createBrand db error, using local:', err);
@@ -759,4 +734,3 @@ export class BrandService {
     return true;
   }
 }
-

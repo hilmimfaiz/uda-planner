@@ -29,7 +29,7 @@ type PaymentItem = AdminPaymentItem;
 export default function AdminPembayaranPage() {
   const { showSuccess, showError } = useModal();
   const [payments, setPayments] = useState<PaymentItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [selectedProof, setSelectedProof] = useState<PaymentItem | null>(null);
@@ -61,7 +61,7 @@ export default function AdminPembayaranPage() {
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     try {
       (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
-    } catch (err) {}
+    } catch {}
     setIsDragging(false);
   };
 
@@ -70,26 +70,17 @@ export default function AdminPembayaranPage() {
   };
 
   React.useEffect(() => {
-    const fetchPayments = () => {
-      if (typeof window !== 'undefined') {
-        try {
-          const raw = localStorage.getItem('uda_admin_payments');
-          if (raw) {
-            const list = JSON.parse(raw);
-            const cleaned = list.filter(
-              (p: any) => !p.id?.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
-            );
-            localStorage.setItem('uda_admin_payments', JSON.stringify(cleaned));
-          }
-        } catch (e) {}
-      }
+    // 1. Tampilkan data cache lokal secara instan tanpa jeda loading
+    const cached = AdminService.getCachedPayments();
+    if (cached.length > 0) {
+      setPayments(cached);
+    }
 
+    const fetchPayments = () => {
       AdminService.getPayments()
         .then((data) => {
           if (data) {
-            const cleanPayments = data.filter(
-              (p) => !p.id?.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
-            );
+            const cleanPayments = data.filter((p) => !AdminService.isDummyPayment(p));
             setPayments(cleanPayments);
           }
         })
@@ -101,14 +92,24 @@ export default function AdminPembayaranPage() {
     fetchPayments();
 
     const handleSync = () => {
+      const latestCached = AdminService.getCachedPayments();
+      if (latestCached.length > 0) {
+        setPayments(latestCached);
+      }
       fetchPayments();
     };
 
     window.addEventListener('uda_payment_submitted', handleSync);
+    window.addEventListener('uda_payment_approved', handleSync);
+    window.addEventListener('uda_payment_rejected', handleSync);
     window.addEventListener('storage', handleSync);
+    window.addEventListener('focus', handleSync);
     return () => {
       window.removeEventListener('uda_payment_submitted', handleSync);
+      window.removeEventListener('uda_payment_approved', handleSync);
+      window.removeEventListener('uda_payment_rejected', handleSync);
       window.removeEventListener('storage', handleSync);
+      window.removeEventListener('focus', handleSync);
     };
   }, []);
 
@@ -124,23 +125,28 @@ export default function AdminPembayaranPage() {
 
     setIsProcessing(true);
     try {
-      const targetPlan = target?.plan || 'pro';
+      const rawPlan = (target?.plan || 'pro').toLowerCase();
+      const targetPlan: 'pro' | 'team' = rawPlan === 'team' ? 'team' : 'pro';
       const dur = resolvePaymentDuration(
         target?.durationDays,
         target?.durationLabel,
         target?.amount,
         targetPlan
       );
+
+      // Optimistic update agar UI langsung berubah tanpa jeda
+      setPayments((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, status: 'approved', plan: targetPlan, durationDays: dur.days, durationLabel: dur.label } : p
+        )
+      );
+      setSelectedProof(null);
+
       await AdminService.approvePayment(id, target?.userId, targetPlan, {
         email: target?.email,
         durationDays: dur.days,
       });
-      setPayments((prev) =>
-        prev.map((p) =>
-          p.id === id ? { ...p, status: 'approved', durationDays: dur.days, durationLabel: dur.label } : p
-        )
-      );
-      setSelectedProof(null);
+
       showSuccess(
         'Pembayaran Berhasil Disetujui!',
         `Bukti transfer dari ${target?.user} telah diverifikasi. Akun pengguna otomatis ditingkatkan ke paket ${targetPlan.toUpperCase()} (${dur.label} / ${dur.days} Hari).`
@@ -156,18 +162,20 @@ export default function AdminPembayaranPage() {
       return;
     }
     const target = payments.find((p) => p.id === id);
-    await AdminService.rejectPayment(id, rejectReason.trim());
+    const reasonText = rejectReason.trim();
     setPayments((prev) =>
       prev.map((p) =>
-        p.id === id ? { ...p, status: 'rejected', reason: rejectReason.trim() } : p
+        p.id === id ? { ...p, status: 'rejected', reason: reasonText } : p
       )
     );
     setSelectedProof(null);
     setShowRejectInput(false);
     setRejectReason('');
+
+    await AdminService.rejectPayment(id, reasonText);
     showSuccess(
       'Pembayaran Ditolak',
-      `Pembayaran dari ${target?.user} telah ditolak dengan catatan: "${rejectReason.trim()}".`
+      `Pembayaran dari ${target?.user} telah ditolak dengan catatan: "${reasonText}".`
     );
   };
 
@@ -503,7 +511,8 @@ export default function AdminPembayaranPage() {
               Periksa Bukti Transfer
             </h3>
             <div style={{ fontSize: '0.86rem', color: '#64748b', marginBottom: 14 }}>
-              <span style={{ fontWeight: 700, color: '#0f172a' }}>{selectedProof.user}</span> ({selectedProof.email}) • Transfer:{' '}
+              <span style={{ fontWeight: 700, color: '#0f172a' }}>{selectedProof.user}</span> ({selectedProof.email}) • Paket:{' '}
+              <strong style={{ color: selectedProof.plan === 'team' ? '#7c3aed' : '#16a34a', textTransform: 'uppercase' }}>{selectedProof.plan}</strong> • Transfer:{' '}
               <strong style={{ color: '#16a34a', fontSize: '0.92rem' }}>Rp {selectedProof.amount.toLocaleString('id-ID')}</strong>
             </div>
 
@@ -520,7 +529,6 @@ export default function AdminPembayaranPage() {
                 gap: 8,
               }}
             >
-              {/* Tombol Zoom Out */}
               <button
                 type="button"
                 title="Perkecil Gambar (Zoom Out)"
@@ -546,7 +554,6 @@ export default function AdminPembayaranPage() {
                 <span>Zoom Out</span>
               </button>
 
-              {/* Indikator Persentase Zoom */}
               <span
                 style={{
                   fontSize: '0.78rem',
@@ -563,7 +570,6 @@ export default function AdminPembayaranPage() {
                 {Math.round(zoomLevel * 100)}%
               </span>
 
-              {/* Tombol Zoom In */}
               <button
                 type="button"
                 title="Perbesar Gambar (Zoom In)"
@@ -589,7 +595,6 @@ export default function AdminPembayaranPage() {
                 <span>Zoom In</span>
               </button>
 
-              {/* Tombol Reset Zoom */}
               {(zoomLevel !== 1 || panOffset.x !== 0 || panOffset.y !== 0) && (
                 <button
                   type="button"
@@ -618,7 +623,7 @@ export default function AdminPembayaranPage() {
               )}
             </div>
 
-            {/* Area Tampilan Gambar Interaktif (Bisa Digeser Bebas & Di-Zoom) */}
+            {/* Area Tampilan Gambar Interaktif */}
             <div
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
@@ -640,7 +645,6 @@ export default function AdminPembayaranPage() {
                 touchAction: 'none',
               }}
             >
-              {/* Layer Gambar yang Digeser (Pan) dan Diperbesar (Zoom) */}
               <div
                 style={{
                   transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0)`,
@@ -670,7 +674,6 @@ export default function AdminPembayaranPage() {
                 />
               </div>
 
-              {/* Pad Tombol Geser Arah (D-Pad Navigasi Cepat) */}
               <div
                 style={{
                   position: 'absolute',
@@ -693,7 +696,6 @@ export default function AdminPembayaranPage() {
                 <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', marginBottom: 2 }}>
                   Geser Gambar
                 </div>
-                {/* Tombol Atas */}
                 <button
                   type="button"
                   title="Geser ke Atas"
@@ -716,7 +718,6 @@ export default function AdminPembayaranPage() {
                 >
                   <ArrowUp size={15} />
                 </button>
-                {/* Baris Kiri, Tengah, Kanan */}
                 <div style={{ display: 'flex', gap: 3 }}>
                   <button
                     type="button"
@@ -787,7 +788,6 @@ export default function AdminPembayaranPage() {
                     <ArrowRight size={15} />
                   </button>
                 </div>
-                {/* Tombol Bawah */}
                 <button
                   type="button"
                   title="Geser ke Bawah"
@@ -812,7 +812,6 @@ export default function AdminPembayaranPage() {
                 </button>
               </div>
 
-              {/* Petunjuk Interaktif di Kiri Bawah */}
               <div
                 style={{
                   position: 'absolute',
@@ -886,7 +885,7 @@ export default function AdminPembayaranPage() {
                           setZoomLevel(1);
                         }}
                       >
-                        Setujui Paket
+                        Setujui Paket ({selectedProof.plan.toUpperCase()})
                       </button>
                     </>
                   ) : (

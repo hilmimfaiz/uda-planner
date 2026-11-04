@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useTransition } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
@@ -68,6 +68,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadUserData = async (currentUser: User) => {
     if (!supabase) return;
 
+    const emailLower = (currentUser.email || '').toLowerCase().trim();
+    const isEmailAdmin =
+      emailLower === 'admin@udaplanner.id' ||
+      emailLower === 'admin@udaplanner.com' ||
+      emailLower.startsWith('admin@') ||
+      currentUser.user_metadata?.role === 'admin';
+
     // Set fallback instan dari metadata jika profile/account belum terisi
     setProfile((prev) => prev || {
       id: currentUser.id,
@@ -78,13 +85,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAccount((prev) => prev || {
       id: currentUser.id,
       user_id: currentUser.id,
-      role: (currentUser.user_metadata?.role as 'user' | 'admin') || 'user',
+      role: isEmailAdmin ? 'admin' : ((currentUser.user_metadata?.role as 'user' | 'admin') || 'user'),
       plan_code: 'free',
     });
 
     try {
-      // Jalankan query profil dan akun secara bersamaan (PARALLEL)
-      const [profRes, accRes] = await Promise.all([
+      // Jalankan query profil, akun, dan pembayaran approved secara bersamaan (PARALLEL)
+      const [profRes, accRes, dbApprovedRes] = await Promise.all([
         (supabase.from('profiles' as any) as any)
           .select('*')
           .eq('id', currentUser.id)
@@ -93,6 +100,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select('*')
           .eq('user_id', currentUser.id)
           .maybeSingle(),
+        (supabase.from('payments' as any) as any)
+          .select('plan_code, duration_days, amount, created_at')
+          .eq('user_id', currentUser.id)
+          .eq('status', 'approved')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
 
       // 1. Proses Profil
@@ -100,7 +114,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const googleFullName = currentUser.user_metadata?.full_name || currentUser.user_metadata?.name;
       const googleAvatar = currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture;
 
-      // Cek apakah ada avatar custom yang tersimpan di localStorage
       let localCustomAvatar: string | null = null;
       try {
         localCustomAvatar = localStorage.getItem('uda_custom_avatar_' + currentUser.id);
@@ -128,7 +141,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (e) {}
         } else {
-          // Profil ada tetapi belum menyelesaikan onboarding /profil-awal
           try {
             localStorage.setItem('uda_user_is_new', 'true');
           } catch (e) {}
@@ -159,13 +171,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           full_name: googleFullName || currentUser.email?.split('@')[0] || 'Pengguna UdaPlanner',
           avatar_url: resolvedAvatar || null,
           phone: localPhone || currentUser.phone || null,
-          role: 'user',
+          role: isEmailAdmin ? 'admin' : 'user',
           reminder_minutes: 15,
         };
         const { data: createdProf } = await (supabase.from('profiles' as any) as any).insert(newProfile).select().maybeSingle();
         finalProfile = createdProf ? { ...createdProf, avatar_url: resolvedAvatar || createdProf.avatar_url, phone: createdProf.phone || localPhone } : newProfile;
 
-        // Tandai sebagai user baru pada pendaftaran profil pertama kali
         try {
           localStorage.setItem('uda_user_is_new', 'true');
         } catch (e) {}
@@ -182,142 +193,151 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const isConfirmed =
         !!(currentUser.email_confirmed_at || currentUser.confirmed_at || currentUser.user_metadata?.email_verified) ||
         currentUser.app_metadata?.provider === 'google' ||
-        currentUser.email === 'admin@udaplanner.id';
+        isEmailAdmin;
 
       if (isConfirmed && currentUser.email) {
-        const cleanEmail = currentUser.email.toLowerCase().trim();
         try {
-          localStorage.setItem(`uda_manually_verified_${cleanEmail}`, 'true');
+          localStorage.setItem(`uda_manually_verified_${emailLower}`, 'true');
           localStorage.setItem(`uda_manually_verified_${currentUser.id}`, 'true');
-          localStorage.removeItem(`uda_unverified_registration_${cleanEmail}`);
+          localStorage.removeItem(`uda_unverified_registration_${emailLower}`);
           localStorage.removeItem(`uda_unverified_registration_${currentUser.id}`);
         } catch (e) {}
       }
 
-      // 2. Proses Akun
+      // 2. Proses Akun & Resolusi Paket yang Akurat (Pro vs Team)
       let finalAccount: UserAccount;
 
-      // Cek apakah ada upgrade paket yang tersimpan di cache lokal / admin
       let cachedLocalPlan: string | null = null;
       let cachedLocalPlanUntil: string | null = null;
       if (typeof window !== 'undefined') {
         try {
+          const directPlanById = localStorage.getItem(`uda_user_plan_${currentUser.id}`);
+          const directPlanByEmail = emailLower ? localStorage.getItem(`uda_user_plan_${emailLower}`) : null;
+          if (directPlanById && directPlanById !== 'free') {
+            cachedLocalPlan = directPlanById.toLowerCase();
+          } else if (directPlanByEmail && directPlanByEmail !== 'free') {
+            cachedLocalPlan = directPlanByEmail.toLowerCase();
+          }
+
           const rawAcc = localStorage.getItem('uda_auth_account');
           if (rawAcc) {
             const parsed = JSON.parse(rawAcc);
-            if (parsed.plan_code && parsed.plan_code !== 'free') {
-              cachedLocalPlan = parsed.plan_code;
-              cachedLocalPlanUntil = parsed.plan_until;
+            if ((parsed.user_id === currentUser.id || parsed.id === currentUser.id) && parsed.plan_code && parsed.plan_code !== 'free') {
+              // Hanya terima 'team' dari cache lama jika memiliki plan_until atau directPlan
+              if (!(parsed.plan_code === 'team' && !parsed.plan_until && !cachedLocalPlan)) {
+                cachedLocalPlan = cachedLocalPlan || parsed.plan_code.toLowerCase();
+                cachedLocalPlanUntil = parsed.plan_until || cachedLocalPlanUntil;
+              }
             }
           }
           const upgradeEvt = localStorage.getItem('uda_last_upgraded_user');
           if (upgradeEvt) {
             const parsedEvt = JSON.parse(upgradeEvt);
             if (
-              (parsedEvt.userId === currentUser.id || (currentUser.email && parsedEvt.email?.toLowerCase() === currentUser.email.toLowerCase())) &&
+              (parsedEvt.userId === currentUser.id || (emailLower && parsedEvt.email?.toLowerCase() === emailLower)) &&
               parsedEvt.planCode
             ) {
-              cachedLocalPlan = parsedEvt.planCode;
+              cachedLocalPlan = parsedEvt.planCode.toLowerCase();
               cachedLocalPlanUntil = parsedEvt.planUntil || cachedLocalPlanUntil;
             }
           }
         } catch (e) {}
       }
 
+      // Cek apakah ada pembayaran approved terbaru di localStorage atau Supabase
+      let latestApprovedPlan: string | null = null;
+      let latestApprovedUntil: string | null = null;
+
+      if (typeof window !== 'undefined') {
+        try {
+          const rawAdminPays = localStorage.getItem('uda_admin_payments');
+          if (rawAdminPays) {
+            const payList = JSON.parse(rawAdminPays);
+            const myApproved = payList.filter(
+              (p: any) =>
+                (p.userId === currentUser.id || (emailLower && p.email?.toLowerCase() === emailLower)) &&
+                p.status === 'approved'
+            );
+            if (myApproved.length > 0) {
+              // Urutkan dari yang terbaru
+              myApproved.sort((a: any, b: any) => {
+                const tA = new Date(a.createdAt || a.date || 0).getTime();
+                const tB = new Date(b.createdAt || b.date || 0).getTime();
+                return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
+              });
+              const latest = myApproved[0];
+              latestApprovedPlan = (latest.plan || latest.plan_code || 'pro').toLowerCase();
+              const durDays = Number(latest.durationDays || latest.duration_days) || 30;
+              const payTime = latest.createdAt ? new Date(latest.createdAt).getTime() : Date.now();
+              const baseTime = isNaN(payTime) ? Date.now() : payTime;
+              latestApprovedUntil = new Date(baseTime + Math.max(durDays, 30) * 86400000).toISOString();
+            }
+          }
+        } catch (e) {}
+      }
+
+      const dbApproved = dbApprovedRes?.data;
+      if (dbApproved && dbApproved.plan_code) {
+        const dbPlan = String(dbApproved.plan_code).toLowerCase();
+        const dDays = Number(dbApproved.duration_days) || 30;
+        const payTime = dbApproved.created_at ? new Date(dbApproved.created_at).getTime() : Date.now();
+        const baseTime = isNaN(payTime) ? Date.now() : payTime;
+        const dbUntil = new Date(baseTime + Math.max(dDays, 30) * 86400000).toISOString();
+
+        if (!latestApprovedPlan) {
+          latestApprovedPlan = dbPlan;
+          latestApprovedUntil = dbUntil;
+        }
+      }
+
       if (accRes.data) {
+        // Jika di DB tercatat 'team' namun plan_until kosong dan tidak ada pembayaran 'team',
+        // itu adalah efek bug brand_members owner lama -> abaikan dan anggap 'free'
+        const rawDbPlan = (accRes.data.plan_code || 'free').toLowerCase();
+        const isStaleOwnerTeamBug = rawDbPlan === 'team' && !accRes.data.plan_until && latestApprovedPlan !== 'team';
+        const cleanDbPlan = isStaleOwnerTeamBug ? 'free' : rawDbPlan;
+
+        // Prioritas utama: Pembayaran yang di-approve Admin (Pro -> Pro, Team -> Team) > Plan dari user_metadata > Plan DB > Cache Lokal
         let resolvedPlan =
-          accRes.data.plan_code && accRes.data.plan_code !== 'free'
-            ? accRes.data.plan_code
-            : cachedLocalPlan || 'free';
-        let resolvedUntil = accRes.data.plan_until || cachedLocalPlanUntil;
+          latestApprovedPlan ||
+          (currentUser.user_metadata?.plan_code && currentUser.user_metadata.plan_code !== 'free'
+            ? String(currentUser.user_metadata.plan_code).toLowerCase()
+            : null) ||
+          (cleanDbPlan !== 'free' ? cleanDbPlan : null) ||
+          cachedLocalPlan ||
+          'free';
 
-        // Auto-heal / fix jika user memiliki pembayaran yang telah disetujui (Bug B1 Fix)
-        if (typeof window !== 'undefined') {
-          try {
-            const rawAdminPays = localStorage.getItem('uda_admin_payments');
-            if (rawAdminPays) {
-              const payList = JSON.parse(rawAdminPays);
-              const myApproved = payList.filter(
-                (p: any) =>
-                  (p.userId === currentUser.id || (currentUser.email && p.email?.toLowerCase() === currentUser.email.toLowerCase())) &&
-                  p.status === 'approved'
-              );
-              if (myApproved.length > 0) {
-                const latest = myApproved[0];
-                const approvedPlan = latest.plan || latest.plan_code || 'pro';
-                if (resolvedPlan === 'free' || !resolvedPlan) {
-                  resolvedPlan = approvedPlan;
-                }
-                const amt = latest.amount || 0;
-                const durDays = latest.durationDays || 30;
-                if (!resolvedUntil) {
-                  resolvedUntil = new Date(Date.now() + durDays * 86400000).toISOString();
-                }
+        let resolvedUntil =
+          latestApprovedUntil ||
+          accRes.data.plan_until ||
+          currentUser.user_metadata?.plan_until ||
+          cachedLocalPlanUntil ||
+          null;
 
-                const isOneYear =
-                  latest.durationDays >= 365 ||
-                  (latest.durationLabel && (latest.durationLabel.includes('1 Tahun') || latest.durationLabel.includes('12 Bulan'))) ||
-                  amt >= 1200000 ||
-                  (amt >= 400000 && resolvedPlan === 'pro');
-
-                if (isOneYear) {
-                  const curExp = resolvedUntil ? new Date(resolvedUntil).getTime() : 0;
-                  const payTime = latest.date ? new Date(latest.date).getTime() : Date.now();
-                  const targetTime = (isNaN(payTime) ? Date.now() : payTime) + 365 * 86400000;
-                  if (isNaN(curExp) || curExp < targetTime - 86400000 * 30) {
-                    resolvedUntil = new Date(targetTime).toISOString();
-                  }
-                }
-              }
-            }
-          } catch (e) {}
-        }
-
-        // Cek juga ke tabel payments Supabase jika status akun di accounts belum ter-update
-        if (supabase && currentUser.id && (resolvedPlan === 'free' || !resolvedPlan)) {
-          try {
-            const { data: dbApproved } = await (supabase.from('payments' as any) as any)
-              .select('plan_code, duration_days, created_at')
-              .eq('user_id', currentUser.id)
-              .eq('status', 'approved')
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            if (dbApproved && dbApproved.plan_code) {
-              resolvedPlan = dbApproved.plan_code;
-              if (!resolvedUntil) {
-                const dDays = dbApproved.duration_days || 30;
-                resolvedUntil = new Date(Date.now() + dDays * 86400000).toISOString();
-              }
-            }
-          } catch (e) {}
-        }
-
-        // Cek juga keanggotaan brand_members atau undangan tim aktif
+        // Cek juga keanggotaan brand_members (HANYA anggota yang diundang, BUKAN owner!)
         if (currentUser.id && (resolvedPlan === 'free' || !resolvedPlan)) {
-          let isTeamMember = false;
+          let isInvitedTeamMember = false;
           if (supabase) {
             try {
               const { data: dbMembers } = await (supabase.from('brand_members' as any) as any)
                 .select('id, role')
                 .eq('user_id', currentUser.id)
+                .neq('role', 'owner')
                 .limit(1);
               if (dbMembers && dbMembers.length > 0) {
-                isTeamMember = true;
+                isInvitedTeamMember = true;
               }
             } catch (e) {}
           }
-          if (!isTeamMember && typeof window !== 'undefined') {
+          if (!isInvitedTeamMember && typeof window !== 'undefined') {
             try {
               const uId = currentUser.id;
-              const uEmail = currentUser.email?.toLowerCase();
               if (uId && localStorage.getItem('uda_team_membership_' + uId)) {
-                isTeamMember = true;
+                isInvitedTeamMember = true;
               }
               const sysRole = uId ? localStorage.getItem('uda_system_role_' + uId) : null;
               if (sysRole && ['Editor', 'Reviewer', 'Viewer'].includes(sysRole)) {
-                isTeamMember = true;
+                isInvitedTeamMember = true;
               }
               const rawInv = localStorage.getItem('uda_brand_invitations');
               if (rawInv) {
@@ -326,108 +346,81 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   invList.some(
                     (inv: any) =>
                       inv.status === 'accepted' &&
-                      ((uEmail && inv.target_email?.toLowerCase() === uEmail) || (uId && inv.target_user_id === uId))
+                      ((emailLower && inv.target_email?.toLowerCase() === emailLower) || (uId && inv.target_user_id === uId))
                   )
                 ) {
-                  isTeamMember = true;
+                  isInvitedTeamMember = true;
                 }
               }
             } catch (e) {}
           }
-          if (isTeamMember) {
+          if (isInvitedTeamMember) {
             resolvedPlan = 'team';
-            if (supabase && accRes?.data?.id) {
-              try {
-                await (supabase.from('accounts' as any) as any)
-                  .update({ plan_code: 'team', updated_at: new Date().toISOString() })
-                  .eq('id', accRes.data.id);
-              } catch (e) {}
-            }
           }
+        }
+
+        const resolvedRole: 'user' | 'admin' = isEmailAdmin ? 'admin' : ((accRes.data.role as 'user' | 'admin') || 'user');
+
+        // Sinkronkan kembali ke tabel accounts jika plan_code atau role di DB belum sesuai
+        if (
+          supabase &&
+          accRes.data.id &&
+          (accRes.data.plan_code !== resolvedPlan || accRes.data.role !== resolvedRole || (resolvedUntil && !accRes.data.plan_until))
+        ) {
+          (supabase.from('accounts' as any) as any)
+            .update({
+              plan_code: resolvedPlan,
+              plan_until: resolvedUntil,
+              role: resolvedRole,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', accRes.data.id)
+            .then(() => {})
+            .catch(() => {});
         }
 
         finalAccount = {
           id: accRes.data.id,
           user_id: accRes.data.user_id,
-          role: (accRes.data.role as 'user' | 'admin') || 'user',
+          role: resolvedRole,
           plan_code: resolvedPlan,
           plan_until: resolvedUntil,
           is_suspended: !!accRes.data.is_suspended,
         };
       } else {
-        let fallbackPlan = cachedLocalPlan || 'free';
-        let fallbackUntil = cachedLocalPlanUntil;
-        if (typeof window !== 'undefined') {
-          try {
-            const rawAdminPays = localStorage.getItem('uda_admin_payments');
-            if (rawAdminPays) {
-              const payList = JSON.parse(rawAdminPays);
-              const myApproved = payList.filter(
-                (p: any) =>
-                  (p.userId === currentUser.id || (currentUser.email && p.email?.toLowerCase() === currentUser.email.toLowerCase())) &&
-                  p.status === 'approved'
-              );
-              if (myApproved.length > 0) {
-                const latest = myApproved[0];
-                fallbackPlan = latest.plan || latest.plan_code || 'pro';
-                const amt = latest.amount || 0;
-                const durDays = latest.durationDays || 30;
-                fallbackUntil = new Date(Date.now() + durDays * 86400000).toISOString();
-                const isOneYear =
-                  latest.durationDays >= 365 ||
-                  (latest.durationLabel && (latest.durationLabel.includes('1 Tahun') || latest.durationLabel.includes('12 Bulan'))) ||
-                  amt >= 1200000 ||
-                  (amt >= 400000 && fallbackPlan === 'pro');
-                if (isOneYear) {
-                  fallbackUntil = new Date(Date.now() + 365 * 86400000).toISOString();
-                }
-              }
-            }
-          } catch (e) {}
-        }
+        let fallbackPlan =
+          latestApprovedPlan ||
+          (currentUser.user_metadata?.plan_code && currentUser.user_metadata.plan_code !== 'free'
+            ? String(currentUser.user_metadata.plan_code).toLowerCase()
+            : null) ||
+          cachedLocalPlan ||
+          'free';
+        let fallbackUntil = latestApprovedUntil || currentUser.user_metadata?.plan_until || cachedLocalPlanUntil || null;
 
-        if (supabase && currentUser.id && fallbackPlan === 'free') {
-          try {
-            const { data: dbApproved } = await (supabase.from('payments' as any) as any)
-              .select('plan_code, duration_days, created_at')
-              .eq('user_id', currentUser.id)
-              .eq('status', 'approved')
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            if (dbApproved && dbApproved.plan_code) {
-              fallbackPlan = dbApproved.plan_code;
-              const dDays = dbApproved.duration_days || 30;
-              fallbackUntil = new Date(Date.now() + dDays * 86400000).toISOString();
-            }
-          } catch (e) {}
-        }
-
-        // Cek juga keanggotaan brand_members atau undangan tim untuk fallbackPlan
+        // Cek juga keanggotaan brand_members (HANYA anggota yang diundang, BUKAN owner)
         if (currentUser.id && (fallbackPlan === 'free' || !fallbackPlan)) {
-          let isTeamMember = false;
+          let isInvitedTeamMember = false;
           if (supabase) {
             try {
               const { data: dbMembers } = await (supabase.from('brand_members' as any) as any)
                 .select('id, role')
                 .eq('user_id', currentUser.id)
+                .neq('role', 'owner')
                 .limit(1);
               if (dbMembers && dbMembers.length > 0) {
-                isTeamMember = true;
+                isInvitedTeamMember = true;
               }
             } catch (e) {}
           }
-          if (!isTeamMember && typeof window !== 'undefined') {
+          if (!isInvitedTeamMember && typeof window !== 'undefined') {
             try {
               const uId = currentUser.id;
-              const uEmail = currentUser.email?.toLowerCase();
               if (uId && localStorage.getItem('uda_team_membership_' + uId)) {
-                isTeamMember = true;
+                isInvitedTeamMember = true;
               }
               const sysRole = uId ? localStorage.getItem('uda_system_role_' + uId) : null;
               if (sysRole && ['Editor', 'Reviewer', 'Viewer'].includes(sysRole)) {
-                isTeamMember = true;
+                isInvitedTeamMember = true;
               }
               const rawInv = localStorage.getItem('uda_brand_invitations');
               if (rawInv) {
@@ -436,22 +429,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   invList.some(
                     (inv: any) =>
                       inv.status === 'accepted' &&
-                      ((uEmail && inv.target_email?.toLowerCase() === uEmail) || (uId && inv.target_user_id === uId))
+                      ((emailLower && inv.target_email?.toLowerCase() === emailLower) || (uId && inv.target_user_id === uId))
                   )
                 ) {
-                  isTeamMember = true;
+                  isInvitedTeamMember = true;
                 }
               }
             } catch (e) {}
           }
-          if (isTeamMember) {
+          if (isInvitedTeamMember) {
             fallbackPlan = 'team';
           }
         }
 
+        const resolvedRole: 'user' | 'admin' = isEmailAdmin ? 'admin' : ((currentUser.user_metadata?.role as 'user' | 'admin') || 'user');
+
         const newAccount = {
           user_id: currentUser.id,
-          role: (currentUser.user_metadata?.role as 'user' | 'admin') || 'user',
+          role: resolvedRole,
           plan_code: fallbackPlan,
           plan_until: fallbackUntil,
           payment_code: Math.floor(100 + Math.random() * 899),
@@ -460,14 +455,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         finalAccount = createdAcc ? {
           id: createdAcc.id,
           user_id: createdAcc.user_id,
-          role: createdAcc.role as 'user' | 'admin',
+          role: (createdAcc.role as 'user' | 'admin') || resolvedRole,
           plan_code: createdAcc.plan_code || fallbackPlan,
           plan_until: createdAcc.plan_until || fallbackUntil,
           is_suspended: !!createdAcc.is_suspended,
         } : {
           id: currentUser.id,
           user_id: currentUser.id,
-          role: (currentUser.user_metadata?.role as 'user' | 'admin') || 'user',
+          role: resolvedRole,
           plan_code: fallbackPlan,
           plan_until: fallbackUntil,
         };
@@ -497,10 +492,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cachedAccount) setAccount(JSON.parse(cachedAccount));
     } catch (e) {}
 
-    // Safety timeout: JANGAN PERNAH biarkan loading terjebak lebih dari 800ms
+    // Safety timeout: JANGAN PERNAH biarkan loading terjebak lebih dari 600ms
     const safetyTimeout = setTimeout(() => {
       setIsLoading(false);
-    }, 800);
+    }, 600);
 
     if (!supabase) {
       setIsLoading(false);
@@ -574,10 +569,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             (!detail.userId && !detail.email);
 
           if (isTarget && detail.planCode) {
+            const targetPlan = String(detail.planCode).toLowerCase();
             setAccount((prev) => {
               const updated = {
                 ...(prev || { id: authUser?.id || 'acc-001', user_id: authUser?.id || 'acc-001', role: 'user' as const }),
-                plan_code: detail.planCode,
+                plan_code: targetPlan,
                 plan_until: detail.planUntil || prev?.plan_until,
               };
               try {
@@ -628,7 +624,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         if (error.message.includes('Email not confirmed') || error.code === 'email_not_confirmed') {
           const cleanEmail = email.trim().toLowerCase();
-          // Cek apakah akun ini telah diverifikasi secara manual oleh Admin di Panel Admin
           let isManuallyVerified = await VerificationService.isUserVerified(cleanEmail);
           if (!isManuallyVerified && typeof window !== 'undefined') {
             try {
@@ -639,7 +634,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (isManuallyVerified) {
-            // 1. Panggil API backend untuk mengonfirmasi email_confirm = true langsung di Supabase Auth (auth.users)
             try {
               await fetch('/api/admin/verify-email', {
                 method: 'POST',
@@ -648,7 +642,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               });
             } catch (e) {}
 
-            // 2. Sekarang login ulang dengan Supabase Auth karena akun sudah terkonfirmasi di server
             const retryRes = await supabase.auth.signInWithPassword({
               email: cleanEmail,
               password,
@@ -677,7 +670,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               return { error: null, isAdmin: isUserAdmin, needsOnboarding };
             }
 
-            // Fallback jika retry tertunda sesaat: bangun sesi manual
             const storedUsers = await VerificationService.getVerifiableUsers();
             const matched = storedUsers.find((u) => u.email.toLowerCase() === cleanEmail);
 
@@ -733,7 +725,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const isUserAdmin =
         loaded?.account?.role === 'admin' ||
         data.user.user_metadata?.role === 'admin' ||
-        data.user.email?.toLowerCase() === 'admin@udaplanner.com';
+        data.user.email?.toLowerCase() === 'admin@udaplanner.id' ||
+        data.user.email?.toLowerCase() === 'admin@udaplanner.com' ||
+        data.user.email?.toLowerCase().startsWith('admin@');
 
       const needsOnboarding =
         data.user.user_metadata?.has_completed_onboarding !== true &&
@@ -755,7 +749,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Pengguna yang berhasil login berarti telah terverifikasi
       if (data.user?.email) {
         const cEmail = data.user.email.toLowerCase().trim();
         try {
@@ -803,7 +796,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { error: 'Email ini sudah terdaftar. Silakan gunakan menu Masuk.', requiresEmailConfirmation: false };
         }
         if (error.message.includes('rate limit') || (error as any).status === 429 || error.code === 'over_email_send_rate_limit') {
-          // Supabase SMTP rate limit tercapai: catat akun agar admin bisa konfirmasi manual
           isRateLimited = true;
         } else {
           return { error: error.message, requiresEmailConfirmation: false };
@@ -812,21 +804,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         authResultUser = data.user;
       }
 
-      // Catat akun pendaftaran ini ke VerificationService agar LANGSUNG MUNCUL di Panel Admin
-      // dengan status "Belum Terverifikasi" (agar Admin dapat konfirmasi manual jika email tidak masuk)
       const generatedUserId = authResultUser?.id || `usr-${Date.now()}`;
       await VerificationService.recordNewRegistration({
         userId: generatedUserId,
         email: cleanEmail,
         name: cleanName,
-        authProvider: 'email', // pendaftaran email biasa
+        authProvider: 'email',
         deliveryStatus: isRateLimited ? 'failed' : 'pending',
         notes: isRateLimited
           ? 'Email verifikasi gagal terkirim otomatis (SMTP limit). Menunggu konfirmasi manual oleh Admin di Panel Admin.'
           : 'Pendaftaran email biasa: Menunggu konfirmasi email pengguna atau konfirmasi manual Admin.',
       });
 
-      // Jika session aktif langsung dari supabase (confirm email off di Supabase)
       if (data?.user && data?.session) {
         setUser(data.user);
         setSession(data.session);
@@ -880,7 +869,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const siteUrl = getSiteUrl();
       const redirectTo = `${siteUrl}${targetPath}`;
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo,
@@ -907,7 +896,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const isAdmin = account?.role === 'admin' || user?.user_metadata?.role === 'admin';
+  const isAdmin =
+    account?.role === 'admin' ||
+    user?.user_metadata?.role === 'admin' ||
+    user?.email?.toLowerCase() === 'admin@udaplanner.id' ||
+    user?.email?.toLowerCase().startsWith('admin@');
 
   return (
     <AuthContext.Provider

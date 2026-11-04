@@ -4,14 +4,29 @@ import { BrandService, isUuid } from './brand.service';
 
 const STORAGE_KEY = 'uda_custom_posts';
 
+const normalizePostMedia = (p: any): DummyPost => {
+  const rawUrls: string[] = Array.isArray(p?.media_urls)
+    ? p.media_urls.filter((u: any) => typeof u === 'string' && u.trim().length > 0)
+    : [];
+  const primaryUrl = p?.media_url && typeof p.media_url === 'string' && p.media_url.trim().length > 0
+    ? p.media_url.trim()
+    : rawUrls[0] || '';
+  const finalUrls = rawUrls.length > 0 ? rawUrls : primaryUrl ? [primaryUrl] : [];
+  return {
+    ...p,
+    media_url: finalUrls[0] || primaryUrl || '',
+    media_urls: finalUrls,
+  };
+};
+
 const getStoredPosts = (): DummyPost[] => {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return (Array.isArray(parsed) ? parsed : []).filter(
-      (p: any) => p && !p.id?.startsWith('post-gen-') && !['post-1', 'post-2', 'post-3', 'post-4', 'post-5', 'post-6'].includes(p.id)
-    );
+    return (Array.isArray(parsed) ? parsed : [])
+      .filter((p: any) => p && !p.id?.startsWith('post-gen-') && !['post-1', 'post-2', 'post-3', 'post-4', 'post-5', 'post-6'].includes(p.id))
+      .map(normalizePostMedia);
   } catch {
     return [];
   }
@@ -20,7 +35,7 @@ const getStoredPosts = (): DummyPost[] => {
 const saveStoredPosts = (posts: DummyPost[]) => {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts.map(normalizePostMedia)));
   } catch {}
 };
 
@@ -36,6 +51,14 @@ export interface PostFilterOptions {
 }
 
 export class PostService {
+  /**
+   * Mengambil data postingan secara sinkron (instan) dari cache lokal tanpa menunggu network
+   */
+  static getCachedPosts(filters: PostFilterOptions = {}): DummyPost[] {
+    const stored = getStoredPosts();
+    return this.filterPostsLocally(stored, filters);
+  }
+
   static async getPosts(filters: PostFilterOptions = {}, userId?: string): Promise<DummyPost[]> {
     const supabase = createClient();
 
@@ -43,7 +66,6 @@ export class PostService {
     const userBrands = await BrandService.getBrands(userId);
     const accessibleBrandIds = new Set(userBrands.map((b) => b.id));
 
-    // Jika pengguna tidak memiliki brand sama sekali, postingan pasti kosong!
     if (accessibleBrandIds.size === 0) {
       return [];
     }
@@ -56,19 +78,16 @@ export class PostService {
 
         if (filters.brandId && filters.brandId !== 'all') {
           if (!accessibleBrandIds.has(filters.brandId)) {
-            // Brand yang diminta tidak berada dalam kepemilikan/tim pengguna, tolak akses!
             return [];
           }
           if (isUuid(filters.brandId)) {
             query = query.eq('brand_id', filters.brandId);
           }
         } else {
-          // Hanya ambil postingan dari brand-brand milik pengguna atau timnya
           const uuidBrandIds = Array.from(accessibleBrandIds).filter((id) => isUuid(id));
           if (uuidBrandIds.length > 0) {
             query = query.in('brand_id', uuidBrandIds);
           } else {
-            // Pengguna hanya memiliki brand lokal, gunakan stored
             return this.filterPostsLocally(stored, filters);
           }
         }
@@ -86,7 +105,12 @@ export class PostService {
           const dbPosts: DummyPost[] = data
             .filter((p: any) => accessibleBrandIds.has(p.brand_id))
             .map((p: any) => {
-              const { notes: cleanNotes, mediaUrl } = this.extractMediaAndNotes(p.notes);
+              const { notes: cleanNotes, mediaUrl, mediaUrls } = this.extractMediaAndNotes(p.notes);
+              const resolvedUrls = mediaUrls && mediaUrls.length > 0
+                ? mediaUrls
+                : mediaUrl || p.media_url
+                ? [mediaUrl || p.media_url]
+                : [];
               return {
                 id: p.id,
                 brand_id: p.brand_id,
@@ -102,7 +126,8 @@ export class PostService {
                 notes: cleanNotes || null,
                 posted_at: p.posted_at || null,
                 posted_url: p.posted_url || null,
-                media_url: mediaUrl || p.media_url || '',
+                media_url: resolvedUrls[0] || mediaUrl || p.media_url || '',
+                media_urls: resolvedUrls,
                 aspect_ratio: '1:1',
                 comments_count: 0,
               };
@@ -115,10 +140,20 @@ export class PostService {
           stored.forEach((st) => {
             if (dbPostsMap.has(st.id)) {
               const currentDb = dbPostsMap.get(st.id)!;
-              dbPostsMap.set(st.id, {
-                ...currentDb,
-                ...st,
-              });
+              const mergedUrls = st.media_urls && st.media_urls.length > 0
+                ? st.media_urls
+                : currentDb.media_urls && currentDb.media_urls.length > 0
+                ? currentDb.media_urls
+                : [];
+              dbPostsMap.set(
+                st.id,
+                normalizePostMedia({
+                  ...currentDb,
+                  ...st,
+                  media_urls: mergedUrls,
+                  media_url: mergedUrls[0] || st.media_url || currentDb.media_url || '',
+                })
+              );
             }
           });
 
@@ -128,6 +163,7 @@ export class PostService {
             ...localPosts.filter((lp) => accessibleBrandIds.has(lp.brand_id) && !dbPostsMap.has(lp.id) && !stored.some((st) => st.id === lp.id)),
           ];
 
+          saveStoredPosts(combined);
           return this.filterPostsLocally(combined, filters);
         }
       } catch (err) {
@@ -194,26 +230,64 @@ export class PostService {
     return results;
   }
 
-  static extractMediaAndNotes(rawNotes: string | null): { notes: string; mediaUrl?: string } {
+  static extractMediaAndNotes(rawNotes: string | null): { notes: string; mediaUrl?: string; mediaUrls?: string[] } {
     if (!rawNotes) return { notes: '' };
-    const match = rawNotes.match(/<!--MEDIA_URL:([\s\S]*?)-->/);
-    if (match) {
-      const mediaUrl = match[1].trim();
-      const notes = rawNotes.replace(/<!--MEDIA_URL:[\s\S]*?-->/, '').trim();
-      return { notes, mediaUrl };
+    let clean = rawNotes;
+    let mediaUrls: string[] | undefined;
+    let mediaUrl: string | undefined;
+
+    const multiMatch = clean.match(/<!--MEDIA_URLS:([\s\S]*?)-->/);
+    if (multiMatch) {
+      try {
+        const parsed = JSON.parse(multiMatch[1].trim());
+        if (Array.isArray(parsed)) {
+          mediaUrls = parsed.filter((u) => typeof u === 'string' && u.trim().length > 0);
+          if (mediaUrls.length > 0) mediaUrl = mediaUrls[0];
+        }
+      } catch {}
+      clean = clean.replace(/<!--MEDIA_URLS:[\s\S]*?-->/g, '').trim();
     }
-    return { notes: rawNotes };
+
+    const singleMatch = clean.match(/<!--MEDIA_URL:([\s\S]*?)-->/);
+    if (singleMatch) {
+      const extractedSingle = singleMatch[1].trim();
+      if (!mediaUrl && extractedSingle) {
+        mediaUrl = extractedSingle;
+      }
+      if (!mediaUrls && extractedSingle) {
+        mediaUrls = [extractedSingle];
+      }
+      clean = clean.replace(/<!--MEDIA_URL:[\s\S]*?-->/g, '').trim();
+    }
+
+    return { notes: clean, mediaUrl, mediaUrls };
   }
 
-  static embedMediaInNotes(notes?: string | null, mediaUrl?: string | null): string | null {
-    let cleanNotes = (notes || '').replace(/<!--MEDIA_URL:[\s\S]*?-->/, '').trim();
-    if (mediaUrl && mediaUrl.trim()) {
-      return `${cleanNotes}\n\n<!--MEDIA_URL:${mediaUrl.trim()}-->`.trim();
+  static embedMediaInNotes(notes?: string | null, mediaUrl?: string | null, mediaUrls?: string[] | null): string | null {
+    const cleanNotes = (notes || '')
+      .replace(/<!--MEDIA_URLS:[\s\S]*?-->/g, '')
+      .replace(/<!--MEDIA_URL:[\s\S]*?-->/g, '')
+      .trim();
+
+    const validUrls = Array.isArray(mediaUrls)
+      ? mediaUrls.filter((u) => typeof u === 'string' && u.trim().length > 0)
+      : mediaUrl && mediaUrl.trim()
+      ? [mediaUrl.trim()]
+      : [];
+
+    if (validUrls.length > 1) {
+      return `${cleanNotes}\n\n<!--MEDIA_URLS:${JSON.stringify(validUrls)}-->\n<!--MEDIA_URL:${validUrls[0]}-->`.trim();
+    }
+    if (validUrls.length === 1) {
+      return `${cleanNotes}\n\n<!--MEDIA_URL:${validUrls[0]}-->`.trim();
     }
     return cleanNotes || null;
   }
 
   static async getPostById(id: string, userId?: string): Promise<DummyPost | null> {
+    const stored = getStoredPosts();
+    const localFound = stored.find((p) => p.id === id) || localPosts.find((p) => p.id === id);
+
     const supabase = createClient();
     let foundPost: DummyPost | null = null;
 
@@ -222,8 +296,16 @@ export class PostService {
         const { data, error } = await supabase.from('posts' as any).select('*').eq('id', id).maybeSingle();
         if (!error && data) {
           const d = data as any;
-          const { notes, mediaUrl } = this.extractMediaAndNotes(d.notes);
-          foundPost = {
+          const { notes, mediaUrl, mediaUrls } = this.extractMediaAndNotes(d.notes);
+          const resolvedUrls =
+            mediaUrls && mediaUrls.length > 0
+              ? mediaUrls
+              : localFound?.media_urls && localFound.media_urls.length > 0
+              ? localFound.media_urls
+              : mediaUrl || localFound?.media_url
+              ? [mediaUrl || localFound?.media_url || '']
+              : [];
+          foundPost = normalizePostMedia({
             id: d.id,
             brand_id: d.brand_id,
             title: d.title || 'Untitled Post',
@@ -238,28 +320,27 @@ export class PostService {
             notes: notes,
             posted_at: d.posted_at || null,
             posted_url: d.posted_url || null,
-            media_url: mediaUrl || '',
+            media_url: resolvedUrls[0] || mediaUrl || '',
+            media_urls: resolvedUrls,
             aspect_ratio: '1:1',
             comments_count: 0,
-          };
+          });
         }
       } catch (err) {
         console.warn('PostService.getPostById db fallback:', err);
       }
     }
 
-    if (!foundPost) {
-      const stored = getStoredPosts();
-      const localFound = stored.find((p) => p.id === id) || localPosts.find((p) => p.id === id);
-      if (localFound) foundPost = localFound;
+    if (!foundPost && localFound) {
+      foundPost = normalizePostMedia(localFound);
     }
 
     if (!foundPost) return null;
 
-    // Verifikasi izin akses: Pengguna harus Owner atau Anggota Tim pada brand postingan ini!
+    // Verifikasi izin akses: Pengguna harus Owner atau Anggota Tim pada brand postingan ini
     const role = await BrandService.getUserBrandRole(foundPost.brand_id, userId);
     if (!role) {
-      return null; // Akses Ditolak: postingan milik brand orang lain
+      return null;
     }
 
     return foundPost;
@@ -280,8 +361,15 @@ export class PostService {
       } catch {}
     }
 
-    // Resolusikan brand_id ke UUID riil Supabase jika ada
     const realBrandId = await BrandService.getRealBrandId(payload.brand_id, effectiveUserId);
+
+    const resolvedMediaUrls =
+      Array.isArray(payload.media_urls) && payload.media_urls.length > 0
+        ? payload.media_urls.filter(Boolean)
+        : payload.media_url
+        ? [payload.media_url]
+        : [];
+    const primaryMediaUrl = resolvedMediaUrls[0] || payload.media_url || '';
 
     const fallbackId = `post-${Date.now()}`;
     const newPost: DummyPost = {
@@ -299,12 +387,12 @@ export class PostService {
       notes: payload.notes || null,
       posted_at: payload.posted_at || null,
       posted_url: payload.posted_url || null,
-      media_url: payload.media_url || '',
+      media_url: primaryMediaUrl,
+      media_urls: resolvedMediaUrls,
       aspect_ratio: payload.aspect_ratio || '1:1',
       comments_count: 0,
     };
 
-    // Verifikasi izin pembuatan: harus Owner, Editor, atau Reviewer (Viewer dilarang!)
     const targetBrandId = payload.brand_id || realBrandId;
     const role = await BrandService.getUserBrandRole(targetBrandId, effectiveUserId);
     if (!role) {
@@ -316,7 +404,7 @@ export class PostService {
 
     if (supabase) {
       try {
-        const finalNotes = this.embedMediaInNotes(payload.notes, payload.media_url);
+        const finalNotes = this.embedMediaInNotes(payload.notes, primaryMediaUrl, resolvedMediaUrls);
         const insertPayload: any = {
           title: payload.title,
           caption: payload.caption || '',
@@ -340,13 +428,15 @@ export class PostService {
         const { data, error } = await (supabase.from('posts' as any) as any).insert(insertPayload).select().single();
         if (!error && data) {
           const d = data as any;
-          const { notes: cleanNotes, mediaUrl } = this.extractMediaAndNotes(d.notes);
+          const { notes: cleanNotes, mediaUrl, mediaUrls } = this.extractMediaAndNotes(d.notes);
+          const finalUrls = resolvedMediaUrls.length > 0 ? resolvedMediaUrls : (mediaUrls || (mediaUrl ? [mediaUrl] : []));
           const created: DummyPost = {
             ...newPost,
             id: d.id,
             brand_id: d.brand_id || newPost.brand_id,
             notes: cleanNotes || newPost.notes,
-            media_url: payload.media_url || mediaUrl || newPost.media_url,
+            media_url: finalUrls[0] || primaryMediaUrl || mediaUrl || newPost.media_url,
+            media_urls: finalUrls,
           };
           localPosts.unshift(created);
           const currentStored = getStoredPosts();
@@ -397,6 +487,17 @@ export class PostService {
       }
     }
 
+    const resolvedMediaUrls =
+      updates.media_urls !== undefined
+        ? updates.media_urls.filter(Boolean)
+        : updates.media_url !== undefined
+        ? updates.media_url
+          ? [updates.media_url]
+          : []
+        : basePost?.media_urls || (basePost?.media_url ? [basePost.media_url] : []);
+
+    const primaryMediaUrl = resolvedMediaUrls[0] || (updates.media_url !== undefined ? updates.media_url : basePost?.media_url) || '';
+
     const supabase = createClient();
     if (supabase && isUuid(id)) {
       try {
@@ -416,10 +517,9 @@ export class PostService {
         if (updates.pillar_id !== undefined) {
           dbUpdates.pillar_id = isUuid(updates.pillar_id || '') ? updates.pillar_id : null;
         }
-        if (updates.notes !== undefined || updates.media_url !== undefined) {
-          const notesText = updates.notes !== undefined ? updates.notes : '';
-          const media = updates.media_url !== undefined ? updates.media_url : '';
-          dbUpdates.notes = this.embedMediaInNotes(notesText, media);
+        if (updates.notes !== undefined || updates.media_url !== undefined || updates.media_urls !== undefined) {
+          const notesText = updates.notes !== undefined ? updates.notes : (basePost?.notes || '');
+          dbUpdates.notes = this.embedMediaInNotes(notesText, primaryMediaUrl, resolvedMediaUrls);
         }
         if (updates.posted_at !== undefined) dbUpdates.posted_at = updates.posted_at;
         if (updates.posted_url !== undefined) dbUpdates.posted_url = updates.posted_url;
@@ -436,13 +536,12 @@ export class PostService {
         console.warn('PostService.updatePost db error:', err);
       }
 
-      // Sinkronkan ke server endpoint PATCH /api/posts agar bypass RLS jika akun adalah anggota tim
       if (typeof window !== 'undefined') {
         try {
           fetch('/api/posts', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, ...updates }),
+            body: JSON.stringify({ id, ...updates, media_url: primaryMediaUrl, media_urls: resolvedMediaUrls }),
           }).catch((err) => console.warn('PATCH /api/posts sync notice:', err));
         } catch {}
       }
@@ -463,18 +562,20 @@ export class PostService {
       notes: updates.notes || null,
       posted_at: updates.posted_at || null,
       posted_url: updates.posted_url || null,
-      media_url: updates.media_url || '',
+      media_url: primaryMediaUrl,
+      media_urls: resolvedMediaUrls,
       aspect_ratio: '1:1',
       comments_count: 0,
     };
 
-    const mergedPost: DummyPost = {
+    const mergedPost: DummyPost = normalizePostMedia({
       ...resolvedBase,
       ...updates,
-      id, // Preserve ID
-    };
+      media_url: primaryMediaUrl,
+      media_urls: resolvedMediaUrls,
+      id,
+    });
 
-    // Pastikan tersimpan ke localStorage (uda_custom_posts) baik postingan dummy maupun uuid
     const existingIdx = currentStored.findIndex((p) => p.id === id);
     let updatedStored: DummyPost[];
     if (existingIdx !== -1) {
@@ -484,7 +585,6 @@ export class PostService {
     }
     saveStoredPosts(updatedStored);
 
-    // Update in-memory localPosts
     const index = localPosts.findIndex((p) => p.id === id);
     if (index !== -1) {
       localPosts[index] = mergedPost;
@@ -492,7 +592,6 @@ export class PostService {
       localPosts.unshift(mergedPost);
     }
 
-    // Broadcast event real-time ke semua halaman (Papan Kanban, Kalender, Daftar Postingan, Beranda)
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('uda_post_updated', { detail: mergedPost }));
       window.dispatchEvent(new Event('storage'));
@@ -534,4 +633,3 @@ export class PostService {
     return true;
   }
 }
-

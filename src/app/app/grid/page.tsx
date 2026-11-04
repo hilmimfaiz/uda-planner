@@ -9,8 +9,10 @@ import {
   Sparkles,
   ExternalLink,
   Image as ImageIcon,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import { DUMMY_POSTS, DUMMY_BRANDS, DummyPost, DummyBrand } from "@/lib/dummy-data";
+import { DUMMY_BRANDS, DummyPost, DummyBrand } from "@/lib/dummy-data";
 import { POST_STATUSES } from "@/lib/platforms";
 import { GuidedTour, TourStep } from "@/components/guided-tour";
 import { PostService } from "@/services/post.service";
@@ -33,7 +35,7 @@ const gridTourSteps: TourStep[] = [
   {
     targetId: "tour-grid-feed",
     title: "Kanvas Visual Interaktif (3 Grid Teratas)",
-    description: "Pratinjau susunan 3 postingan teratas feed Anda. Klik foto mana saja untuk langsung membuka dan mengedit detail caption serta jadwal tayangnya.",
+    description: "Pratinjau susunan 3 postingan teratas feed Anda (termasuk slide foto Carousel). Klik foto mana saja untuk membuka detailnya.",
     placement: "bottom",
   },
 ];
@@ -42,10 +44,11 @@ export default function GridInstagramPage() {
   const router = useRouter();
   const { user, account } = useAuth();
   const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
-  const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
+  const [posts, setPosts] = useState<DummyPost[]>(() => PostService.getCachedPosts());
   const [selectedBrandId, setSelectedBrandId] = useState<string>("brand-1");
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:5">("1:1");
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
+  const [slideIndices, setSlideIndices] = useState<Record<string, number>>({});
 
   React.useEffect(() => {
     BrandService.getBrands(user?.id).then((bList) => {
@@ -59,6 +62,8 @@ export default function GridInstagramPage() {
     });
 
     const loadPosts = () => {
+      const cached = PostService.getCachedPosts();
+      if (cached.length > 0) setPosts(cached);
       PostService.getPosts({}, user?.id).then((data) => {
         if (data) setPosts(data);
       });
@@ -87,28 +92,22 @@ export default function GridInstagramPage() {
     }
   }, [selectedBrandId, user?.id]);
 
-  // Deteksi apakah pengguna merupakan anggota tim / undangan tim
   const isTeamMember = React.useMemo(() => {
-    // 1. Role pada brand terpilih
     if (userRole && ['editor', 'reviewer', 'viewer'].includes(userRole)) {
       return true;
     }
-    // 2. Paket akun aktif
     if (account?.plan_code === 'team') {
       return true;
     }
-    // 3. Pengecekan data keanggotaan lokal
     if (typeof window !== 'undefined') {
       try {
         const uId = user?.id;
         const uEmail = user?.email?.toLowerCase();
 
-        // Cek data team membership
         if (uId && localStorage.getItem('uda_team_membership_' + uId)) {
           return true;
         }
 
-        // Cek system role
         if (uId) {
           const sysRole = localStorage.getItem('uda_system_role_' + uId);
           if (sysRole && ['Editor', 'Reviewer', 'Viewer'].includes(sysRole)) {
@@ -116,7 +115,6 @@ export default function GridInstagramPage() {
           }
         }
 
-        // Cek brand members lokal pada brand terpilih
         if (selectedBrandId) {
           const rawM = localStorage.getItem('uda_brand_members_' + selectedBrandId);
           if (rawM) {
@@ -132,7 +130,6 @@ export default function GridInstagramPage() {
           }
         }
 
-        // Cek apakah user adalah anggota tim pada salah satu brand yang tersedia
         if (brands && brands.length > 0) {
           for (const b of brands) {
             const rawM = localStorage.getItem('uda_brand_members_' + b.id);
@@ -150,7 +147,6 @@ export default function GridInstagramPage() {
           }
         }
 
-        // Cek undangan yang telah diterima
         const rawInv = localStorage.getItem('uda_brand_invitations');
         if (rawInv) {
           const invList = JSON.parse(rawInv);
@@ -161,15 +157,6 @@ export default function GridInstagramPage() {
                 (uId && inv.target_user_id === uId))
           );
           if (foundInv) return true;
-        }
-
-        // Cek auth account cache
-        const rawAcc = localStorage.getItem('uda_auth_account');
-        if (rawAcc) {
-          const parsed = JSON.parse(rawAcc);
-          if (parsed.plan_code === 'team' || parsed.team_member_brand_id) {
-            return true;
-          }
         }
       } catch (err) {}
     }
@@ -195,7 +182,6 @@ export default function GridInstagramPage() {
   const activeBrand =
     brands.find((b) => b.id === selectedBrandId) || brands[0] || fallbackBrand;
 
-  // Postingan IG untuk brand terpilih (urut jadwal terbaru di kiri atas)
   const igPosts = posts.filter(
     (p) =>
       p.brand_id === selectedBrandId &&
@@ -204,7 +190,240 @@ export default function GridInstagramPage() {
         p.platforms.length === 0)
   );
 
-  // Jika Paket Gratis & Bukan Anggota Tim: Tampilkan Layar Terkunci Khusus Pro & Tim
+  // Helper komponen tiap kotak Grid Instagram (mendukung slide Carousel langsung di dalam Grid)
+  const renderGridTile = (post: DummyPost) => {
+    const statusMeta = POST_STATUSES[post.status] || POST_STATUSES.draft;
+    const mediaList: string[] =
+      Array.isArray(post.media_urls) && post.media_urls.length > 0
+        ? post.media_urls.filter((u) => typeof u === "string" && u.trim().length > 0)
+        : post.media_url && post.media_url.trim().length > 0
+        ? [post.media_url.trim()]
+        : [];
+
+    const currentIdx = mediaList.length > 0
+      ? Math.min(slideIndices[post.id] || 0, mediaList.length - 1)
+      : 0;
+    const activeImage = mediaList[currentIdx] || "";
+    const isCarouselPost = post.content_type === "carousel" || mediaList.length > 1;
+
+    return (
+      <div
+        key={post.id}
+        onClick={() => router.push(`/app/postingan/${post.id}`)}
+        style={{
+          position: "relative",
+          aspectRatio: aspectRatio === "1:1" ? "1 / 1" : "4 / 5",
+          cursor: "pointer",
+          overflow: "hidden",
+          background: "#1e293b",
+        }}
+      >
+        {activeImage ? (
+          <img
+            src={activeImage}
+            alt={post.title}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              transition: "transform 0.2s ease",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 8,
+              textAlign: "center",
+              color: "#64748b",
+              background: "#0f172a",
+            }}
+          >
+            <ImageIcon size={20} style={{ color: "#94a3b8", marginBottom: 4 }} />
+            <span
+              style={{
+                fontSize: "0.68rem",
+                fontWeight: 700,
+                color: "#f8fafc",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+              }}
+            >
+              {post.title}
+            </span>
+          </div>
+        )}
+
+        {/* Badge Carousel + Jumlah Slide di Pojok Kanan Atas */}
+        {isCarouselPost && (
+          <div
+            style={{
+              position: "absolute",
+              top: 6,
+              right: 6,
+              color: "white",
+              background: "rgba(15, 23, 42, 0.78)",
+              padding: "3px 7px",
+              borderRadius: 6,
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: "0.64rem",
+              fontWeight: 800,
+              backdropFilter: "blur(4px)",
+            }}
+          >
+            <Layers size={12} />
+            {mediaList.length > 1 && <span>{currentIdx + 1}/{mediaList.length}</span>}
+          </div>
+        )}
+
+        {/* Navigasi Geser Slide Carousel Langsung di Grid IG jika foto > 1 */}
+        {mediaList.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSlideIndices((prev) => ({
+                  ...prev,
+                  [post.id]: currentIdx > 0 ? currentIdx - 1 : mediaList.length - 1,
+                }));
+              }}
+              style={{
+                position: "absolute",
+                left: 6,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 24,
+                height: 24,
+                borderRadius: "50%",
+                background: "rgba(255, 255, 255, 0.88)",
+                color: "#0f172a",
+                border: "1px solid #0f172a",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                padding: 0,
+                zIndex: 4,
+              }}
+              title="Slide Sebelumnya"
+            >
+              <ChevronLeft size={14} />
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSlideIndices((prev) => ({
+                  ...prev,
+                  [post.id]: currentIdx < mediaList.length - 1 ? currentIdx + 1 : 0,
+                }));
+              }}
+              style={{
+                position: "absolute",
+                right: 6,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 24,
+                height: 24,
+                borderRadius: "50%",
+                background: "rgba(255, 255, 255, 0.88)",
+                color: "#0f172a",
+                border: "1px solid #0f172a",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                padding: 0,
+                zIndex: 4,
+              }}
+              title="Slide Berikutnya"
+            >
+              <ChevronRight size={14} />
+            </button>
+
+            {/* Indikator Titik Slide di Bawah */}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: "absolute",
+                bottom: 6,
+                right: 6,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                background: "rgba(15, 23, 42, 0.65)",
+                padding: "3px 6px",
+                borderRadius: 999,
+                zIndex: 4,
+              }}
+            >
+              {mediaList.map((_, dIdx) => (
+                <span
+                  key={dIdx}
+                  onClick={() =>
+                    setSlideIndices((prev) => ({
+                      ...prev,
+                      [post.id]: dIdx,
+                    }))
+                  }
+                  style={{
+                    width: dIdx === currentIdx ? 10 : 5,
+                    height: 5,
+                    borderRadius: 999,
+                    background: dIdx === currentIdx ? "#22c55e" : "rgba(255,255,255,0.65)",
+                    transition: "all 0.15s ease",
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Status Badge jika belum tayang */}
+        {post.status !== "terposting" && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: 6,
+              left: 6,
+              fontSize: "0.62rem",
+              fontWeight: 700,
+              padding: "2px 6px",
+              borderRadius: 4,
+              background: "rgba(15, 23, 42, 0.85)",
+              color: statusMeta.color,
+              display: "flex",
+              alignItems: "center",
+              gap: 3,
+            }}
+          >
+            <span
+              style={{
+                width: 4,
+                height: 4,
+                borderRadius: "50%",
+                backgroundColor: statusMeta.color,
+              }}
+            />
+            <span>{statusMeta.label}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (isLocked) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 860, margin: '0 auto', width: '100%' }}>
@@ -232,7 +451,6 @@ export default function GridInstagramPage() {
             alignItems: 'center',
           }}
         >
-          {/* Subtle background glow */}
           <div
             style={{
               position: 'absolute',
@@ -245,7 +463,6 @@ export default function GridInstagramPage() {
             }}
           />
 
-          {/* Badge & Lock Icon */}
           <div
             style={{
               display: 'inline-flex',
@@ -293,7 +510,6 @@ export default function GridInstagramPage() {
             Dapatkan pengalaman merancang tata letak feed Instagram yang rapi, profesional, dan harmonis dengan beralih ke <strong>Paket Pro</strong> atau <strong>Paket Tim</strong>.
           </p>
 
-          {/* Benefit Cards Grid */}
           <div
             style={{
               display: 'grid',
@@ -336,7 +552,6 @@ export default function GridInstagramPage() {
             </div>
           </div>
 
-          {/* Action Buttons */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
             <button
               onClick={() => router.push('/app/langganan')}
@@ -390,7 +605,7 @@ export default function GridInstagramPage() {
           </p>
         </div>
 
-        {/* Controls: Brand Selector, Ratio, and Plan Simulator */}
+        {/* Controls: Brand Selector, Ratio */}
         <div
           id="tour-grid-controls"
           style={{
@@ -412,7 +627,6 @@ export default function GridInstagramPage() {
             ))}
           </select>
 
-          {/* Rasio: 1:1 atau 4:5 */}
           <div
             style={{
               display: "flex",
@@ -502,67 +716,6 @@ export default function GridInstagramPage() {
 
         {/* 3-Column Instagram Feed */}
         <div style={{ position: "relative" }}>
-          {isLocked && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                background: "rgba(255, 255, 255, 0.75)",
-                backdropFilter: "blur(8px)",
-                zIndex: 20,
-                borderRadius: 14,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: 24,
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: "50%",
-                  background: "#fee2e2",
-                  color: "#dc2626",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: 12,
-                }}
-              >
-                <Lock size={24} />
-              </div>
-              <h3
-                style={{
-                  fontSize: "1.2rem",
-                  fontWeight: 800,
-                  color: "#0f172a",
-                }}
-              >
-                Fitur Khusus Paket Pro & Tim
-              </h3>
-              <p
-                style={{
-                  color: "#64748b",
-                  fontSize: "0.88rem",
-                  maxWidth: 360,
-                  margin: "8px 0 16px",
-                }}
-              >
-                Pratinjau visual susunan grid feed Instagram tersedia untuk
-                pelanggan paket Pro dan Tim.
-              </p>
-              <button
-                className="btn-uda btn-uda-primary"
-                onClick={() => router.push("/app/langganan")}
-              >
-                Upgrade ke Pro (Rp 49.000)
-              </button>
-            </div>
-          )}
-
           <div
             style={{
               display: "grid",
@@ -574,7 +727,7 @@ export default function GridInstagramPage() {
               padding: 4,
             }}
           >
-            {/* Baris 3 Grid Pertama (Target Spotlight Panduan) */}
+            {/* Baris 3 Grid Pertama */}
             <div
               id="tour-grid-feed"
               style={{
@@ -584,201 +737,11 @@ export default function GridInstagramPage() {
                 gap: 4,
               }}
             >
-              {igPosts.slice(0, 3).map((post) => {
-                const statusMeta = POST_STATUSES[post.status];
-                return (
-                  <div
-                    key={post.id}
-                    onClick={() => router.push(`/app/postingan/${post.id}`)}
-                    style={{
-                      position: "relative",
-                      aspectRatio: aspectRatio === "1:1" ? "1 / 1" : "4 / 5",
-                      cursor: "pointer",
-                      overflow: "hidden",
-                      background: "#1e293b",
-                    }}
-                  >
-                    {post.media_url ? (
-                      <img
-                        src={post.media_url}
-                        alt=""
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          transition: "transform 0.2s ease",
-                        }}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          padding: 8,
-                          textAlign: "center",
-                          color: "#64748b",
-                          background: "#0f172a",
-                        }}
-                      >
-                        <ImageIcon size={20} style={{ color: "#94a3b8", marginBottom: 4 }} />
-                        <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#f8fafc", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                          {post.title}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Icon Carousel or Reels */}
-                    {post.content_type === "carousel" && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          top: 6,
-                          right: 6,
-                          color: "white",
-                          background: "rgba(0,0,0,0.5)",
-                          padding: 4,
-                          borderRadius: 4,
-                        }}
-                      >
-                        <Layers size={13} />
-                      </div>
-                    )}
-
-                    {/* Status Badge jika belum tayang */}
-                    {post.status !== "terposting" && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          bottom: 6,
-                          left: 6,
-                          fontSize: "0.62rem",
-                          fontWeight: 700,
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                          background: "rgba(15, 23, 42, 0.85)",
-                          color: statusMeta.color,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 3,
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: 4,
-                            height: 4,
-                            borderRadius: "50%",
-                            backgroundColor: statusMeta.color,
-                          }}
-                        />
-                        <span>{statusMeta.label}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {igPosts.slice(0, 3).map((post) => renderGridTile(post))}
             </div>
 
             {/* Sisa Grid Postingan Berikutnya */}
-            {igPosts.slice(3).map((post) => {
-              const statusMeta = POST_STATUSES[post.status];
-              return (
-                <div
-                  key={post.id}
-                  onClick={() => router.push(`/app/postingan/${post.id}`)}
-                  style={{
-                    position: "relative",
-                    aspectRatio: aspectRatio === "1:1" ? "1 / 1" : "4 / 5",
-                    cursor: "pointer",
-                    overflow: "hidden",
-                    background: "#1e293b",
-                  }}
-                >
-                  {post.media_url ? (
-                    <img
-                      src={post.media_url}
-                      alt=""
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                        transition: "transform 0.2s ease",
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: 8,
-                        textAlign: "center",
-                        color: "#64748b",
-                        background: "#0f172a",
-                      }}
-                    >
-                      <ImageIcon size={20} style={{ color: "#94a3b8", marginBottom: 4 }} />
-                      <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#f8fafc", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                        {post.title}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Icon Carousel or Reels */}
-                  {post.content_type === "carousel" && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 6,
-                        right: 6,
-                        color: "white",
-                        background: "rgba(0,0,0,0.5)",
-                        padding: 4,
-                        borderRadius: 4,
-                      }}
-                    >
-                      <Layers size={13} />
-                    </div>
-                  )}
-
-                  {/* Status Badge jika belum tayang */}
-                  {post.status !== "terposting" && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        bottom: 6,
-                        left: 6,
-                        fontSize: "0.62rem",
-                        fontWeight: 700,
-                        padding: "2px 6px",
-                        borderRadius: 4,
-                        background: "rgba(15, 23, 42, 0.85)",
-                        color: statusMeta.color,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 3,
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: 4,
-                          height: 4,
-                          borderRadius: "50%",
-                          backgroundColor: statusMeta.color,
-                        }}
-                      />
-                      <span>{statusMeta.label}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {igPosts.slice(3).map((post) => renderGridTile(post))}
           </div>
         </div>
       </div>

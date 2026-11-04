@@ -65,7 +65,6 @@ export function resolvePaymentDuration(
   const amt = Number(amount) || 0;
   const plan = (planCode || 'pro').toLowerCase();
 
-  // Jika terdapat label durasi eksplisit
   if (durationLabel) {
     const l = durationLabel.toLowerCase();
     if (l.includes('12 bulan') || l.includes('1 tahun') || l.includes('365')) days = 365;
@@ -74,7 +73,6 @@ export function resolvePaymentDuration(
     else if (l.includes('1 bulan') || l.includes('30')) days = 30;
   }
 
-  // Jika durasi kosong atau default 30 hari tetapi nominal menunjukkan paket berdurasi lebih panjang
   if (days <= 0 || (days === 30 && amt >= 200000)) {
     if (plan === 'team') {
       if (amt >= 1200000) days = 365;
@@ -149,6 +147,20 @@ const setStorage = (data: DynamicPlan[]) => {
 };
 
 export class PlanService {
+  /**
+   * Mengambil paket aktif secara sinkron (instan) dari cache/default tanpa menunggu network
+   */
+  static getCachedActivePlans(): DynamicPlan[] {
+    const all = getStorage();
+    return all
+      .filter((p) => p.isActive)
+      .map((p) => ({
+        ...p,
+        durations: (p.durations || []).filter((d) => d.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
+      }))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
   /**
    * Mengambil semua paket aktif beserta variasi durasinya untuk halaman publik & langganan pengguna
    */
@@ -286,7 +298,6 @@ export class PlanService {
           sort_order: plan.sortOrder,
         });
 
-        // Insert initial durations
         for (const dur of newPlan.durations) {
           await (supabase.from('plan_durations' as any) as any).insert({
             plan_code: plan.code,

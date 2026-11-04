@@ -80,6 +80,14 @@ const setStorage = (data: BankAccountItem[]) => {
 
 export class BankService {
   /**
+   * Mengambil semua rekening aktif secara sinkron (instan) dari cache/default
+   */
+  static getCachedActiveBankAccounts(): BankAccountItem[] {
+    const all = getStorage();
+    return all.filter((b) => b.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  /**
    * Mengambil semua rekening aktif untuk halaman pembayaran pengguna
    */
   static async getActiveBankAccounts(): Promise<BankAccountItem[]> {

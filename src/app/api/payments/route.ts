@@ -4,23 +4,63 @@ import { resolvePaymentDuration } from '@/services/plan.service';
 import { formatWibDate } from '@/lib/date-utils';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
-const PAYMENTS_BACKUP_FILE = path.join(process.cwd(), '.server_payments.json');
+const LOCAL_BACKUP_FILE = path.join(process.cwd(), '.server_payments.json');
+const TMP_BACKUP_FILE = path.join(os.tmpdir(), '.server_payments.json');
+
+// Global in-memory cache so Vercel serverless warm instances always retain recent payments instantly
+const globalForPayments = globalThis as unknown as {
+  __udaServerPayments?: any[];
+};
+
+function isDummyPayment(p: any): boolean {
+  if (!p) return true;
+  if (['pay-1', 'pay-2', 'pay-3'].includes(p.id)) return true;
+  if (['Budi Santoso', 'PT Muda Kreatif Indonesia', 'Sarah Rahmawati'].includes(p.user)) return true;
+  return false;
+}
 
 function loadBackupPayments(): any[] {
-  try {
-    if (fs.existsSync(PAYMENTS_BACKUP_FILE)) {
-      const content = fs.readFileSync(PAYMENTS_BACKUP_FILE, 'utf-8');
-      return JSON.parse(content) || [];
+  const results: any[] = [];
+  const seenIds = new Set<string>();
+
+  const addItems = (items: any[]) => {
+    if (!Array.isArray(items)) return;
+    for (const item of items) {
+      if (item && item.id && !seenIds.has(item.id) && !isDummyPayment(item)) {
+        seenIds.add(item.id);
+        results.push(item);
+      }
     }
-  } catch {}
-  return [];
+  };
+
+  if (globalForPayments.__udaServerPayments) {
+    addItems(globalForPayments.__udaServerPayments);
+  }
+
+  for (const filePath of [LOCAL_BACKUP_FILE, TMP_BACKUP_FILE]) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const parsed = JSON.parse(content);
+        addItems(parsed);
+      }
+    } catch {}
+  }
+
+  return results;
 }
 
 function saveBackupPayments(list: any[]) {
-  try {
-    fs.writeFileSync(PAYMENTS_BACKUP_FILE, JSON.stringify(list, null, 2), 'utf-8');
-  } catch {}
+  const cleanList = (list || []).filter((p) => !isDummyPayment(p));
+  globalForPayments.__udaServerPayments = cleanList;
+
+  for (const filePath of [LOCAL_BACKUP_FILE, TMP_BACKUP_FILE]) {
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(cleanList, null, 2), 'utf-8');
+    } catch {}
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -46,13 +86,15 @@ export async function GET(req: NextRequest) {
           const profMap = new Map((profRes.data || []).map((pr: any) => [pr.id, pr]));
           dbPayments = payRes.data.map((p: any) => {
             const prof: any = profMap.get(p.user_id) || {};
-            const resolved = resolvePaymentDuration(p.duration_days, p.duration_label, p.amount, p.plan_code);
+            const planCode = (p.plan_code || 'pro').toLowerCase();
+            const resolved = resolvePaymentDuration(p.duration_days, p.duration_label, p.amount, planCode);
             return {
               id: p.id,
               userId: p.user_id,
               user: p.sender_name || prof.full_name || 'Pelanggan',
               email: prof.email || (p.sender_name ? `${p.sender_name.toLowerCase().replace(/\s+/g, '')}@gmail.com` : 'pelanggan@udaplanner.id'),
-              plan: (p.plan_code as any) || 'pro',
+              plan: planCode,
+              plan_code: planCode,
               durationDays: resolved.days,
               durationLabel: resolved.label,
               amount: p.amount || 0,
@@ -60,6 +102,7 @@ export async function GET(req: NextRequest) {
               proof: p.proof_path || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
               status: p.status || 'pending',
               date: formatWibDate(p.created_at),
+              created_at: p.created_at,
               reason: p.admin_note,
             };
           });
@@ -71,12 +114,25 @@ export async function GET(req: NextRequest) {
 
     const backupList = loadBackupPayments();
     const dbIds = new Set(dbPayments.map((p) => p.id));
+
+    // Jika ada pembayaran di backup yang sudah di-approve/reject, sinkronkan statusnya
+    const backupMap = new Map(backupList.map((bp: any) => [bp.id, bp]));
+    const mergedDbPayments = dbPayments.map((dbItem) => {
+      const bp = backupMap.get(dbItem.id);
+      if (bp && bp.status !== 'pending' && dbItem.status === 'pending') {
+        return {
+          ...dbItem,
+          status: bp.status,
+          reason: bp.reason || dbItem.reason,
+        };
+      }
+      return dbItem;
+    });
+
     const combined = [
-      ...dbPayments,
+      ...mergedDbPayments,
       ...backupList.filter((bp: any) => !dbIds.has(bp.id)),
-    ].filter(
-      (p: any) => !p.id?.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
-    );
+    ].filter((p: any) => !isDummyPayment(p));
 
     if (!all) {
       const filtered = combined.filter((p: any) => {
@@ -100,8 +156,9 @@ export async function POST(req: NextRequest) {
     const serverClient = createServerClient();
     const db = adminClient || serverClient;
 
-    const paymentId = body.id || `pay-${Date.now()}`;
-    const planCode = body.planCode || body.planId || 'pro';
+    const alreadyInsertedInDb = !!body.alreadyInsertedInDb;
+    const paymentId = body.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `pay-${Date.now()}`);
+    const planCode = (body.planCode || body.planId || 'pro').toLowerCase();
     const amount = Number(body.amount) || 0;
     const durationDays = Number(body.durationDays) || 30;
     const durationLabel = body.durationLabel || `${durationDays} Hari`;
@@ -111,8 +168,8 @@ export async function POST(req: NextRequest) {
     const userEmail = body.userEmail || (senderName ? `${senderName.toLowerCase().replace(/\s+/g, '')}@gmail.com` : 'pelanggan@udaplanner.id');
     const userId = body.userId || body.accountId || null;
 
-    // Validasi pencegahan pengajuan ganda (Bug B4)
-    if (db && userId) {
+    // Validasi pencegahan pengajuan ganda (Bug B4) hanya jika belum di-insert oleh client di request yang sama
+    if (!alreadyInsertedInDb && db && userId) {
       try {
         const { data: existingPending } = await (db.from('payments' as any) as any)
           .select('id')
@@ -121,7 +178,7 @@ export async function POST(req: NextRequest) {
           .limit(1)
           .maybeSingle();
 
-        if (existingPending) {
+        if (existingPending && existingPending.id !== paymentId) {
           return NextResponse.json(
             {
               success: false,
@@ -134,22 +191,27 @@ export async function POST(req: NextRequest) {
     }
 
     const backupList = loadBackupPayments();
-    const existingPendingBackup = backupList.find(
-      (p: any) => (p.userId === userId || p.email?.toLowerCase() === userEmail.toLowerCase()) && p.status === 'pending'
-    );
-    if (existingPendingBackup) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Anda masih memiliki pengajuan pembayaran yang sedang menunggu verifikasi admin. Mohon tunggu proses verifikasi selesai sebelum mengajukan kembali.',
-        },
-        { status: 400 }
+    if (!alreadyInsertedInDb) {
+      const existingPendingBackup = backupList.find(
+        (p: any) =>
+          p.id !== paymentId &&
+          ((userId && p.userId === userId) || (userEmail && p.email?.toLowerCase() === userEmail.toLowerCase())) &&
+          p.status === 'pending'
       );
+      if (existingPendingBackup) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Anda masih memiliki pengajuan pembayaran yang sedang menunggu verifikasi admin. Mohon tunggu proses verifikasi selesai sebelum mengajukan kembali.',
+          },
+          { status: 400 }
+        );
+      }
     }
 
     let createdRecordId = paymentId;
 
-    if (db && userId && userId.includes('-') && userId.length > 20) {
+    if (!alreadyInsertedInDb && db && userId && userId.includes('-') && userId.length > 20) {
       try {
         const { data: inserted, error: insertErr } = await (db.from('payments' as any) as any)
           .insert({
@@ -173,12 +235,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const nowIso = new Date().toISOString();
     const newPaymentRecord = {
       id: createdRecordId,
       userId,
       user: senderName,
       email: userEmail,
       plan: planCode,
+      plan_code: planCode,
       durationDays,
       durationLabel,
       amount,
@@ -186,10 +250,17 @@ export async function POST(req: NextRequest) {
       proof: proofPath,
       status: 'pending',
       date: formatWibDate(new Date()),
-      created_at: new Date().toISOString(),
+      created_at: nowIso,
     };
 
-    const filteredBackup = backupList.filter((p: any) => p.id !== newPaymentRecord.id);
+    const filteredBackup = backupList.filter(
+      (p: any) =>
+        p.id !== newPaymentRecord.id &&
+        !(
+          p.status === 'pending' &&
+          ((userId && p.userId === userId) || (userEmail && p.email?.toLowerCase() === userEmail.toLowerCase()))
+        )
+    );
     filteredBackup.unshift(newPaymentRecord);
     saveBackupPayments(filteredBackup);
 
@@ -202,58 +273,70 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { paymentId, status, adminId, notes, userId, userEmail, planCode, durationDays } = body;
+    const { paymentId, status, notes, userId, userEmail, planCode, durationDays } = body;
 
     const adminClient = createAdminClient();
     const serverClient = createServerClient();
     const db = adminClient || serverClient;
 
-    let targetUserId = userId;
-    let targetPlan = planCode || 'pro';
-    let targetDuration = durationDays || 30;
+    const backupList = loadBackupPayments();
+    const backupMatch = backupList.find((bp: any) => bp.id === paymentId);
+
+    let targetUserId = userId || backupMatch?.userId;
+    let targetPlan = (planCode || backupMatch?.plan || backupMatch?.plan_code || 'pro').toLowerCase();
+    let targetDuration = durationDays || backupMatch?.durationDays || 30;
 
     if (db && paymentId) {
       try {
-        // Ambil data pembayaran dari database
-        const { data: payRecord } = await db
-          .from('payments' as any)
-          .select('*')
-          .eq('id', paymentId)
-          .maybeSingle();
+        // Ambil data pembayaran dari database jika merupakan UUID
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(paymentId);
+        let payRecord: any = null;
+        if (isUuid) {
+          const { data } = await db
+            .from('payments' as any)
+            .select('*')
+            .eq('id', paymentId)
+            .maybeSingle();
+          payRecord = data;
+        }
 
         if (payRecord) {
-          targetUserId = targetUserId || (payRecord as any).user_id;
-          targetPlan = targetPlan || (payRecord as any).plan_code || 'pro';
+          targetUserId = targetUserId || payRecord.user_id;
+          // Prioritaskan planCode eksplisit atau plan_code pada record pembayaran
+          targetPlan = (planCode || payRecord.plan_code || targetPlan || 'pro').toLowerCase();
 
           const resolved = resolvePaymentDuration(
-            durationDays || (payRecord as any).duration_days,
-            (payRecord as any).duration_label,
-            (payRecord as any).amount,
+            durationDays || payRecord.duration_days,
+            payRecord.duration_label,
+            payRecord.amount,
             targetPlan
           );
           targetDuration = resolved.days;
         } else {
-          const resolved = resolvePaymentDuration(durationDays, undefined, undefined, targetPlan);
+          const resolved = resolvePaymentDuration(durationDays, backupMatch?.durationLabel, backupMatch?.amount, targetPlan);
           targetDuration = resolved.days;
         }
 
         // Update status pembayaran di database
-        await (db.from('payments' as any) as any)
-          .update({
-            status,
-            admin_note: notes || (status === 'approved' ? 'Disetujui oleh Administrator' : 'Ditolak'),
-            reviewed_at: new Date().toISOString(),
-          })
-          .eq('id', paymentId);
+        if (isUuid) {
+          await (db.from('payments' as any) as any)
+            .update({
+              status,
+              plan_code: targetPlan,
+              admin_note: notes || (status === 'approved' ? 'Disetujui oleh Administrator' : 'Ditolak'),
+              reviewed_at: new Date().toISOString(),
+            })
+            .eq('id', paymentId);
+        }
 
         // Jika disetujui, upgrade akun pengguna di tabel accounts
         if (status === 'approved') {
-          // Jika userId belum ada tapi userEmail ada, cari user_id dari profiles
-          if (!targetUserId && userEmail) {
+          if (!targetUserId && (userEmail || backupMatch?.email)) {
+            const targetMail = userEmail || backupMatch?.email;
             const { data: profRecord } = await db
               .from('profiles' as any)
               .select('id')
-              .eq('email', userEmail)
+              .ilike('email', targetMail)
               .maybeSingle();
             if (profRecord) {
               targetUserId = (profRecord as any).id;
@@ -273,9 +356,8 @@ export async function PATCH(req: NextRequest) {
               if (currentAcc && (currentAcc as any).plan_until) {
                 const currentExpiry = new Date((currentAcc as any).plan_until).getTime();
                 const isStillActive = !isNaN(currentExpiry) && currentExpiry > Date.now();
-                const currentPlanCode = (currentAcc as any).plan_code || 'free';
+                const currentPlanCode = ((currentAcc as any).plan_code || 'free').toLowerCase();
 
-                // Jika paket sama, tambahkan durasi ke sisa masa aktif
                 if (isStillActive && currentPlanCode === targetPlan) {
                   baseStartTime = currentExpiry;
                 }
@@ -291,6 +373,15 @@ export async function PATCH(req: NextRequest) {
                 plan_until: planUntil,
               })
               .or(`user_id.eq.${targetUserId},id.eq.${targetUserId}`);
+
+            // Pastikan semua pembayaran pending lain dari user ini juga diselesaikan agar tidak menghalangi
+            await (db.from('payments' as any) as any)
+              .update({
+                status: 'approved',
+                reviewed_at: new Date().toISOString(),
+              })
+              .eq('user_id', targetUserId)
+              .eq('status', 'pending');
 
             if (adminClient) {
               try {
@@ -309,11 +400,12 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Update juga status di backup file server
-    const backupList = loadBackupPayments();
     const updatedBackup = backupList.map((bp: any) => {
       if (bp.id === paymentId) {
         return {
           ...bp,
+          plan: targetPlan,
+          plan_code: targetPlan,
           status,
           reason: notes || (status === 'approved' ? 'Disetujui oleh Administrator' : 'Ditolak'),
         };
@@ -324,7 +416,7 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { id: paymentId, status },
+      data: { id: paymentId, status, planCode: targetPlan },
       upgraded: status === 'approved' ? { userId: targetUserId, planCode: targetPlan } : null,
     });
   } catch (error: any) {

@@ -6,15 +6,9 @@ import {
   Calendar as CalendarIcon,
   Clock,
   AlertCircle,
-  CheckCircle2,
   ChevronRight,
-  ChevronLeft,
   Plus,
   Copy,
-  Instagram,
-  Sparkles,
-  Layers,
-  ArrowRight,
   Loader2,
   Check,
   CalendarDays,
@@ -30,12 +24,17 @@ export default function BerandaPage() {
   const router = useRouter();
   const { user, profile } = useAuth();
 
-  // State Jadwal & Tanggal
+  // State Jadwal & Tanggal (diinisialisasi instan dari cache lokal tanpa layar loading lambat)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [posts, setPosts] = useState<DummyPost[]>([]);
-  const [brands, setBrands] = useState<DummyBrand[]>([]);
+  const [posts, setPosts] = useState<DummyPost[]>(() => {
+    const todayStr = new Date().toDateString();
+    return PostService.getCachedPosts().filter(
+      (p) => p.scheduled_at && new Date(p.scheduled_at).toDateString() === todayStr
+    );
+  });
+  const [brands, setBrands] = useState<DummyBrand[]>(() => BrandService.getCachedBrands());
   const [selectedBrandFilter, setSelectedBrandFilter] = useState<string>("all");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [brandError, setBrandError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -70,23 +69,26 @@ export default function BerandaPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Ambil daftar brand hanya ketika akun berubah.
+  // Ambil daftar brand ketika akun tersedia
   useEffect(() => {
     if (!user?.id) {
-      setBrands([]);
       return;
     }
 
     let active = true;
-
     setBrandError(null);
+
+    const cachedBrands = BrandService.getCachedBrands(user.id);
+    if (cachedBrands.length > 0) {
+      setBrands(cachedBrands);
+    }
 
     BrandService.getBrands(user.id)
       .then((data) => {
         if (active) setBrands(data || []);
       })
       .catch(() => {
-        if (active) {
+        if (active && cachedBrands.length === 0) {
           setBrands([]);
           setBrandError("Gagal memuat daftar brand. Coba muat ulang halaman.");
         }
@@ -97,25 +99,29 @@ export default function BerandaPage() {
     };
   }, [user?.id]);
 
-  // Ambil jadwal sesuai akun, tanggal, dan filter.
-  // Respons permintaan lama tidak boleh menimpa pilihan terbaru.
+  // Ambil jadwal sesuai akun, tanggal, dan filter secara non-blocking
   useEffect(() => {
+    const targetDateStr = selectedDate.toDateString();
+    const filters =
+      selectedBrandFilter !== "all" ? { brandId: selectedBrandFilter } : {};
+
+    // Tampilkan data cache lokal secara instan terlebih dahulu
+    const cachedForDate = PostService.getCachedPosts(filters).filter(
+      (p) => p.scheduled_at && new Date(p.scheduled_at).toDateString() === targetDateStr
+    );
+    setPosts(cachedForDate);
+
     if (!user?.id) {
-      setPosts([]);
-      setIsLoading(true);
+      setIsLoading(false);
       return;
     }
 
     let active = true;
 
     const loadPosts = async () => {
-      setIsLoading(true);
       setErrorMessage(null);
 
       try {
-        const filters =
-          selectedBrandFilter !== "all" ? { brandId: selectedBrandFilter } : {};
-
         const data = await PostService.getPostsForDate(
           selectedDate,
           filters,
@@ -124,7 +130,7 @@ export default function BerandaPage() {
 
         if (active) setPosts(data || []);
       } catch (error: unknown) {
-        if (active) {
+        if (active && cachedForDate.length === 0) {
           setPosts([]);
           setErrorMessage(
             error instanceof Error
@@ -146,8 +152,6 @@ export default function BerandaPage() {
 
   const handleDateChange = (newDate: Date) => {
     if (newDate.toDateString() === selectedDate.toDateString()) return;
-
-    setIsLoading(true);
     setSelectedDate(newDate);
   };
 
@@ -196,7 +200,6 @@ export default function BerandaPage() {
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  // Langkah-Langkah Panduan Interaktif Dashboard (Guided Tour)
   const dashboardTourSteps: TourStep[] = [
     {
       targetId: "tour-welcome",
@@ -253,13 +256,12 @@ export default function BerandaPage() {
         margin: "0 auto",
       }}
     >
-      {/* GUIDED TOUR KOMPONEN */}
       <GuidedTour
         steps={dashboardTourSteps}
         tourKey="uda_guided_tour_dashboard"
       />
 
-      {/* Sapaan Header & Waktu Live (ID: tour-welcome) */}
+      {/* Sapaan Header & Waktu Live */}
       <div
         id="tour-welcome"
         style={{
@@ -370,7 +372,7 @@ export default function BerandaPage() {
           </div>
         </div>
 
-        {/* Tombol Aksi Utama (ID: tour-actions) */}
+        {/* Tombol Aksi Utama */}
         <div
           id="tour-actions"
           style={{ display: "flex", alignItems: "center", gap: 10 }}
@@ -405,7 +407,7 @@ export default function BerandaPage() {
         </div>
       </div>
 
-      {/* Baris Navigasi Brand & Tanggal (ID: tour-nav & tour-summary) */}
+      {/* Baris Navigasi Brand & Tanggal */}
       <div
         id="tour-nav"
         style={{
@@ -439,7 +441,6 @@ export default function BerandaPage() {
           <select
             value={selectedBrandFilter}
             onChange={(e) => {
-              setIsLoading(true);
               setSelectedBrandFilter(e.target.value);
             }}
             style={{
@@ -467,8 +468,6 @@ export default function BerandaPage() {
             </span>
           )}
         </div>
-
-        {/* Date Selector Tabs */}
 
         {/* Date Selector Tabs */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -521,7 +520,6 @@ export default function BerandaPage() {
             Besok
           </button>
 
-          {/* Native Date Picker */}
           <div
             style={{
               position: "relative",
@@ -551,7 +549,7 @@ export default function BerandaPage() {
         </div>
       </div>
 
-      {/* Summary Metrics (ID: tour-summary) - 4 Kolom di Desktop, 2 Atas 2 Bawah di Mobile */}
+      {/* Summary Metrics */}
       <div id="tour-summary" className="dashboard-summary-grid">
         <div
           className="uda-card dashboard-summary-card"
@@ -672,7 +670,7 @@ export default function BerandaPage() {
         </div>
       </div>
 
-      {/* DAFTAR JADWAL HARI INI (ID: tour-today-schedule) */}
+      {/* DAFTAR JADWAL HARI INI */}
       <div
         id="tour-today-schedule"
         className="uda-card"
@@ -900,7 +898,6 @@ export default function BerandaPage() {
                       flex: 1,
                     }}
                   >
-                    {/* Waktu Badge */}
                     <div
                       style={{
                         padding: "8px 12px",

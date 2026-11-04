@@ -24,11 +24,58 @@ export interface SubmitPaymentPayload {
   notes?: string;
 }
 
+function isDummyPaymentItem(it: any): boolean {
+  if (!it) return true;
+  if (['pay-1', 'pay-2', 'pay-3'].includes(it.id)) return true;
+  if (['Budi Santoso', 'PT Muda Kreatif Indonesia', 'Sarah Rahmawati'].includes(it.user || it.sender_name)) return true;
+  return false;
+}
+
 export class PaymentService {
+  static getCachedPayments(accountId?: string, email?: string): any[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem('uda_admin_payments');
+      if (!raw) return [];
+      const list = JSON.parse(raw);
+      if (!Array.isArray(list)) return [];
+      return list
+        .filter((it: any) => {
+          if (isDummyPaymentItem(it)) return false;
+          if (accountId && (it.userId === accountId || it.id === accountId)) return true;
+          if (email && it.email && it.email.toLowerCase() === email.toLowerCase()) return true;
+          return !accountId && !email;
+        })
+        .map((it: any) => {
+          const planCode = (it.plan || it.plan_code || 'pro').toLowerCase();
+          const res = resolvePaymentDuration(it.durationDays || it.duration_days, it.durationLabel || it.duration_label, it.amount, planCode);
+          return {
+            id: it.id,
+            user_id: it.userId || accountId,
+            plan_code: planCode,
+            plan: planCode,
+            amount: it.amount,
+            duration_days: res.days,
+            duration_label: res.label,
+            sender_name: it.user || it.sender_name,
+            sender_bank: it.bank?.split(' — ')[0] || it.sender_bank || 'Transfer Bank',
+            proof_path: it.proof || it.proof_path,
+            status: it.status || 'pending',
+            admin_note: it.reason || it.admin_note,
+            created_at: it.created_at || new Date().toISOString(),
+          };
+        });
+    } catch {
+      return [];
+    }
+  }
+
   static async getPayments(accountId?: string, email?: string): Promise<any[]> {
-    let dbPayments: any[] = [];
     const supabase = createClient();
-    if (supabase) {
+
+    // Jalankan query Supabase & API Server secara PARALEL agar cepat tanpa jeda
+    const dbPromise = (async () => {
+      if (!supabase) return [];
       try {
         let query = supabase.from('payments' as any).select('*').order('created_at', { ascending: false });
         if (accountId && accountId.includes('-') && accountId.length > 20) {
@@ -36,22 +83,28 @@ export class PaymentService {
         }
         const { data, error } = await query;
         if (!error && data) {
-          dbPayments = data.map((p: any) => {
-            const res = resolvePaymentDuration(p.duration_days, p.duration_label, p.amount, p.plan_code);
-            return {
-              ...p,
-              duration_days: res.days,
-              duration_label: res.label,
-            };
-          });
+          return data
+            .filter((p: any) => !isDummyPaymentItem(p))
+            .map((p: any) => {
+              const planCode = (p.plan_code || 'pro').toLowerCase();
+              const res = resolvePaymentDuration(p.duration_days, p.duration_label, p.amount, planCode);
+              return {
+                ...p,
+                plan_code: planCode,
+                plan: planCode,
+                duration_days: res.days,
+                duration_label: res.label,
+              };
+            });
         }
       } catch (err) {
         console.warn('PaymentService.getPayments db error:', err);
       }
-    }
+      return [];
+    })();
 
-    // Sinkronkan juga dari server API /api/payments
-    if (typeof window !== 'undefined') {
+    const apiPromise = (async () => {
+      if (typeof window === 'undefined') return [];
       try {
         const params = new URLSearchParams();
         if (accountId) params.set('accountId', accountId);
@@ -60,49 +113,16 @@ export class PaymentService {
         if (res.ok) {
           const resData = await res.json();
           if (resData.success && Array.isArray(resData.data)) {
-            const serverItems = resData.data.map((it: any) => ({
-              id: it.id,
-              user_id: it.userId || accountId,
-              plan_code: it.plan || 'pro',
-              amount: it.amount,
-              duration_days: it.durationDays,
-              duration_label: it.durationLabel,
-              sender_name: it.user,
-              sender_bank: it.bank?.split(' — ')[0] || 'Transfer Bank',
-              proof_path: it.proof,
-              status: it.status || 'pending',
-              admin_note: it.reason,
-              created_at: it.created_at || new Date().toISOString(),
-            }));
-            const dbIds = new Set(dbPayments.map((p) => p.id));
-            dbPayments = [...dbPayments, ...serverItems.filter((s: any) => !dbIds.has(s.id))];
-          }
-        }
-      } catch (e) {}
-    }
-
-    // Sinkronkan juga data pengajuan pembayaran dari localStorage (agar instan muncul tanpa jeda)
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('uda_admin_payments');
-        if (raw) {
-          const list = JSON.parse(raw);
-          if (Array.isArray(list)) {
-            const userLocal = list.filter((it: any) => {
-              if (accountId && (it.userId === accountId || it.id === accountId)) return true;
-              if (email && it.email && it.email.toLowerCase() === email.toLowerCase()) return true;
-              return !accountId && !email;
-            });
-
-            const dbIds = new Set(dbPayments.map((p) => p.id));
-            const formattedLocal = userLocal
-              .filter((it: any) => !dbIds.has(it.id))
+            return resData.data
+              .filter((it: any) => !isDummyPaymentItem(it))
               .map((it: any) => {
-                const res = resolvePaymentDuration(it.durationDays, it.durationLabel, it.amount, it.plan);
+                const planCode = (it.plan || it.plan_code || 'pro').toLowerCase();
+                const res = resolvePaymentDuration(it.durationDays, it.durationLabel, it.amount, planCode);
                 return {
                   id: it.id,
                   user_id: it.userId || accountId,
-                  plan_code: it.plan || 'pro',
+                  plan_code: planCode,
+                  plan: planCode,
                   amount: it.amount,
                   duration_days: res.days,
                   duration_label: res.label,
@@ -111,68 +131,64 @@ export class PaymentService {
                   proof_path: it.proof,
                   status: it.status || 'pending',
                   admin_note: it.reason,
-                  created_at: new Date().toISOString(),
+                  created_at: it.created_at || new Date().toISOString(),
                 };
               });
-
-            const allList = [...dbPayments, ...formattedLocal];
-
-            // Jika akun pengguna saat ini sudah aktif di paket berbayar (Pro atau Team),
-            // pastikan pembayaran yang sesuai otomatis berstatus 'approved' dan bersihkan status 'pending'
-            let activeUserPlan: string | null = null;
-            try {
-              const rawAcc = localStorage.getItem('uda_auth_account');
-              if (rawAcc) {
-                const parsed = JSON.parse(rawAcc);
-                if (parsed.plan_code && parsed.plan_code !== 'free') {
-                  activeUserPlan = parsed.plan_code;
-                }
-              }
-            } catch (e) {}
-
-            if (activeUserPlan) {
-              const normalized = allList.map((p: any) => {
-                if (p.status === 'pending' && (p.plan_code === activeUserPlan || activeUserPlan === 'team')) {
-                  return { ...p, status: 'approved' };
-                }
-                return p;
-              });
-
-              // Sinkronkan ke uda_admin_payments agar tidak ada yang tertinggal berstatus pending
-              try {
-                const rawAdmin = localStorage.getItem('uda_admin_payments');
-                if (rawAdmin) {
-                  const adminItems = JSON.parse(rawAdmin);
-                  let hasUpdate = false;
-                  const updatedAdminItems = adminItems.map((ai: any) => {
-                    const matchUser = (accountId && ai.userId === accountId) || (email && ai.email?.toLowerCase() === email.toLowerCase());
-                    if (matchUser && ai.status === 'pending' && (ai.plan === activeUserPlan || activeUserPlan === 'team')) {
-                      hasUpdate = true;
-                      return { ...ai, status: 'approved' };
-                    }
-                    return ai;
-                  });
-                  if (hasUpdate) {
-                    localStorage.setItem('uda_admin_payments', JSON.stringify(updatedAdminItems));
-                  }
-                }
-              } catch (e) {}
-
-              return normalized;
-            }
-
-            return allList;
           }
         }
-      } catch (e) {}
+      } catch {}
+      return [];
+    })();
+
+    const [dbPayments, serverItems] = await Promise.all([dbPromise, apiPromise]);
+
+    const mergedMap = new Map<string, any>();
+    dbPayments.forEach((p: any) => mergedMap.set(p.id, p));
+    serverItems.forEach((s: any) => {
+      const existing = mergedMap.get(s.id);
+      if (!existing) {
+        mergedMap.set(s.id, s);
+      } else if (existing.status === 'pending' && s.status !== 'pending') {
+        mergedMap.set(s.id, { ...existing, status: s.status, admin_note: s.admin_note || existing.admin_note });
+      }
+    });
+
+    // Gabungkan juga dari localStorage agar pembayaran baru langsung muncul tanpa jeda
+    const localItems = this.getCachedPayments(accountId, email);
+    localItems.forEach((loc: any) => {
+      const existing = mergedMap.get(loc.id);
+      if (!existing) {
+        mergedMap.set(loc.id, loc);
+      } else if (existing.status === 'pending' && loc.status !== 'pending') {
+        mergedMap.set(loc.id, { ...existing, status: loc.status, admin_note: loc.admin_note || existing.admin_note });
+      }
+    });
+
+    // Cek apakah ada event persetujuan spesifik dari Admin pada uda_last_upgraded_user
+    if (typeof window !== 'undefined') {
+      try {
+        const rawUpgrade = localStorage.getItem('uda_last_upgraded_user');
+        if (rawUpgrade) {
+          const upg = JSON.parse(rawUpgrade);
+          if (upg && upg.paymentId && mergedMap.has(upg.paymentId)) {
+            const target = mergedMap.get(upg.paymentId);
+            mergedMap.set(upg.paymentId, {
+              ...target,
+              status: 'approved',
+              plan_code: (upg.planCode || target.plan_code || 'pro').toLowerCase(),
+              plan: (upg.planCode || target.plan || 'pro').toLowerCase(),
+            });
+          }
+        }
+      } catch {}
     }
 
-    return dbPayments;
+    return Array.from(mergedMap.values());
   }
 
   static async submitPayment(payload: SubmitPaymentPayload): Promise<any> {
     const supabase = createClient();
-    const planCode = payload.planCode || payload.planId || 'pro';
+    const planCode = (payload.planCode || payload.planId || 'pro').toLowerCase();
     const senderName = payload.senderName || payload.userName || 'Pelanggan';
     const senderBank = payload.senderBank || payload.paymentMethod || 'Transfer Bank';
     const proofPath = payload.proofPath || payload.proofUrl || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600';
@@ -180,7 +196,7 @@ export class PaymentService {
     const durationLabel = payload.durationLabel || `${durationDays} Hari`;
     const targetUser = payload.userId || payload.accountId;
 
-    // Payload murni sesuai skema tabel public.payments di database Supabase
+    // Payload sesuai skema tabel public.payments di database Supabase
     const dbPayload: any = {
       plan_code: planCode,
       amount: payload.amount,
@@ -199,27 +215,54 @@ export class PaymentService {
 
     if (supabase && dbPayload.user_id) {
       try {
-        const { data, error } = await (supabase.from('payments' as any) as any)
-          .insert(dbPayload)
-          .select()
-          .single();
-        if (!error && data) {
-          createdRecord = data;
-        } else if (error) {
-          console.warn('PaymentService.submitPayment supabase insert error:', error.message);
+        // Cek apakah sudah ada baris berstatus pending di DB untuk user_id ini (menghindari error unique index idx_payments_user_pending)
+        const { data: existingPending } = await (supabase.from('payments' as any) as any)
+          .select('id')
+          .eq('user_id', dbPayload.user_id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (existingPending && existingPending.id) {
+          const { data: updatedData, error: updateErr } = await (supabase.from('payments' as any) as any)
+            .update({
+              ...dbPayload,
+              created_at: new Date().toISOString(),
+            })
+            .eq('id', existingPending.id)
+            .select()
+            .single();
+          if (!updateErr && updatedData) {
+            createdRecord = updatedData;
+          }
+        } else {
+          const { data, error } = await (supabase.from('payments' as any) as any)
+            .insert(dbPayload)
+            .select()
+            .single();
+          if (!error && data) {
+            createdRecord = data;
+          } else if (error) {
+            console.warn('PaymentService.submitPayment supabase insert error:', error.message);
+          }
         }
       } catch (err) {
         console.warn('PaymentService.submitPayment exception:', err);
       }
     }
 
-    // Panggil juga API route server untuk persistensi ganda & bypass RLS
+    const generatedId =
+      createdRecord?.id ||
+      (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `pay-${Date.now()}`);
+
+    // Panggil API route server untuk persistensi lintas sesi
     if (typeof window !== 'undefined') {
       try {
         const res = await fetch('/api/payments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            id: generatedId,
+            alreadyInsertedInDb: !!createdRecord,
             userId: targetUser,
             userEmail: payload.userEmail,
             userName: senderName,
@@ -238,7 +281,7 @@ export class PaymentService {
         if (res.ok) {
           const resData = await res.json();
           if (resData.success && resData.data) {
-            createdRecord = { ...createdRecord, ...resData.data };
+            createdRecord = { ...createdRecord, ...resData.data, plan_code: planCode, plan: planCode };
           }
         }
       } catch (apiErr) {
@@ -246,26 +289,33 @@ export class PaymentService {
       }
     }
 
-    const finalRecord = createdRecord || {
-      id: `pay-${Date.now()}`,
+    const nowIso = new Date().toISOString();
+    const finalRecord = {
+      id: createdRecord?.id || generatedId,
+      user_id: targetUser,
       ...dbPayload,
+      plan_code: planCode,
+      plan: planCode,
       duration_label: durationLabel,
       target_bank_name: payload.targetBankName,
       target_account_number: payload.targetAccountNumber,
       target_account_name: payload.targetAccountName,
+      created_at: createdRecord?.created_at || nowIso,
     };
 
-    // Sinkronkan ke uda_admin_payments agar panel admin langsung mendeteksi pengajuan pembayaran baru secara real-time
+    // Sinkronkan ke uda_admin_payments agar panel admin langsung mendeteksi pengajuan pembayaran baru secara instan tanpa jeda
     if (typeof window !== 'undefined') {
       try {
         const raw = localStorage.getItem('uda_admin_payments');
         const list = raw ? JSON.parse(raw) : [];
+        const cleanEmail = payload.userEmail || (senderName ? `${senderName.toLowerCase().replace(/\s+/g, '')}@gmail.com` : 'pelanggan@udaplanner.id');
         const adminItem = {
           id: finalRecord.id,
           userId: targetUser,
           user: senderName,
-          email: payload.userEmail || (senderName ? `${senderName.toLowerCase().replace(/\s+/g, '')}@gmail.com` : 'pelanggan@udaplanner.id'),
+          email: cleanEmail,
           plan: planCode,
+          plan_code: planCode,
           durationDays,
           durationLabel,
           amount: payload.amount,
@@ -273,14 +323,25 @@ export class PaymentService {
           proof: proofPath,
           status: 'pending',
           date: formatWibDate(new Date()),
+          created_at: finalRecord.created_at,
         };
 
-        const updatedList = [adminItem, ...list.filter((it: any) => it.id !== finalRecord.id)];
+        // Hapus item pending lama dari user yang sama atau ID yang sama agar tidak duplikat
+        const filteredList = (Array.isArray(list) ? list : []).filter(
+          (it: any) =>
+            !isDummyPaymentItem(it) &&
+            it.id !== finalRecord.id &&
+            !(
+              it.status === 'pending' &&
+              ((targetUser && it.userId === targetUser) || (cleanEmail && it.email?.toLowerCase() === cleanEmail.toLowerCase()))
+            )
+        );
+        const updatedList = [adminItem, ...filteredList];
         localStorage.setItem('uda_admin_payments', JSON.stringify(updatedList));
 
-        // Trigger event agar tab admin atau komponen lain langsung memperbarui antrean
         window.dispatchEvent(new CustomEvent('uda_payment_submitted', { detail: adminItem }));
-      } catch (e) {}
+        window.dispatchEvent(new Event('storage'));
+      } catch {}
     }
 
     return finalRecord;
@@ -294,11 +355,13 @@ export class PaymentService {
     extra?: { userId?: string; planCode?: string; durationDays?: number }
   ): Promise<any> {
     const supabase = createClient();
+    const targetPlan = (extra?.planCode || 'pro').toLowerCase();
     if (supabase) {
       try {
         const { data, error } = await (supabase.from('payments' as any) as any)
           .update({
             status,
+            plan_code: targetPlan,
             admin_note: notes || undefined,
             reviewed_at: new Date().toISOString(),
           })
@@ -306,7 +369,6 @@ export class PaymentService {
           .select()
           .single();
 
-        // Jika disetujui, update akun pengguna di database
         if (status === 'approved' && extra?.userId) {
           let planUntil = (extra as any)?.customPlanUntil;
           if (!planUntil) {
@@ -319,17 +381,17 @@ export class PaymentService {
 
               if (curAcc && curAcc.plan_until) {
                 const curExp = new Date(curAcc.plan_until).getTime();
-                if (!isNaN(curExp) && curExp > Date.now() && curAcc.plan_code === (extra.planCode || 'pro')) {
+                if (!isNaN(curExp) && curExp > Date.now() && curAcc.plan_code === targetPlan) {
                   baseTime = curExp;
                 }
               }
-            } catch (accErr) {}
+            } catch {}
             planUntil = new Date(baseTime + (extra.durationDays || 30) * 86400000).toISOString();
           }
 
           await (supabase.from('accounts' as any) as any)
             .update({
-              plan_code: extra.planCode || 'pro',
+              plan_code: targetPlan,
               plan_until: planUntil,
             })
             .or(`user_id.eq.${extra.userId},id.eq.${extra.userId}`);
@@ -340,6 +402,6 @@ export class PaymentService {
         console.warn('PaymentService.verifyPayment exception:', err);
       }
     }
-    return { id: paymentId, status, notes };
+    return { id: paymentId, status, notes, plan_code: targetPlan };
   }
 }

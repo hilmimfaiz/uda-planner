@@ -49,14 +49,13 @@ const adminTourSteps: TourStep[] = [
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const [activeAdminTab, setActiveAdminTab] = useState<'ringkasan' | 'pembayaran' | 'pengguna' | 'paket' | 'pengaturan'>('ringkasan');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Realtime Admin Statistics State
+  // Realtime Admin Statistics State (Instantly initialized from cache without blocking)
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
   const [allPayments, setAllPayments] = useState<any[]>([]);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
 
   const fetchDashboardStats = React.useCallback(async () => {
@@ -66,9 +65,7 @@ export default function AdminDashboardPage() {
         AdminService.getAdminUsers(),
       ]);
       if (paymentsData) {
-        const cleanPayments = paymentsData.filter(
-          (p) => !p.id?.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
-        );
+        const cleanPayments = paymentsData.filter((p) => !AdminService.isDummyPayment(p));
         setAllPayments(cleanPayments);
         setPendingPayments(cleanPayments.filter((p) => p.status === 'pending'));
       }
@@ -83,22 +80,25 @@ export default function AdminDashboardPage() {
   }, []);
 
   React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('uda_admin_payments');
-        if (raw) {
-          const list = JSON.parse(raw);
-          const cleaned = list.filter(
-            (p: any) => !p.id?.startsWith('pay-') && p.user !== 'Budi Santoso' && p.user !== 'PT Muda Kreatif Indonesia' && p.user !== 'Sarah Rahmawati'
-          );
-          localStorage.setItem('uda_admin_payments', JSON.stringify(cleaned));
-        }
-      } catch (e) {}
+    // 1. Muat dari cache lokal secara instan tanpa jeda
+    const cachedPays = AdminService.getCachedPayments();
+    const cachedUsers = AdminService.getCachedAdminUsers();
+    if (cachedPays.length > 0) {
+      setAllPayments(cachedPays);
+      setPendingPayments(cachedPays.filter((p) => p.status === 'pending'));
+    }
+    if (cachedUsers.length > 0) {
+      setAdminUsers(cachedUsers);
     }
 
     fetchDashboardStats();
 
     const handleSync = () => {
+      const latestPays = AdminService.getCachedPayments();
+      if (latestPays.length > 0) {
+        setAllPayments(latestPays);
+        setPendingPayments(latestPays.filter((p) => p.status === 'pending'));
+      }
       fetchDashboardStats();
     };
 
@@ -108,6 +108,7 @@ export default function AdminDashboardPage() {
     window.addEventListener('uda_account_updated', handleSync);
     window.addEventListener('uda_user_registered', handleSync);
     window.addEventListener('storage', handleSync);
+    window.addEventListener('focus', handleSync);
 
     return () => {
       window.removeEventListener('uda_payment_submitted', handleSync);
@@ -116,6 +117,7 @@ export default function AdminDashboardPage() {
       window.removeEventListener('uda_account_updated', handleSync);
       window.removeEventListener('uda_user_registered', handleSync);
       window.removeEventListener('storage', handleSync);
+      window.removeEventListener('focus', handleSync);
     };
   }, [fetchDashboardStats]);
 
@@ -148,7 +150,7 @@ export default function AdminDashboardPage() {
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     try {
       (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
-    } catch (err) {}
+    } catch {}
     setIsDragging(false);
   };
 
@@ -168,19 +170,24 @@ export default function AdminDashboardPage() {
 
     setIsApproving(true);
     try {
-      const targetPlan = item?.plan || 'pro';
+      const rawPlan = (item?.plan || 'pro').toLowerCase();
+      const targetPlan: 'pro' | 'team' = rawPlan === 'team' ? 'team' : 'pro';
       const dur = resolvePaymentDuration(
         (item as any)?.durationDays,
         (item as any)?.durationLabel,
         item?.amount,
         targetPlan
       );
+
+      // Optimistic UI update
+      setPendingPayments((prev) => prev.filter((p) => p.id !== id));
+      setAllPayments((prev) => prev.map((p) => (p.id === id ? { ...p, status: 'approved', plan: targetPlan } : p)));
+      setSelectedProof(null);
+
       await AdminService.approvePayment(id, item?.userId, targetPlan, {
         email: item?.email,
         durationDays: dur.days,
       });
-      setPendingPayments((prev) => prev.filter((p) => p.id !== id));
-      setSelectedProof(null);
       showToast(`✅ Pembayaran disetujui! Pengguna ${item?.user || ''} otomatis ditingkatkan ke paket ${targetPlan.toUpperCase()} (${dur.label} / ${dur.days} Hari).`);
     } finally {
       setIsApproving(false);
@@ -192,13 +199,16 @@ export default function AdminDashboardPage() {
       alert('Wajib mengisi alasan penolakan!');
       return;
     }
-    await AdminService.rejectPayment(id, rejectReason);
-    setPendingPayments(pendingPayments.filter((p) => p.id !== id));
+    const reasonText = rejectReason;
+    setPendingPayments((prev) => prev.filter((p) => p.id !== id));
+    setAllPayments((prev) => prev.map((p) => (p.id === id ? { ...p, status: 'rejected', reason: reasonText } : p)));
     setSelectedProof(null);
     setShowRejectInput(false);
-    showToast(`❌ Pembayaran ditolak. Alasan: ${rejectReason}`);
-  };
+    setRejectReason('');
 
+    await AdminService.rejectPayment(id, reasonText);
+    showToast(`❌ Pembayaran ditolak. Alasan: ${reasonText}`);
+  };
 
   // Perhitungan Statistik Real-time & Sinkron
   const totalUsersCount = adminUsers.length || 0;
@@ -253,10 +263,10 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PENGGUNA TERDAFTAR</div>
           <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
-            {isLoading ? '...' : totalUsersCount}
+            {totalUsersCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>
-            {isLoading ? 'Memuat data...' : `${freeUsersCount} akun gratis (free)`}
+            {`${freeUsersCount} akun gratis (free)`}
           </div>
         </div>
 
@@ -268,7 +278,7 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#3b82f6', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA PRO AKTIF</div>
           <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#1d4ed8', marginTop: 4 }}>
-            {isLoading ? '...' : proUsersCount}
+            {proUsersCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Rp 49.000 / 30 hari</div>
         </div>
@@ -281,7 +291,7 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#8b5cf6', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA TIM AKTIF</div>
           <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#6d28d9', marginTop: 4 }}>
-            {isLoading ? '...' : teamUsersCount}
+            {teamUsersCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Rp 149.000 / 30 hari</div>
         </div>
@@ -293,7 +303,7 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#b45309', fontSize: '0.78rem', fontWeight: 700 }}>MENUNGGU VERIFIKASI</div>
           <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#d97706', marginTop: 4 }}>
-            {isLoading ? '...' : pendingPayments.length}
+            {pendingPayments.length}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600, marginTop: 4 }}>Klik untuk cek transfer →</div>
         </div>
@@ -305,7 +315,7 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#c2410c', fontSize: '0.78rem', fontWeight: 700 }}>EMAIL BELUM DIVERIFIKASI</div>
           <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#ea580c', marginTop: 4 }}>
-            {isLoading ? '...' : Math.max(0, adminUsers.filter((u) => u.isSuspended).length)}
+            {Math.max(0, adminUsers.filter((u) => !u.isEmailVerified).length)}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#c2410c', fontWeight: 600, marginTop: 4 }}>Verifikasi akun manual →</div>
         </div>
@@ -318,20 +328,19 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#15803d', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PEMASUKAN DIVERIFIKASI</div>
           <div className="admin-metrics-number" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#166534', marginTop: 4 }}>
-            {isLoading ? '...' : formattedRevenue}
+            {formattedRevenue}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>
-            {isLoading ? 'Memuat data omset...' : `Dari ${allPayments.filter((p) => p.status === 'approved').length} transaksi berhasil`}
+            {`Dari ${allPayments.filter((p) => p.status === 'approved').length} transaksi berhasil`}
           </div>
         </div>
       </div>
-
 
       {/* Tabel Verifikasi Pembayaran Sesuai PRD Bab 8 */}
       <div className="uda-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
           <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
-            Verifikasi Pembayaran Masuk {isLoading ? '' : `(${pendingPayments.length} Menunggu)`}
+            Verifikasi Pembayaran Masuk ({pendingPayments.length} Menunggu)
           </h3>
           <button
             className="btn-uda btn-uda-secondary btn-uda-sm"
@@ -341,12 +350,7 @@ export default function AdminDashboardPage() {
           </button>
         </div>
 
-        {isLoading ? (
-          <div style={{ padding: '32px 16px', textAlign: 'center', color: '#64748b', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-            <Loader2 size={18} className="animate-spin" />
-            <span>Memuat data verifikasi pembayaran...</span>
-          </div>
-        ) : pendingPayments.length === 0 ? (
+        {pendingPayments.length === 0 ? (
           <p style={{ color: '#64748b', fontSize: '0.88rem', fontStyle: 'italic' }}>
             Semua pembayaran transfer telah selesai diverifikasi.
           </p>
@@ -484,7 +488,6 @@ export default function AdminDashboardPage() {
               backgroundColor: '#ffffff',
             }}
           >
-            {/* Tombol Tutup X di Kanan Atas */}
             <button
               type="button"
               onClick={() => {
@@ -515,7 +518,8 @@ export default function AdminDashboardPage() {
               Periksa Bukti Pembayaran
             </h3>
             <div style={{ fontSize: '0.86rem', color: '#64748b', marginBottom: 14 }}>
-              <span style={{ fontWeight: 700, color: '#0f172a' }}>{selectedProof.user}</span> • Nominal:{' '}
+              <span style={{ fontWeight: 700, color: '#0f172a' }}>{selectedProof.user}</span> • Paket:{' '}
+              <strong style={{ color: selectedProof.plan === 'team' ? '#7c3aed' : '#16a34a', textTransform: 'uppercase' }}>{selectedProof.plan}</strong> • Nominal:{' '}
               <strong style={{ color: '#16a34a', fontSize: '0.92rem' }}>Rp {selectedProof.amount.toLocaleString('id-ID')}</strong>
             </div>
 
@@ -532,7 +536,6 @@ export default function AdminDashboardPage() {
                 gap: 8,
               }}
             >
-              {/* Tombol Zoom Out */}
               <button
                 type="button"
                 title="Perkecil Gambar (Zoom Out)"
@@ -558,7 +561,6 @@ export default function AdminDashboardPage() {
                 <span>Zoom Out</span>
               </button>
 
-              {/* Indikator Persentase Zoom */}
               <span
                 style={{
                   fontSize: '0.78rem',
@@ -575,7 +577,6 @@ export default function AdminDashboardPage() {
                 {Math.round(zoomLevel * 100)}%
               </span>
 
-              {/* Tombol Zoom In */}
               <button
                 type="button"
                 title="Perbesar Gambar (Zoom In)"
@@ -601,7 +602,6 @@ export default function AdminDashboardPage() {
                 <span>Zoom In</span>
               </button>
 
-              {/* Tombol Reset Zoom */}
               {(zoomLevel !== 1 || panOffset.x !== 0 || panOffset.y !== 0) && (
                 <button
                   type="button"
@@ -630,7 +630,6 @@ export default function AdminDashboardPage() {
               )}
             </div>
 
-            {/* Area Tampilan Gambar Interaktif (Bisa Digeser Bebas & Di-Zoom) */}
             <div
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
@@ -652,7 +651,6 @@ export default function AdminDashboardPage() {
                 touchAction: 'none',
               }}
             >
-              {/* Layer Gambar yang Digeser (Pan) dan Diperbesar (Zoom) */}
               <div
                 style={{
                   transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0)`,
@@ -682,7 +680,6 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-              {/* Pad Tombol Geser Arah (D-Pad Navigasi Cepat) */}
               <div
                 style={{
                   position: 'absolute',
@@ -705,7 +702,6 @@ export default function AdminDashboardPage() {
                 <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', marginBottom: 2 }}>
                   Geser Gambar
                 </div>
-                {/* Tombol Atas */}
                 <button
                   type="button"
                   title="Geser ke Atas"
@@ -728,7 +724,6 @@ export default function AdminDashboardPage() {
                 >
                   <ArrowUp size={15} />
                 </button>
-                {/* Baris Kiri, Tengah, Kanan */}
                 <div style={{ display: 'flex', gap: 3 }}>
                   <button
                     type="button"
@@ -799,7 +794,6 @@ export default function AdminDashboardPage() {
                     <ArrowRight size={15} />
                   </button>
                 </div>
-                {/* Tombol Bawah */}
                 <button
                   type="button"
                   title="Geser ke Bawah"
@@ -824,7 +818,6 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
 
-              {/* Petunjuk Interaktif di Kiri Bawah */}
               <div
                 style={{
                   position: 'absolute',
@@ -893,7 +886,7 @@ export default function AdminDashboardPage() {
                       setZoomLevel(1);
                     }}
                   >
-                    Setujui (Upgrade)
+                    Setujui ({selectedProof.plan.toUpperCase()})
                   </button>
                 </>
               ) : (

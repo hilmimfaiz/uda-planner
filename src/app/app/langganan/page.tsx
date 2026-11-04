@@ -6,20 +6,15 @@ import {
   CheckCircle2,
   Copy,
   UploadCloud,
-  CreditCard,
   ShieldCheck,
   Clock,
   Landmark,
   Check,
   ArrowRight,
   AlertCircle,
-  FileCheck,
   Loader2,
-  Info,
-  Upload,
   Camera,
   Trash2,
-  Image as ImageIcon,
   MessageCircle,
   X,
   Sparkles,
@@ -65,12 +60,22 @@ export default function LanggananPage() {
   const { showSuccess, showError } = useModal();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [plans, setPlans] = useState<DynamicPlan[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<BankAccountItem[]>([]);
+  // Inisialisasi langsung dari cache/default tanpa layar loading yang menghambat
+  const [plans, setPlans] = useState<DynamicPlan[]>(() => PlanService.getCachedActivePlans());
+  const [bankAccounts, setBankAccounts] = useState<BankAccountItem[]>(() => BankService.getCachedActiveBankAccounts());
   const [selectedPlanCode, setSelectedPlanCode] = useState<string>('pro');
-  const [selectedDurationIndex, setSelectedDurationIndex] = useState<Record<string, number>>({});
-  const [selectedBankId, setSelectedBankId] = useState<string>('');
-  const [isPageLoading, setIsPageLoading] = useState(true);
+  const [selectedDurationIndex, setSelectedDurationIndex] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    PlanService.getCachedActivePlans().forEach((p) => {
+      initial[p.code] = 0;
+    });
+    return initial;
+  });
+  const [selectedBankId, setSelectedBankId] = useState<string>(() => {
+    const cachedBanks = BankService.getCachedActiveBankAccounts();
+    return cachedBanks[0]?.id || 'bank-bca';
+  });
+  const [isPageLoading, setIsPageLoading] = useState(false);
 
   // Status Keanggotaan TIM
   const [teamMembership, setTeamMembership] = useState<{
@@ -113,6 +118,15 @@ export default function LanggananPage() {
 
   const loadData = async () => {
     try {
+      // Tampilkan cache pembayaran secara instan terlebih dahulu
+      if (user?.id || user?.email) {
+        const cachedPays = PaymentService.getCachedPayments(user?.id, user?.email);
+        if (cachedPays.length > 0 && userPaymentsRef.current.length === 0) {
+          setUserPayments(cachedPays);
+          userPaymentsRef.current = cachedPays;
+        }
+      }
+
       const [pList, bList, myPayments, appSettings] = await Promise.all([
         PlanService.getActivePlans(),
         BankService.getActiveBankAccounts(),
@@ -126,56 +140,26 @@ export default function LanggananPage() {
 
       if (pList && pList.length > 0) {
         setPlans(pList);
-        const initialDurIdx: Record<string, number> = {};
-        pList.forEach((p) => {
-          initialDurIdx[p.code] = 0;
+        setSelectedDurationIndex((prev) => {
+          const next = { ...prev };
+          pList.forEach((p) => {
+            if (next[p.code] === undefined) next[p.code] = 0;
+          });
+          return next;
         });
-        setSelectedDurationIndex(initialDurIdx);
       }
 
       if (bList && bList.length > 0) {
         setBankAccounts(bList);
-        setSelectedBankId(bList[0].id);
+        setSelectedBankId((prev) => (bList.some((b) => b.id === prev) ? prev : bList[0].id));
       }
 
       if (myPayments) {
-        const activePlan = account?.plan_code || 'free';
-        const hasPaidPlan = activePlan === 'pro' || activePlan === 'team';
+        setUserPayments(myPayments);
+        userPaymentsRef.current = myPayments;
 
-        const normalizedPayments = myPayments.map((p: any) => {
-          if (hasPaidPlan && p.status === 'pending' && (p.plan_code === activePlan || activePlan === 'team')) {
-            return { ...p, status: 'approved' };
-          }
-          return p;
-        });
-
-        setUserPayments(normalizedPayments);
-        userPaymentsRef.current = normalizedPayments;
-
-        // Bersihkan status pending di localStorage jika akun sudah aktif di paket tersebut
-        if (hasPaidPlan && typeof window !== 'undefined') {
-          try {
-            const rawAdmin = localStorage.getItem('uda_admin_payments');
-            if (rawAdmin) {
-              const list = JSON.parse(rawAdmin);
-              let changed = false;
-              const updatedList = list.map((item: any) => {
-                const matchUser = (user?.id && item.userId === user.id) || (user?.email && item.email?.toLowerCase() === user.email.toLowerCase());
-                if (matchUser && item.status === 'pending' && (item.plan === activePlan || activePlan === 'team')) {
-                  changed = true;
-                  return { ...item, status: 'approved' };
-                }
-                return item;
-              });
-              if (changed) {
-                localStorage.setItem('uda_admin_payments', JSON.stringify(updatedList));
-              }
-            }
-          } catch (e) {}
-        }
-
-        // Tandai pembayaran yang sudah approved sebelumnya agar tidak pernah memicu notifikasi ulang
-        normalizedPayments.forEach((p: any) => {
+        // Tandai pembayaran yang sudah approved sebelumnya agar tidak memicu popup notifikasi berulang
+        myPayments.forEach((p: any) => {
           if (p.status === 'approved') {
             notifiedPaymentsRef.current.add(p.id);
             try {
@@ -184,7 +168,7 @@ export default function LanggananPage() {
           }
         });
 
-        // B1: Verifikasi dan sinkronkan durasi masa aktif jika user memiliki pembayaran berstatus approved
+        // B1 & Sinkronisasi Paket Pro / Team: Verifikasi jika user memiliki pembayaran berstatus approved
         const approvedList = myPayments.filter((p: any) => p.status === 'approved');
         if (approvedList.length > 0) {
           const latestApproved = approvedList[0];
@@ -194,7 +178,7 @@ export default function LanggananPage() {
             latestApproved.amount,
             latestApproved.plan_code
           );
-          const approvedPlan = latestApproved.plan_code || 'pro';
+          const approvedPlan = (latestApproved.plan_code || 'pro').toLowerCase();
           let currentPlanUntil = account?.plan_until;
           if (typeof window !== 'undefined') {
             try {
@@ -209,7 +193,7 @@ export default function LanggananPage() {
           const currentExpiry = currentPlanUntil ? new Date(currentPlanUntil).getTime() : 0;
           const isExpiredOrMissing = isNaN(currentExpiry) || currentExpiry <= Date.now();
           const needsPlanUpgrade =
-            account?.plan_code === 'free' ||
+            account?.plan_code !== approvedPlan ||
             !account?.plan_code ||
             isExpiredOrMissing ||
             (dur.days >= 90 && (currentExpiry - Date.now()) / 86400000 < dur.days - 30);
@@ -229,6 +213,8 @@ export default function LanggananPage() {
                   plan_until: fixedPlanUntil,
                 };
                 localStorage.setItem('uda_auth_account', JSON.stringify(updatedAcc));
+                if (user?.id) localStorage.setItem(`uda_user_plan_${user.id}`, approvedPlan);
+                if (user?.email) localStorage.setItem(`uda_user_plan_${user.email.toLowerCase()}`, approvedPlan);
               } catch (e) {}
             }
 
@@ -278,7 +264,7 @@ export default function LanggananPage() {
             setTimeout(() => {
               const el = document.getElementById('tour-langganan-payment');
               if (el) el.scrollIntoView({ behavior: 'smooth' });
-            }, 400);
+            }, 300);
           }
         }
       }
@@ -340,16 +326,42 @@ export default function LanggananPage() {
       });
 
       if (newlyApproved) {
-        // Tandai SEGERA agar tidak pernah muncul lebih dari satu kali
         notifiedPaymentsRef.current.add(newlyApproved.id);
+        const targetPlan = (newlyApproved.plan_code || 'pro').toLowerCase();
+        const durDays = Number(newlyApproved.duration_days) || 30;
+        const fixedUntil = new Date(Date.now() + durDays * 86400000).toISOString();
+
         try {
           localStorage.setItem('uda_notified_approved_' + newlyApproved.id, 'true');
+          if (user?.id) localStorage.setItem(`uda_user_plan_${user.id}`, targetPlan);
+          if (user?.email) localStorage.setItem(`uda_user_plan_${user.email.toLowerCase()}`, targetPlan);
+          const rawAcc = localStorage.getItem('uda_auth_account');
+          const accObj = rawAcc ? JSON.parse(rawAcc) : {};
+          localStorage.setItem(
+            'uda_auth_account',
+            JSON.stringify({
+              ...accObj,
+              plan_code: targetPlan,
+              plan_until: fixedUntil,
+            })
+          );
         } catch (e) {}
+
+        window.dispatchEvent(
+          new CustomEvent('uda_account_updated', {
+            detail: {
+              userId: user?.id,
+              email: user?.email,
+              planCode: targetPlan,
+              planUntil: fixedUntil,
+            },
+          })
+        );
 
         await refreshUserData();
         showSuccess(
           'Paket Berhasil Diaktifkan!',
-          `Selamat! Pembayaran Anda telah dikonfirmasi oleh Admin. Akun Anda telah ditingkatkan menjadi paket ${(newlyApproved.plan_code || 'Pro').toUpperCase()}.`
+          `Selamat! Pembayaran Anda telah dikonfirmasi oleh Admin. Akun Anda kini resmi berlangganan paket ${targetPlan.toUpperCase()}.`
         );
       }
     };
@@ -498,8 +510,8 @@ export default function LanggananPage() {
         proofPath: finalProofUrl,
       });
 
-      setUserPayments((prev) => [newPayment, ...prev]);
-      userPaymentsRef.current = [newPayment, ...userPaymentsRef.current];
+      setUserPayments((prev) => [newPayment, ...prev.filter((p) => p.id !== newPayment.id)]);
+      userPaymentsRef.current = [newPayment, ...userPaymentsRef.current.filter((p) => p.id !== newPayment.id)];
       setSuccessPaymentData({
         ...newPayment,
         targetBankName: selectedBank?.bankName,
@@ -521,20 +533,8 @@ export default function LanggananPage() {
     }
   };
 
-  // Cek apakah ada pembayaran yang sedang pending
-  // JIKA akun pengguna sudah aktif di paket berbayar (Pro atau Team),
-  // jangan pernah menampilkan banner "Menunggu Verifikasi Admin" lagi!
-  const currentActivePlan = account?.plan_code || 'free';
-  const hasActivePaidPlan = currentActivePlan === 'pro' || currentActivePlan === 'team';
-
-  const pendingPayment = userPayments.find((p) => {
-    if (p.status !== 'pending') return false;
-    if (hasActivePaidPlan) {
-      if (currentActivePlan === 'team') return false; // Sudah level tertinggi (TEAM), tidak ada lagi pending
-      if (currentActivePlan === p.plan_code) return false;
-    }
-    return true;
-  });
+  // Tampilkan banner menunggu verifikasi jika masih ada transaksi dengan status pending
+  const pendingPayment = userPayments.find((p) => p.status === 'pending');
 
   if (isPageLoading) {
     return (
@@ -549,12 +549,6 @@ export default function LanggananPage() {
           <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
             Memuat data paket dan status akun Anda...
           </p>
-        </div>
-
-        <div className="uda-card" style={{ padding: 56, textAlign: 'center', color: '#64748b', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
-          <Loader2 size={36} className="animate-spin" style={{ color: '#16a34a' }} />
-          <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>Memuat Konfigurasi Paket & Transaksi...</div>
-          <div style={{ fontSize: '0.84rem', color: '#64748b' }}>Mohon tunggu sebentar, sedang menyinkronkan data langganan.</div>
         </div>
       </div>
     );
@@ -784,7 +778,6 @@ export default function LanggananPage() {
         )}
       </div>
 
-
       {/* PILIHAN PAKET DINAMIS */}
       <div id="tour-langganan-plans">
         <h2 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', marginBottom: 6 }}>
@@ -827,7 +820,7 @@ export default function LanggananPage() {
                   borderRadius: 20,
                   border: isSelected ? '2px solid #16a34a' : '1px solid #e2e8f0',
                   boxShadow: isSelected ? '0 12px 30px rgba(22, 163, 74, 0.12)' : 'none',
-                  backgroundColor: isSelected ? '#ffffff' : '#ffffff',
+                  backgroundColor: '#ffffff',
                   cursor: 'pointer',
                   position: 'relative',
                   transition: 'all 0.2s ease',
@@ -1363,7 +1356,7 @@ export default function LanggananPage() {
                 <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 2 }}>Alur Verifikasi:</div>
                 1. Transfer nominal tepat ke rekening di samping.<br />
                 2. Unggah foto struk dan klik tombol Konfirmasi Pembayaran.<br />
-                3. Admin memeriksa mutasi dan durasi paket Anda otomatis bertambah!
+                3. Admin memeriksa mutasi dan akun Anda otomatis berubah sesuai paket yang dipilih!
               </div>
 
               <button
