@@ -204,10 +204,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoading && !user && !profile) {
-      const hasCookie = typeof document !== 'undefined' && (document.cookie.includes('auth-token') || document.cookie.includes('uda_auth_token'));
-      const hasLocalStorage = typeof window !== 'undefined' && !!localStorage.getItem('uda_auth_user');
-      if (!hasCookie && !hasLocalStorage) {
-        router.push(`/masuk?redirect=${encodeURIComponent(pathname)}`);
+      if (typeof window !== 'undefined') {
+        window.location.replace(`/masuk?redirect=${encodeURIComponent(pathname)}`);
+      } else {
+        router.replace(`/masuk?redirect=${encodeURIComponent(pathname)}`);
       }
     }
   }, [isLoading, user, profile, pathname, router]);

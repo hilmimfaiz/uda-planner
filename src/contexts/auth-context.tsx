@@ -844,19 +844,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('uda_auth_user');
       localStorage.removeItem('uda_auth_profile');
       localStorage.removeItem('uda_auth_account');
+      if (user?.id) {
+        localStorage.removeItem('uda_system_role_' + user.id);
+        localStorage.removeItem('uda_team_membership_' + user.id);
+      }
+      // Bersihkan seluruh token cache auth Supabase di localStorage
+      Object.keys(localStorage).forEach((key) => {
+        if ((key.startsWith('sb-') && key.endsWith('-auth-token')) || key.startsWith('uda_auth_')) {
+          localStorage.removeItem(key);
+        }
+      });
+      // Bersihkan seluruh cookie auth
       if (typeof document !== 'undefined') {
-        document.cookie = 'uda_auth_token=; path=/; max-age=0; SameSite=Lax';
+        document.cookie = 'uda_auth_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+        const cookies = document.cookie.split(';');
+        for (const cookie of cookies) {
+          const eqPos = cookie.indexOf('=');
+          const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+          if (name.includes('auth') || name.includes('sb-') || name.includes('uda_')) {
+            document.cookie = `${name}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+          }
+        }
       }
     } catch (e) {}
 
     if (supabase) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch (e) {
+        try {
+          await supabase.auth.signOut();
+        } catch (e2) {}
+      }
     }
+
     setUser(null);
     setSession(null);
     setProfile(null);
     setAccount(null);
-    router.push('/masuk');
+
+    if (typeof window !== 'undefined') {
+      window.location.replace('/masuk?logout=true');
+    } else {
+      router.push('/masuk?logout=true');
+    }
   };
 
   const signInWithGoogle = async (targetPath: string = '/app') => {

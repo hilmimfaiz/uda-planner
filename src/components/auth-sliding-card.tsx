@@ -92,7 +92,9 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('logout') === 'true') {
-        signOut();
+        if (user) {
+          signOut();
+        }
         return;
       }
       if (urlParams.get('switch') === 'true') {
