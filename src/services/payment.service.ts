@@ -72,18 +72,18 @@ export class PaymentService {
 
   static async getPayments(accountId?: string, email?: string): Promise<any[]> {
     const supabase = createClient();
+    let dbPayments: any[] = [];
 
-    // Jalankan query Supabase & API Server secara PARALEL agar cepat tanpa jeda
-    const dbPromise = (async () => {
-      if (!supabase) return [];
+    // 1. Prioritaskan query langsung ke database Supabase (cepat ~50ms, tanpa serverless cold-start)
+    if (supabase) {
       try {
         let query = supabase.from('payments' as any).select('*').order('created_at', { ascending: false });
         if (accountId && accountId.includes('-') && accountId.length > 20) {
           query = query.eq('user_id', accountId);
         }
         const { data, error } = await query;
-        if (!error && data) {
-          return data
+        if (!error && data && data.length > 0) {
+          dbPayments = data
             .filter((p: any) => !isDummyPaymentItem(p))
             .map((p: any) => {
               const planCode = (p.plan_code || 'pro').toLowerCase();
@@ -100,11 +100,11 @@ export class PaymentService {
       } catch (err) {
         console.warn('PaymentService.getPayments db error:', err);
       }
-      return [];
-    })();
+    }
 
-    const apiPromise = (async () => {
-      if (typeof window === 'undefined') return [];
+    // 2. Hanya panggil API server jika query database langsung tidak mengembalikan data (misal saat offline / fallback)
+    let serverItems: any[] = [];
+    if (dbPayments.length === 0 && typeof window !== 'undefined') {
       try {
         const params = new URLSearchParams();
         if (accountId) params.set('accountId', accountId);
@@ -113,7 +113,7 @@ export class PaymentService {
         if (res.ok) {
           const resData = await res.json();
           if (resData.success && Array.isArray(resData.data)) {
-            return resData.data
+            serverItems = resData.data
               .filter((it: any) => !isDummyPaymentItem(it))
               .map((it: any) => {
                 const planCode = (it.plan || it.plan_code || 'pro').toLowerCase();
@@ -137,10 +137,7 @@ export class PaymentService {
           }
         }
       } catch {}
-      return [];
-    })();
-
-    const [dbPayments, serverItems] = await Promise.all([dbPromise, apiPromise]);
+    }
 
     const mergedMap = new Map<string, any>();
     dbPayments.forEach((p: any) => mergedMap.set(p.id, p));

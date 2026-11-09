@@ -183,6 +183,17 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
     e.preventDefault();
     setRegError(null);
 
+    const cleanRegName = regFullName.trim();
+    if (!cleanRegName) {
+      setRegError('Nama Lengkap tidak boleh kosong.');
+      return;
+    }
+
+    if (!/^[a-zA-Z\s]+$/.test(cleanRegName)) {
+      setRegError('Nama Lengkap hanya boleh berupa huruf dan spasi (tidak boleh mengandung angka atau simbol).');
+      return;
+    }
+
     if (regPassword.length < 6) {
       setRegError('Kata sandi harus minimal 6 karakter demi keamanan akun Anda.');
       return;
@@ -791,7 +802,10 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
                       autoFocus={mode === 'register'}
                       placeholder="Contoh: Muhammad Rizki"
                       value={regFullName}
-                      onChange={(e) => setRegFullName(e.target.value)}
+                      onChange={(e) => {
+                        const filtered = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                        setRegFullName(filtered);
+                      }}
                       disabled={isRegLoading}
                       style={{
                         width: '100%',

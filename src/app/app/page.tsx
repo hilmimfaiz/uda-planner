@@ -38,7 +38,6 @@ export default function BerandaPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [brandError, setBrandError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
   // Greeting & Nama User
   const rawName =
@@ -59,15 +58,6 @@ export default function BerandaPage() {
   }, [user]);
 
   const currentAvatarUrl = profile?.avatar_url || localAvatar;
-
-  // Real-time clock sinkron
-  useEffect(() => {
-    setCurrentTime(new Date());
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Ambil daftar brand ketika akun tersedia
   useEffect(() => {
@@ -156,7 +146,7 @@ export default function BerandaPage() {
   };
 
   // Helper salam waktu
-  const currentHour = currentTime.getHours();
+  const currentHour = new Date().getHours();
   let greetingText = "Selamat Pagi";
   if (currentHour >= 4 && currentHour < 11) {
     greetingText = "Selamat Pagi";
@@ -183,15 +173,6 @@ export default function BerandaPage() {
     month: "long",
     year: "numeric",
   });
-
-  const timeString = currentTime
-    .toLocaleTimeString("id-ID", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    })
-    .replace(/\./g, ":");
 
   const handleCopyCaption = (post: DummyPost) => {
     const textToCopy = `${post.caption}\n\n${post.hashtags}`;
@@ -349,24 +330,7 @@ export default function BerandaPage() {
                   })}
                 </span>
                 <span style={{ color: "#cbd5e1" }}>•</span>
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    fontWeight: 700,
-                    color: "#15803d",
-                    backgroundColor: "#ffffff",
-                    padding: "2px 8px",
-                    borderRadius: 6,
-                    border: "1px solid #bbf7d0",
-                    fontVariantNumeric: "tabular-nums",
-                    fontSize: "0.84rem",
-                  }}
-                >
-                  <Clock size={13} />
-                  {timeString} WIB
-                </span>
+                <LiveDigitalClock />
               </div>
             </div>
           </div>
@@ -1050,5 +1014,50 @@ export default function BerandaPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Komponen jam terisolasi agar dashboard tidak re-render seluruh halaman tiap 1 detik
+function LiveDigitalClock() {
+  const [time, setTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setTime(new Date());
+    const timer = setInterval(() => {
+      setTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeString = time
+    ? time
+        .toLocaleTimeString("id-ID", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        })
+        .replace(/\./g, ":")
+    : "--:--:--";
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        fontWeight: 700,
+        color: "#15803d",
+        backgroundColor: "#ffffff",
+        padding: "2px 8px",
+        borderRadius: 6,
+        border: "1px solid #bbf7d0",
+        fontVariantNumeric: "tabular-nums",
+        fontSize: "0.84rem",
+      }}
+    >
+      <Clock size={13} />
+      {timeString} WIB
+    </span>
   );
 }

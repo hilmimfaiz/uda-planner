@@ -140,6 +140,7 @@ export default function DaftarBrandPage() {
     'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150'
   );
   const [isUploadingNewAvatar, setIsUploadingNewAvatar] = useState(false);
+  const [isCreatingBrand, setIsCreatingBrand] = useState(false);
   const [brandPlatforms, setBrandPlatforms] = useState<string[]>(['instagram', 'tiktok']);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['instagram', 'tiktok']);
   const [platformInput, setPlatformInput] = useState('');
@@ -553,6 +554,7 @@ export default function DaftarBrandPage() {
                   setShowAddBrandModal(false);
                   return;
                 }
+                setIsCreatingBrand(true);
                 try {
                   const finalPlatforms = selectedPlatforms.length > 0 ? selectedPlatforms : ['instagram'];
                   const created = await BrandService.createBrand({
@@ -577,6 +579,8 @@ export default function DaftarBrandPage() {
                   );
                 } catch (err: any) {
                   showError('Gagal Membuat Brand', err.message || 'Silakan periksa kembali data input.');
+                } finally {
+                  setIsCreatingBrand(false);
                 }
               }}
               style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
@@ -832,11 +836,12 @@ export default function DaftarBrandPage() {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
-                <button type="button" className="btn-uda btn-uda-secondary" onClick={() => setShowAddBrandModal(false)}>
+                <button type="button" className="btn-uda btn-uda-secondary" onClick={() => setShowAddBrandModal(false)} disabled={isCreatingBrand}>
                   Batal
                 </button>
-                <button type="submit" className="btn-uda btn-uda-primary" disabled={isUploadingNewAvatar}>
-                  Buat Brand
+                <button type="submit" className="btn-uda btn-uda-primary" disabled={isUploadingNewAvatar || isCreatingBrand} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {isCreatingBrand && <Loader2 size={16} className="animate-spin" />}
+                  <span>{isCreatingBrand ? 'Menyimpan Brand...' : 'Buat Brand'}</span>
                 </button>
               </div>
             </form>

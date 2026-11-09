@@ -29,15 +29,17 @@ import {
 import { AdminService, AdminUserItem } from '@/services/admin.service';
 import { VerificationService } from '@/services/verification.service';
 import { useModal } from '@/contexts/modal-context';
+import { playSuccessSound } from '@/lib/audio-effects';
 
 export default function AdminPenggunaPage() {
-  const { showSuccess, confirmAction } = useModal();
+  const { showSuccess, showError, confirmAction } = useModal();
   const [users, setUsers] = useState<AdminUserItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<AdminUserItem | null>(null);
   const [detailUser, setDetailUser] = useState<AdminUserItem | null>(null);
   const [userToDelete, setUserToDelete] = useState<AdminUserItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdatingPlan, setIsUpdatingPlan] = useState(false);
   const [newPlan, setNewPlan] = useState<'free' | 'pro' | 'team'>('pro');
   const [durationDays, setDurationDays] = useState(30);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -185,61 +187,69 @@ export default function AdminPenggunaPage() {
 
   const handleUpdatePlan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUser) return;
+    if (!selectedUser || isUpdatingPlan) return;
 
-    await AdminService.updateUserPlan(
-      selectedUser.userId || selectedUser.id,
-      newPlan,
-      durationDays,
-      { email: selectedUser.email }
-    );
-
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === selectedUser.id) {
-          const until =
-            newPlan === 'free'
-              ? null
-              : new Date(Date.now() + durationDays * 86400000).toLocaleDateString('id-ID', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                });
-          return {
-            ...u,
-            plan: newPlan,
-            planUntil: until,
-          };
-        }
-        return u;
-      })
-    );
-
-    if (detailUser && detailUser.id === selectedUser.id) {
-      setDetailUser((prev) =>
-        prev
-          ? {
-              ...prev,
-              plan: newPlan,
-              planUntil:
-                newPlan === 'free'
-                  ? null
-                  : new Date(Date.now() + durationDays * 86400000).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    }),
-            }
-          : null
+    setIsUpdatingPlan(true);
+    try {
+      await AdminService.updateUserPlan(
+        selectedUser.userId || selectedUser.id,
+        newPlan,
+        durationDays,
+        { email: selectedUser.email }
       );
-    }
 
-    const userName = selectedUser.name;
-    setSelectedUser(null);
-    showSuccess(
-      'Paket Pengguna Berhasil Diubah!',
-      `Paket langganan untuk "${userName}" telah diperbarui menjadi ${newPlan.toUpperCase()} selama ${durationDays} hari.`
-    );
+      setUsers((prev) =>
+        prev.map((u) => {
+          if (u.id === selectedUser.id) {
+            const until =
+              newPlan === 'free'
+                ? null
+                : new Date(Date.now() + durationDays * 86400000).toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  });
+            return {
+              ...u,
+              plan: newPlan,
+              planUntil: until,
+            };
+          }
+          return u;
+        })
+      );
+
+      if (detailUser && detailUser.id === selectedUser.id) {
+        setDetailUser((prev) =>
+          prev
+            ? {
+                ...prev,
+                plan: newPlan,
+                planUntil:
+                  newPlan === 'free'
+                    ? null
+                    : new Date(Date.now() + durationDays * 86400000).toLocaleDateString('id-ID', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      }),
+              }
+            : null
+        );
+      }
+
+      const userName = selectedUser.name;
+      setSelectedUser(null);
+      playSuccessSound();
+      showSuccess(
+        'Paket Pengguna Berhasil Diubah!',
+        `Paket langganan untuk "${userName}" telah diperbarui menjadi ${newPlan.toUpperCase()} selama ${durationDays} hari.`
+      );
+    } catch (err: any) {
+      showError('Gagal Mengubah Paket', err?.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsUpdatingPlan(false);
+    }
   };
 
   const handleToggleSuspend = (id: string, currentStatus: boolean) => {
@@ -1141,8 +1151,20 @@ export default function AdminPenggunaPage() {
                 >
                   Batal
                 </button>
-                <button type="submit" className="btn-uda btn-uda-primary" style={{ flex: 1 }}>
-                  Simpan Paket
+                <button
+                  type="submit"
+                  className="btn-uda btn-uda-primary"
+                  style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  disabled={isUpdatingPlan}
+                >
+                  {isUpdatingPlan ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Menyimpan Paket...</span>
+                    </>
+                  ) : (
+                    <span>Simpan Paket</span>
+                  )}
                 </button>
               </div>
             </form>

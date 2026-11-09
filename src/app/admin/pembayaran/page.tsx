@@ -23,6 +23,7 @@ import {
 import { AdminService, AdminPaymentItem } from '@/services/admin.service';
 import { resolvePaymentDuration } from '@/services/plan.service';
 import { useModal } from '@/contexts/modal-context';
+import { playSuccessSound } from '@/lib/audio-effects';
 
 type PaymentItem = AdminPaymentItem;
 
@@ -31,6 +32,7 @@ export default function AdminPembayaranPage() {
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [selectedProof, setSelectedProof] = useState<PaymentItem | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
@@ -124,6 +126,7 @@ export default function AdminPembayaranPage() {
     if (!target || target.status === 'approved') return;
 
     setIsProcessing(true);
+    setApprovingId(id);
     try {
       const rawPlan = (target?.plan || 'pro').toLowerCase();
       const targetPlan: 'pro' | 'team' = rawPlan === 'team' ? 'team' : 'pro';
@@ -134,25 +137,32 @@ export default function AdminPembayaranPage() {
         targetPlan
       );
 
-      // Optimistic update agar UI langsung berubah tanpa jeda
-      setPayments((prev) =>
-        prev.map((p) =>
-          p.id === id ? { ...p, status: 'approved', plan: targetPlan, durationDays: dur.days, durationLabel: dur.label } : p
-        )
-      );
-      setSelectedProof(null);
-
       await AdminService.approvePayment(id, target?.userId, targetPlan, {
         email: target?.email,
         durationDays: dur.days,
       });
 
+      // Update state data lokal
+      setPayments((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, status: 'approved', plan: targetPlan, durationDays: dur.days, durationLabel: dur.label } : p
+        )
+      );
+
+      // Tutup modal setelah proses persetujuan server selesai
+      setSelectedProof(null);
+      setZoomLevel(1);
+
+      playSuccessSound();
       showSuccess(
         'Pembayaran Berhasil Disetujui!',
         `Bukti transfer dari ${target?.user} telah diverifikasi. Akun pengguna otomatis ditingkatkan ke paket ${targetPlan.toUpperCase()} (${dur.label} / ${dur.days} Hari).`
       );
+    } catch (err: any) {
+      showError('Gagal Menyetujui Pembayaran', err?.message || 'Terjadi kesalahan sistem saat memproses persetujuan.');
     } finally {
       setIsProcessing(false);
+      setApprovingId(null);
     }
   };
 
@@ -163,20 +173,33 @@ export default function AdminPembayaranPage() {
     }
     const target = payments.find((p) => p.id === id);
     const reasonText = rejectReason.trim();
-    setPayments((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, status: 'rejected', reason: reasonText } : p
-      )
-    );
-    setSelectedProof(null);
-    setShowRejectInput(false);
-    setRejectReason('');
 
-    await AdminService.rejectPayment(id, reasonText);
-    showSuccess(
-      'Pembayaran Ditolak',
-      `Pembayaran dari ${target?.user} telah ditolak dengan catatan: "${reasonText}".`
-    );
+    setIsProcessing(true);
+    setApprovingId(id);
+    try {
+      await AdminService.rejectPayment(id, reasonText);
+
+      setPayments((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, status: 'rejected', reason: reasonText } : p
+        )
+      );
+      setSelectedProof(null);
+      setZoomLevel(1);
+      setShowRejectInput(false);
+      setRejectReason('');
+
+      playSuccessSound();
+      showSuccess(
+        'Pembayaran Ditolak',
+        `Pembayaran dari ${target?.user} telah ditolak dengan catatan: "${reasonText}".`
+      );
+    } catch (err: any) {
+      showError('Gagal Menolak Pembayaran', err?.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsProcessing(false);
+      setApprovingId(null);
+    }
   };
 
   const filteredPayments = payments.filter((p) => {
@@ -341,18 +364,40 @@ export default function AdminPembayaranPage() {
                         )}
                       </td>
                       <td style={{ padding: '14px 18px', textAlign: 'right' }}>
-                        <button
-                          className="btn-uda btn-uda-secondary btn-uda-sm"
-                          onClick={() => {
-                            setSelectedProof(p);
-                            setZoomLevel(1);
-                            setShowRejectInput(false);
-                            setRejectReason('');
-                          }}
-                        >
-                          <Eye size={13} />
-                          <span>Periksa</span>
-                        </button>
+                        <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                          <button
+                            className="btn-uda btn-uda-secondary btn-uda-sm"
+                            onClick={() => {
+                              setSelectedProof(p);
+                              setZoomLevel(1);
+                              setShowRejectInput(false);
+                              setRejectReason('');
+                            }}
+                          >
+                            <Eye size={13} />
+                            <span>Periksa</span>
+                          </button>
+                          {p.status === 'pending' && (
+                            <button
+                              className="btn-uda btn-uda-primary btn-uda-sm"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                              disabled={isProcessing}
+                              onClick={() => handleApprove(p.id)}
+                            >
+                              {isProcessing && approvingId === p.id ? (
+                                <>
+                                  <Loader2 size={13} className="animate-spin" />
+                                  <span>Menyetujui...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 size={13} />
+                                  <span>Setujui</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -423,19 +468,41 @@ export default function AdminPembayaranPage() {
                     </div>
                   )}
 
-                  <button
-                    className="btn-uda btn-uda-secondary btn-uda-sm"
-                    style={{ width: '100%', marginTop: 4, justifyContent: 'center', padding: '9px 12px' }}
-                    onClick={() => {
-                      setSelectedProof(p);
-                      setZoomLevel(1);
-                      setShowRejectInput(false);
-                      setRejectReason('');
-                    }}
-                  >
-                    <Eye size={14} />
-                    <span>Periksa Bukti Transfer</span>
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                    <button
+                      className="btn-uda btn-uda-secondary btn-uda-sm"
+                      style={{ flex: 1, justifyContent: 'center', padding: '9px 12px' }}
+                      onClick={() => {
+                        setSelectedProof(p);
+                        setZoomLevel(1);
+                        setShowRejectInput(false);
+                        setRejectReason('');
+                      }}
+                    >
+                      <Eye size={14} />
+                      <span>Periksa Bukti</span>
+                    </button>
+                    {p.status === 'pending' && (
+                      <button
+                        className="btn-uda btn-uda-primary btn-uda-sm"
+                        style={{ flex: 1, justifyContent: 'center', padding: '9px 12px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        disabled={isProcessing}
+                        onClick={() => handleApprove(p.id)}
+                      >
+                        {isProcessing && approvingId === p.id ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>Menyetujui...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 size={14} />
+                            <span>Setujui</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -872,32 +939,50 @@ export default function AdminPembayaranPage() {
                     <>
                       <button
                         className="btn-uda btn-uda-danger"
-                        style={{ flex: 1 }}
+                        style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                        disabled={isProcessing}
                         onClick={() => setShowRejectInput(true)}
                       >
                         Tolak
                       </button>
                       <button
                         className="btn-uda btn-uda-primary"
-                        style={{ flex: 1 }}
+                        style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                        disabled={isProcessing}
                         onClick={() => {
                           handleApprove(selectedProof.id);
-                          setZoomLevel(1);
                         }}
                       >
-                        Setujui Paket ({selectedProof.plan.toUpperCase()})
+                        {isProcessing ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            <span>Sedang Menyetujui...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 size={16} />
+                            <span>Setujui Paket ({selectedProof.plan.toUpperCase()})</span>
+                          </>
+                        )}
                       </button>
                     </>
                   ) : (
                     <button
                       className="btn-uda btn-uda-danger"
-                      style={{ flex: 1 }}
+                      style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                      disabled={isProcessing}
                       onClick={() => {
                         handleReject(selectedProof.id);
-                        setZoomLevel(1);
                       }}
                     >
-                      Konfirmasi Tolak
+                      {isProcessing ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Menyimpan Penolakan...</span>
+                        </>
+                      ) : (
+                        <span>Konfirmasi Tolak</span>
+                      )}
                     </button>
                   )}
                 </>

@@ -171,7 +171,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           full_name: googleFullName || currentUser.email?.split('@')[0] || 'Pengguna UdaPlanner',
           avatar_url: resolvedAvatar || null,
           phone: localPhone || currentUser.phone || null,
-          role: isEmailAdmin ? 'admin' : 'user',
           reminder_minutes: 15,
         };
         const { data: createdProf } = await (supabase.from('profiles' as any) as any).insert(newProfile).select().maybeSingle();

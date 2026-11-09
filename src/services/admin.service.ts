@@ -204,37 +204,10 @@ export class AdminService {
   static async getPayments(): Promise<AdminPaymentItem[]> {
     const stored = this.getCachedPayments();
     const supabase = createClient();
+    let dbPayments: AdminPaymentItem[] = [];
 
-    // Jalankan fetch API server dan query database Supabase secara PARALEL agar instan tanpa jeda
-    const apiPromise = (async (): Promise<AdminPaymentItem[]> => {
-      if (typeof window === 'undefined') return [];
-      try {
-        const res = await fetch('/api/payments?all=true');
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && Array.isArray(json.data)) {
-            return json.data
-              .filter((p: any) => !this.isDummyPayment(p))
-              .map((p: any) => {
-                const plan = ((p.plan || p.plan_code || 'pro').toLowerCase() as 'free' | 'pro' | 'team');
-                const resDur = resolvePaymentDuration(p.durationDays, p.durationLabel, p.amount, plan);
-                return {
-                  ...p,
-                  plan,
-                  durationDays: resDur.days,
-                  durationLabel: resDur.label,
-                };
-              });
-          }
-        }
-      } catch (apiErr) {
-        console.warn('AdminService.getPayments fetch /api/payments warning:', apiErr);
-      }
-      return [];
-    })();
-
-    const dbPromise = (async (): Promise<AdminPaymentItem[]> => {
-      if (!supabase) return [];
+    // 1. Query langsung dari database Supabase (cepat ~50ms, tanpa overhead serverless API)
+    if (supabase) {
       try {
         const [payRes, profRes] = await Promise.all([
           supabase.from('payments' as any).select('*').order('created_at', { ascending: false }),
@@ -243,7 +216,7 @@ export class AdminService {
 
         if (!payRes.error && payRes.data && payRes.data.length > 0) {
           const profMap = new Map((profRes.data || []).map((pr: any) => [pr.id, pr]));
-          return payRes.data
+          dbPayments = payRes.data
             .filter((p: any) => !this.isDummyPayment(p))
             .map((p: any) => {
               const prof: any = profMap.get(p.user_id) || {};
@@ -269,10 +242,34 @@ export class AdminService {
       } catch (err) {
         console.warn('AdminService.getPayments db fallback:', err);
       }
-      return [];
-    })();
+    }
 
-    const [apiPayments, dbPayments] = await Promise.all([apiPromise, dbPromise]);
+    // 2. Hanya fetch ke API server jika database kosong / offline
+    let apiPayments: AdminPaymentItem[] = [];
+    if (dbPayments.length === 0 && typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/payments?all=true');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data)) {
+            apiPayments = json.data
+              .filter((p: any) => !this.isDummyPayment(p))
+              .map((p: any) => {
+                const plan = ((p.plan || p.plan_code || 'pro').toLowerCase() as 'free' | 'pro' | 'team');
+                const resDur = resolvePaymentDuration(p.durationDays, p.durationLabel, p.amount, plan);
+                return {
+                  ...p,
+                  plan,
+                  durationDays: resDur.days,
+                  durationLabel: resDur.label,
+                };
+              });
+          }
+        }
+      } catch (apiErr) {
+        console.warn('AdminService.getPayments fetch /api/payments warning:', apiErr);
+      }
+    }
 
     const mergedMap = new Map<string, AdminPaymentItem>();
     dbPayments.forEach((p) => mergedMap.set(p.id, p));

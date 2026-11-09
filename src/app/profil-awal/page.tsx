@@ -224,8 +224,14 @@ export default function ProfilAwalPage() {
   // STEP 1: Simpan Profil dan Lanjut ke Pemilihan Paket
   const handleSaveProfileAndContinue = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim()) {
+    const cleanName = fullName.trim();
+    if (!cleanName) {
       setErrorMessage('Nama Lengkap tidak boleh kosong.');
+      return;
+    }
+
+    if (!/^[a-zA-Z\s]+$/.test(cleanName)) {
+      setErrorMessage('Nama Lengkap hanya boleh berupa huruf dan spasi (tidak boleh mengandung angka atau simbol).');
       return;
     }
 
@@ -1220,8 +1226,12 @@ export default function ProfilAwalPage() {
               type="text"
               required
               value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Masukkan nama lengkap Anda..."
+              onChange={(e) => {
+                const filtered = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                setFullName(filtered);
+                if (errorMessage) setErrorMessage(null);
+              }}
+              placeholder="Masukkan nama lengkap Anda (hanya huruf)..."
               disabled={isSaving}
               style={{
                 width: '100%',
@@ -1237,6 +1247,9 @@ export default function ProfilAwalPage() {
                 backgroundColor: '#ffffff',
               }}
             />
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 5, fontWeight: 600 }}>
+              * Hanya boleh berupa huruf dan spasi (tanpa angka atau simbol).
+            </div>
           </div>
 
           {/* Akun Terhubung Info */}

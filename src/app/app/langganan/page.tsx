@@ -380,12 +380,12 @@ export default function LanggananPage() {
     window.addEventListener('uda_account_updated', handleSync);
     window.addEventListener('focus', handleSync);
 
-    // Polling setiap 3 detik saat ada pembayaran pending
+    // Polling setiap 8 detik saat ada pembayaran pending (mencegah bandwidth berlebih & lag)
     const interval = setInterval(async () => {
       if (userPaymentsRef.current.some((p) => p.status === 'pending')) {
         await checkNewlyApprovedPayment();
       }
-    }, 3000);
+    }, 8000);
 
     return () => {
       window.removeEventListener('storage', handleSync);
@@ -518,7 +518,13 @@ export default function LanggananPage() {
         targetAccountNumber: selectedBank?.accountNumber,
         targetAccountName: selectedBank?.accountName,
       });
+
+      playSuccessSound();
       setShowSuccessModal(true);
+      showSuccess(
+        'Konfirmasi Pembayaran Berhasil Terkirim!',
+        'Bukti transfer pembayaran Anda telah berhasil kami terima. Admin akan memverifikasi dan paket akun Anda otomatis aktif!'
+      );
 
       // Reset form
       setSenderName('');

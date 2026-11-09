@@ -274,6 +274,16 @@ export default function AkunPenggunaPage() {
 
   const handleSaveProfile = async () => {
     if (!user) return;
+    const cleanName = fullName.trim();
+    if (!cleanName) {
+      showToast('Nama Lengkap tidak boleh kosong.');
+      return;
+    }
+    if (!/^[a-zA-Z\s]+$/.test(cleanName)) {
+      showToast('Nama Lengkap hanya boleh berupa huruf dan spasi (tanpa angka atau simbol).');
+      return;
+    }
+
     setIsSaving(true);
     try {
       // 1. Simpan preferensi role, phone & reminder ke localStorage
@@ -285,28 +295,59 @@ export default function AkunPenggunaPage() {
         window.dispatchEvent(new CustomEvent('uda_role_updated', { detail: { role: userRole } }));
       }
 
-      // 2. Simpan ke database Supabase jika koneksi aktif
+      // 2. Simpan ke database Supabase jika koneksi aktif (HANYA kolom yang ada di skema profiles)
       if (supabase) {
-        const { error } = await (supabase.from('profiles' as any) as any)
+        const { error: profError } = await (supabase.from('profiles' as any) as any)
           .update({
-            full_name: fullName.trim(),
-            phone: phone.trim() || null,
+            full_name: cleanName,
             reminder_minutes: reminderMinutes,
-            role: userRole === 'Owner' && isAdmin ? 'admin' : 'user',
             updated_at: new Date().toISOString(),
           })
           .eq('id', user.id);
 
-        if (error) {
-          console.warn('Update profiles error, local state saved:', error.message);
+        if (profError) {
+          console.warn('Update profiles error, fallback to auth updateUser:', profError.message);
         }
+
+        // 3. Update juga user_metadata di Supabase Auth agar sesi login & refreshUserData langsung tersinkron
+        try {
+          await supabase.auth.updateUser({
+            data: {
+              full_name: cleanName,
+              name: cleanName,
+              phone: phone.trim() || null,
+            },
+          });
+        } catch (authErr) {
+          console.warn('Update auth user metadata warning:', authErr);
+        }
+      }
+
+      // 4. Update cache lokal profil & user agar refresh seketika menampilkan nama baru
+      if (typeof window !== 'undefined') {
+        try {
+          const cachedProfile = localStorage.getItem('uda_auth_profile');
+          if (cachedProfile) {
+            const parsed = JSON.parse(cachedProfile);
+            parsed.full_name = cleanName;
+            parsed.reminder_minutes = reminderMinutes;
+            localStorage.setItem('uda_auth_profile', JSON.stringify(parsed));
+          }
+          const cachedUser = localStorage.getItem('uda_auth_user');
+          if (cachedUser) {
+            const parsedU = JSON.parse(cachedUser);
+            if (!parsedU.user_metadata) parsedU.user_metadata = {};
+            parsedU.user_metadata.full_name = cleanName;
+            localStorage.setItem('uda_auth_user', JSON.stringify(parsedU));
+          }
+        } catch (e) {}
       }
 
       await refreshUserData();
       playSuccessSound();
-      showToast('Profil dan Role sistem berhasil diperbarui!');
+      showToast('Profil dan nama pengguna berhasil diperbarui!');
     } catch (err: any) {
-      showToast('Gagal menyimpan profil.');
+      showToast('Gagal menyimpan profil: ' + (err.message || ''));
     } finally {
       setIsSaving(false);
     }
@@ -565,13 +606,22 @@ export default function AkunPenggunaPage() {
           {/* Input Nama, Email & Nomor Handphone / WhatsApp */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 16 }}>
             <div>
-              <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>Nama Lengkap</label>
+              <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                Nama Lengkap <span style={{ color: '#dc2626' }}>*</span>
+              </label>
               <input
                 type="text"
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(e) => {
+                  const filtered = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                  setFullName(filtered);
+                }}
+                placeholder="Masukkan nama lengkap (hanya huruf)..."
                 style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: 8, marginTop: 5, outline: 'none', fontSize: '0.9rem' }}
               />
+              <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4, display: 'block' }}>
+                * Hanya huruf dan spasi (tanpa angka atau simbol).
+              </span>
             </div>
 
             <div>
@@ -1018,13 +1068,22 @@ export default function AkunPenggunaPage() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>Nama Lengkap</label>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                  Nama Lengkap <span style={{ color: '#dc2626' }}>*</span>
+                </label>
                 <input
                   type="text"
                   value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  onChange={(e) => {
+                    const filtered = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                    setFullName(filtered);
+                  }}
+                  placeholder="Masukkan nama lengkap..."
                   style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #0f172a', borderRadius: 8, marginTop: 4, outline: 'none', fontSize: '0.9rem' }}
                 />
+                <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4, display: 'block' }}>
+                  * Hanya huruf dan spasi.
+                </span>
               </div>
 
               <div>
