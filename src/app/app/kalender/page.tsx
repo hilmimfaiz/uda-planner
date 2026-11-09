@@ -13,6 +13,7 @@ import {
   Calendar as CalendarIcon,
   Filter,
   X,
+  Loader2,
 } from "lucide-react";
 import {
   DUMMY_POSTS,
@@ -73,8 +74,23 @@ export default function KalenderPage() {
   const [viewMode, setViewMode] = useState<"bulan" | "minggu" | "agenda">(
     "bulan",
   );
-  const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
-  const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
+  const [posts, setPosts] = useState<DummyPost[]>(() => {
+    try {
+      const cached = PostService.getCachedPosts();
+      return cached.length > 0 ? cached : DUMMY_POSTS;
+    } catch {
+      return DUMMY_POSTS;
+    }
+  });
+  const [brands, setBrands] = useState<DummyBrand[]>(() => {
+    try {
+      const cached = BrandService.getCachedBrands();
+      return cached.length > 0 ? cached : DUMMY_BRANDS;
+    } catch {
+      return DUMMY_BRANDS;
+    }
+  });
+  const [isLoading, setIsLoading] = useState(true);
   const [filterBrand, setFilterBrand] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -84,10 +100,13 @@ export default function KalenderPage() {
   } | null>(null);
 
   React.useEffect(() => {
-    const loadPosts = () => {
-      PostService.getPosts({}, user?.id).then((data) => {
+    const loadPosts = async () => {
+      try {
+        const data = await PostService.getPosts({}, user?.id);
         setPosts(data || []);
-      });
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     loadPosts();
@@ -343,10 +362,31 @@ export default function KalenderPage() {
         }}
       >
         <div>
-          <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#0f172a" }}>
-            Kalender Konten
-          </h1>
-          <p style={{ color: "#64748b", fontSize: "0.88rem" }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#0f172a", margin: 0 }}>
+              Kalender Konten
+            </h1>
+            {isLoading && (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: '0.75rem',
+                  color: '#16a34a',
+                  fontWeight: 700,
+                  background: '#f0fdf4',
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  border: '1px solid #bbf7d0',
+                }}
+              >
+                <Loader2 size={13} className="animate-spin" />
+                <span>Memuat...</span>
+              </div>
+            )}
+          </div>
+          <p style={{ color: "#64748b", fontSize: "0.88rem", marginTop: 4 }}>
             Geser postingan untuk memindahkan tanggal dan jam tayang secara
             instan.
           </p>
@@ -542,7 +582,12 @@ export default function KalenderPage() {
             overflow: "hidden",
           }}
         >
-          {viewMode === "agenda" ? (
+          {isLoading && posts.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 14 }}>
+              <Loader2 size={38} className="animate-spin" style={{ color: '#16a34a' }} />
+              <span style={{ fontSize: '0.92rem', color: '#64748b', fontWeight: 600 }}>Memuat jadwal kalender konten...</span>
+            </div>
+          ) : viewMode === "agenda" ? (
             /* Mode Agenda (Daftar per hari) */
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {scheduledPosts.length === 0 ? (

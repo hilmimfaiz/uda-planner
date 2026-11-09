@@ -30,7 +30,7 @@ type PaymentItem = AdminPaymentItem;
 export default function AdminPembayaranPage() {
   const { showSuccess, showError } = useModal();
   const [payments, setPayments] = useState<PaymentItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
@@ -76,6 +76,7 @@ export default function AdminPembayaranPage() {
     const cached = AdminService.getCachedPayments();
     if (cached.length > 0) {
       setPayments(cached);
+      setIsLoading(false);
     }
 
     const fetchPayments = () => {

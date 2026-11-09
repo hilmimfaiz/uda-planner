@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import { DUMMY_BRANDS, DummyPost, DummyBrand } from "@/lib/dummy-data";
 import { POST_STATUSES } from "@/lib/platforms";
@@ -43,30 +44,46 @@ const gridTourSteps: TourStep[] = [
 export default function GridInstagramPage() {
   const router = useRouter();
   const { user, account } = useAuth();
-  const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
+  const [brands, setBrands] = useState<DummyBrand[]>(() => {
+    try {
+      const cached = BrandService.getCachedBrands();
+      return cached.length > 0 ? cached : DUMMY_BRANDS;
+    } catch {
+      return DUMMY_BRANDS;
+    }
+  });
   const [posts, setPosts] = useState<DummyPost[]>(() => PostService.getCachedPosts());
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedBrandId, setSelectedBrandId] = useState<string>("brand-1");
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:5">("1:1");
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
   const [slideIndices, setSlideIndices] = useState<Record<string, number>>({});
 
   React.useEffect(() => {
+    let isMounted = true;
+
     BrandService.getBrands(user?.id).then((bList) => {
+      if (!isMounted) return;
       setBrands(bList || []);
       if (bList && bList.length > 0) {
         const activeBrandId = typeof window !== 'undefined' ? localStorage.getItem('uda_active_brand_id') : null;
         const targetId = (activeBrandId && bList.some((b) => b.id === activeBrandId)) ? activeBrandId : bList[0].id;
         setSelectedBrandId(targetId);
-        BrandService.getUserBrandRole(targetId, user?.id).then((r) => setUserRole(r));
+        BrandService.getUserBrandRole(targetId, user?.id).then((r) => {
+          if (isMounted) setUserRole(r);
+        });
       }
     });
 
-    const loadPosts = () => {
-      const cached = PostService.getCachedPosts();
-      if (cached.length > 0) setPosts(cached);
-      PostService.getPosts({}, user?.id).then((data) => {
-        if (data) setPosts(data);
-      });
+    const loadPosts = async () => {
+      try {
+        const cached = PostService.getCachedPosts();
+        if (isMounted && cached.length > 0) setPosts(cached);
+        const data = await PostService.getPosts({}, user?.id);
+        if (isMounted && data) setPosts(data);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
     };
 
     loadPosts();
@@ -75,14 +92,13 @@ export default function GridInstagramPage() {
     window.addEventListener("uda_post_created", loadPosts);
     window.addEventListener("uda_post_deleted", loadPosts);
     window.addEventListener("storage", loadPosts);
-    window.addEventListener("focus", loadPosts);
 
     return () => {
+      isMounted = false;
       window.removeEventListener("uda_post_updated", loadPosts);
       window.removeEventListener("uda_post_created", loadPosts);
       window.removeEventListener("uda_post_deleted", loadPosts);
       window.removeEventListener("storage", loadPosts);
-      window.removeEventListener("focus", loadPosts);
     };
   }, [user?.id]);
 
@@ -596,10 +612,31 @@ export default function GridInstagramPage() {
         }}
       >
         <div>
-          <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#0f172a" }}>
-            Pratinjau Grid Instagram (Feed Simulator)
-          </h1>
-          <p style={{ color: "#64748b", fontSize: "0.88rem" }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#0f172a", margin: 0 }}>
+              Pratinjau Grid Instagram (Feed Simulator)
+            </h1>
+            {isLoading && (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: '0.75rem',
+                  color: '#16a34a',
+                  fontWeight: 700,
+                  background: '#f0fdf4',
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  border: '1px solid #bbf7d0',
+                }}
+              >
+                <Loader2 size={13} className="animate-spin" />
+                <span>Memuat...</span>
+              </div>
+            )}
+          </div>
+          <p style={{ color: "#64748b", fontSize: "0.88rem", marginTop: 4 }}>
             Lihat visual estetika kerapihan susunan feed 3 kolom sebelum konten
             resmi dipublikasikan.
           </p>

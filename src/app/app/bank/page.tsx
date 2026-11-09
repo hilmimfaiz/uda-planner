@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Copy, Plus, Trash2, Edit3, Sparkles } from 'lucide-react';
+import { Copy, Plus, Trash2, Edit3, Sparkles, Loader2 } from 'lucide-react';
 import { DUMMY_SNIPPETS, DUMMY_BRANDS, DummySnippet, DummyBrand } from '@/lib/dummy-data';
 import { SnippetService } from '@/services/snippet.service';
 import { BrandService } from '@/services/brand.service';
@@ -34,7 +34,16 @@ export default function BankKontenPage() {
   const { user, account } = useAuth();
   const { confirmDelete, showSuccess, showError } = useModal();
   const [snippets, setSnippets] = useState<DummySnippet[]>(DUMMY_SNIPPETS);
-  const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
+  const [brands, setBrands] = useState<DummyBrand[]>(() => {
+    try {
+      const cached = BrandService.getCachedBrands();
+      return cached.length > 0 ? cached : DUMMY_BRANDS;
+    } catch {
+      return DUMMY_BRANDS;
+    }
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'caption' | 'hashtag'>('caption');
   const [filterBrand, setFilterBrand] = useState('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -49,16 +58,27 @@ export default function BankKontenPage() {
   const isSnippetQuotaExceeded = isFreePlan && snippets.length >= 5;
 
   React.useEffect(() => {
-    SnippetService.getSnippets(undefined, undefined, user?.id).then((data) => {
-      setSnippets(data || []);
-    });
+    let isMounted = true;
+
+    SnippetService.getSnippets(undefined, undefined, user?.id)
+      .then((data) => {
+        if (isMounted) setSnippets(data || []);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
 
     BrandService.getBrands(user?.id).then((bList) => {
+      if (!isMounted) return;
       setBrands(bList || []);
       if (bList && bList.length > 0) {
         setNewBrand(bList[0].id);
       }
     });
+
+    return () => {
+      isMounted = false;
+    };
   }, [user?.id]);
 
   const showToast = (msg: string) => {
@@ -90,6 +110,7 @@ export default function BankKontenPage() {
 
   const handleAddSnippet = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
     try {
       const created = await SnippetService.createSnippet({
         brandId: newBrand,
@@ -108,6 +129,8 @@ export default function BankKontenPage() {
       );
     } catch (err: any) {
       showError('Gagal Menyimpan Template', err.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -136,8 +159,29 @@ export default function BankKontenPage() {
       {/* Header */}
       <div id="tour-bank-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Bank Konten (Caption & Hashtag)</h1>
-          <p style={{ color: '#64748b', fontSize: '0.88rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>Bank Konten (Caption & Hashtag)</h1>
+            {isLoading && (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: '0.75rem',
+                  color: '#16a34a',
+                  fontWeight: 700,
+                  background: '#f0fdf4',
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  border: '1px solid #bbf7d0',
+                }}
+              >
+                <Loader2 size={13} className="animate-spin" />
+                <span>Memuat...</span>
+              </div>
+            )}
+          </div>
+          <p style={{ color: '#64748b', fontSize: '0.88rem', marginTop: 4 }}>
             Simpan template pembuka (hook), call-to-action (CTA), dan kumpulan hashtag untuk disalin dalam 1 klik.
           </p>
         </div>
@@ -203,8 +247,14 @@ export default function BankKontenPage() {
       </div>
 
       {/* Grid Kartu Template Responsif */}
-      <div id="tour-bank-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 18 }}>
-        {filtered.map((item) => {
+      {isLoading && snippets.length === 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 300, gap: 14 }}>
+          <Loader2 size={36} className="animate-spin" style={{ color: '#16a34a' }} />
+          <span style={{ fontSize: '0.92rem', color: '#64748b', fontWeight: 600 }}>Memuat bank konten...</span>
+        </div>
+      ) : (
+        <div id="tour-bank-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 18 }}>
+          {filtered.map((item) => {
           const brand = brands.find((b) => b.id === item.brand_id);
           return (
             <div
@@ -282,7 +332,8 @@ export default function BankKontenPage() {
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
 
       {/* Modal Tambah Snippet */}
       {showAddModal && (
@@ -353,11 +404,12 @@ export default function BankKontenPage() {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
-                <button type="button" className="btn-uda btn-uda-secondary" onClick={() => setShowAddModal(false)}>
+                <button type="button" className="btn-uda btn-uda-secondary" onClick={() => setShowAddModal(false)} disabled={isSaving}>
                   Batal
                 </button>
-                <button type="submit" className="btn-uda btn-uda-primary">
-                  Simpan Template
+                <button type="submit" className="btn-uda btn-uda-primary" disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {isSaving && <Loader2 size={16} className="animate-spin" />}
+                  <span>{isSaving ? 'Menyimpan Template...' : 'Simpan Template'}</span>
                 </button>
               </div>
             </form>

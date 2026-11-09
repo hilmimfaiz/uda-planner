@@ -12,6 +12,7 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { DUMMY_POSTS, DUMMY_BRANDS, DUMMY_PILLARS, DUMMY_MEMBERS, DummyPost, DummyBrand } from '@/lib/dummy-data';
 import { POST_STATUSES } from '@/lib/platforms';
@@ -59,8 +60,23 @@ export default function DaftarPostinganPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { confirmDelete, showSuccess } = useModal();
-  const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
-  const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
+  const [posts, setPosts] = useState<DummyPost[]>(() => {
+    try {
+      const cached = PostService.getCachedPosts();
+      return cached.length > 0 ? cached : DUMMY_POSTS;
+    } catch {
+      return DUMMY_POSTS;
+    }
+  });
+  const [brands, setBrands] = useState<DummyBrand[]>(() => {
+    try {
+      const cached = BrandService.getCachedBrands();
+      return cached.length > 0 ? cached : DUMMY_BRANDS;
+    } catch {
+      return DUMMY_BRANDS;
+    }
+  });
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -72,29 +88,33 @@ export default function DaftarPostinganPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   React.useEffect(() => {
-    const loadPosts = () => {
-      PostService.getPosts({}, user?.id).then((data) => {
-        if (data) setPosts(data);
-      });
+    let isMounted = true;
+
+    const loadPosts = async () => {
+      try {
+        const data = await PostService.getPosts({}, user?.id);
+        if (isMounted && data) setPosts(data);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
     };
 
     loadPosts();
     BrandService.getBrands(user?.id).then((data) => {
-      setBrands(data || []);
+      if (isMounted) setBrands(data || []);
     });
 
     window.addEventListener('uda_post_updated', loadPosts);
     window.addEventListener('uda_post_created', loadPosts);
     window.addEventListener('uda_post_deleted', loadPosts);
     window.addEventListener('storage', loadPosts);
-    window.addEventListener('focus', loadPosts);
 
     return () => {
+      isMounted = false;
       window.removeEventListener('uda_post_updated', loadPosts);
       window.removeEventListener('uda_post_created', loadPosts);
       window.removeEventListener('uda_post_deleted', loadPosts);
       window.removeEventListener('storage', loadPosts);
-      window.removeEventListener('focus', loadPosts);
     };
   }, [user?.id]);
 
@@ -162,8 +182,29 @@ export default function DaftarPostinganPage() {
       {/* Header & Controls */}
       <div id="tour-daftar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Daftar Semua Postingan</h1>
-          <p style={{ color: '#64748b', fontSize: '0.88rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>Daftar Semua Postingan</h1>
+            {isLoading && (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: '0.75rem',
+                  color: '#16a34a',
+                  fontWeight: 700,
+                  background: '#f0fdf4',
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  border: '1px solid #bbf7d0',
+                }}
+              >
+                <Loader2 size={13} className="animate-spin" />
+                <span>Memuat...</span>
+              </div>
+            )}
+          </div>
+          <p style={{ color: '#64748b', fontSize: '0.88rem', marginTop: 4 }}>
             Filter detail, pencarian kata kunci, dan ekspor CSV jadwal konten.
           </p>
         </div>
@@ -280,7 +321,16 @@ export default function DaftarPostinganPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {isLoading && posts.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: '60px 20px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                      <Loader2 size={36} className="animate-spin" style={{ color: '#16a34a' }} />
+                      <span style={{ fontSize: '0.92rem', color: '#64748b', fontWeight: 600 }}>Memuat daftar postingan...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
                 <tr id="tour-daftar-row">
                   <td colSpan={6} style={{ padding: '32px 20px', textAlign: 'center', color: '#64748b' }}>
                     <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Tidak ada postingan ditemukan</div>

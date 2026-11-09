@@ -108,7 +108,6 @@ export default function AdminDashboardPage() {
     window.addEventListener('uda_account_updated', handleSync);
     window.addEventListener('uda_user_registered', handleSync);
     window.addEventListener('storage', handleSync);
-    window.addEventListener('focus', handleSync);
 
     return () => {
       window.removeEventListener('uda_payment_submitted', handleSync);
@@ -117,7 +116,6 @@ export default function AdminDashboardPage() {
       window.removeEventListener('uda_account_updated', handleSync);
       window.removeEventListener('uda_user_registered', handleSync);
       window.removeEventListener('storage', handleSync);
-      window.removeEventListener('focus', handleSync);
     };
   }, [fetchDashboardStats]);
 

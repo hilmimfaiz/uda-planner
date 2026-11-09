@@ -11,6 +11,7 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import {
   DUMMY_POSTS,
@@ -58,8 +59,23 @@ const papanTourSteps: TourStep[] = [
 export default function PapanKanbanPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
-  const [posts, setPosts] = useState<DummyPost[]>(DUMMY_POSTS);
+  const [brands, setBrands] = useState<DummyBrand[]>(() => {
+    try {
+      const cached = BrandService.getCachedBrands();
+      return cached.length > 0 ? cached : DUMMY_BRANDS;
+    } catch {
+      return DUMMY_BRANDS;
+    }
+  });
+  const [posts, setPosts] = useState<DummyPost[]>(() => {
+    try {
+      const cached = PostService.getCachedPosts();
+      return cached.length > 0 ? cached : DUMMY_POSTS;
+    } catch {
+      return DUMMY_POSTS;
+    }
+  });
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedBrandId, setSelectedBrandId] = useState<string>("all");
   const [userRolesByBrand, setUserRolesByBrand] = useState<
     Record<string, "owner" | "editor" | "reviewer" | "viewer" | null>
@@ -90,26 +106,38 @@ export default function PapanKanbanPage() {
     setPageByColumn({ ide: 1, draft: 1, review: 1, siap: 1, terposting: 1 });
 
   React.useEffect(() => {
-    const loadBrandsAndRoles = () => {
-      BrandService.getBrands(user?.id).then(async (bList) => {
+    let isMounted = true;
+
+    const loadBrandsAndRoles = async () => {
+      try {
+        const bList = await BrandService.getBrands(user?.id);
+        if (!isMounted) return;
         const list = bList || [];
         setBrands(list);
 
-        const rolesMap: Record<
-          string,
-          "owner" | "editor" | "reviewer" | "viewer" | null
-        > = {};
-        for (const b of list) {
-          rolesMap[b.id] = await BrandService.getUserBrandRole(b.id, user?.id);
-        }
+        // Fetch roles in parallel to prevent sequential waterfall lag
+        const rolePromises = list.map(async (b) => {
+          const role = await BrandService.getUserBrandRole(b.id, user?.id);
+          return [b.id, role] as const;
+        });
+        const resolvedRoles = await Promise.all(rolePromises);
+        if (!isMounted) return;
+
+        const rolesMap: Record<string, "owner" | "editor" | "reviewer" | "viewer" | null> = {};
+        resolvedRoles.forEach(([bId, role]) => {
+          rolesMap[bId] = role;
+        });
         setUserRolesByBrand(rolesMap);
-      });
+      } catch (e) {}
     };
 
-    const loadPosts = () => {
-      PostService.getPosts({}, user?.id).then((data) => {
-        if (data) setPosts(data);
-      });
+    const loadPosts = async () => {
+      try {
+        const data = await PostService.getPosts({}, user?.id);
+        if (isMounted && data) setPosts(data);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
     };
 
     loadBrandsAndRoles();
@@ -125,15 +153,14 @@ export default function PapanKanbanPage() {
     window.addEventListener("uda_post_deleted", loadPosts);
     window.addEventListener("uda_team_updated", handleDataChange);
     window.addEventListener("storage", handleDataChange);
-    window.addEventListener("focus", handleDataChange);
 
     return () => {
+      isMounted = false;
       window.removeEventListener("uda_post_updated", loadPosts);
       window.removeEventListener("uda_post_created", loadPosts);
       window.removeEventListener("uda_post_deleted", loadPosts);
       window.removeEventListener("uda_team_updated", handleDataChange);
       window.removeEventListener("storage", handleDataChange);
-      window.removeEventListener("focus", handleDataChange);
     };
   }, [user?.id]);
 
@@ -348,10 +375,31 @@ export default function PapanKanbanPage() {
         }}
       >
         <div>
-          <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#0f172a" }}>
-            Papan Status (Kanban)
-          </h1>
-          <p style={{ color: "#64748b", fontSize: "0.88rem" }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#0f172a", margin: 0 }}>
+              Papan Status (Kanban)
+            </h1>
+            {isLoading && (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: '0.75rem',
+                  color: '#16a34a',
+                  fontWeight: 700,
+                  background: '#f0fdf4',
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  border: '1px solid #bbf7d0',
+                }}
+              >
+                <Loader2 size={13} className="animate-spin" />
+                <span>Memuat...</span>
+              </div>
+            )}
+          </div>
+          <p style={{ color: "#64748b", fontSize: "0.88rem", marginTop: 4 }}>
             Geser kartu antar kolom untuk memperbarui status dan alur
             persetujuan.
           </p>
@@ -499,19 +547,26 @@ export default function PapanKanbanPage() {
 
       {/* 5 Kolom Kanban Responsif */}
       <div className="kanban-board-wrapper" style={{ position: "relative" }}>
-        {/* Target Spotlight Khusus Bagian Atas 5 Kolom (Hanya Header Status, Tidak Sampai Bawah) */}
-        <div
-          id="tour-papan-board"
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 56,
-            pointerEvents: "none",
-          }}
-        />
-        {columns.map((col, idx) => {
+        {isLoading && posts.length === 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 14, width: '100%' }}>
+            <Loader2 size={38} className="animate-spin" style={{ color: '#16a34a' }} />
+            <span style={{ fontSize: '0.92rem', color: '#64748b', fontWeight: 600 }}>Memuat papan status konten...</span>
+          </div>
+        ) : (
+          <>
+            {/* Target Spotlight Khusus Bagian Atas 5 Kolom (Hanya Header Status, Tidak Sampai Bawah) */}
+            <div
+              id="tour-papan-board"
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 56,
+                pointerEvents: "none",
+              }}
+            />
+            {columns.map((col, idx) => {
           if (isMobile && col.id !== activeStatus) return null;
           const isRow1 = idx < 3; // 0 (ide), 1 (draft), 2 (review) -> Baris Atas 3 Kolom
           const colPosts = filteredPosts.filter((p) => p.status === col.id);
@@ -958,6 +1013,8 @@ export default function PapanKanbanPage() {
             </div>
           );
         })}
+          </>
+        )}
       </div>
 
       <GuidedTour steps={papanTourSteps} tourKey="uda_tour_papan" />

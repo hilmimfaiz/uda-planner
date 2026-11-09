@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Settings, Save, CheckCircle2, MessageSquare, CreditCard } from 'lucide-react';
+import { Settings, Save, CheckCircle2, MessageSquare, CreditCard, Loader2 } from 'lucide-react';
 import { AdminService } from '@/services/admin.service';
 import { useModal } from '@/contexts/modal-context';
 
@@ -166,8 +166,8 @@ export default function AdminPengaturanPage() {
               fontWeight: 800,
             }}
           >
-            <Save size={16} />
-            <span>{isSaving ? 'Menyimpan...' : 'Simpan Pengaturan'}</span>
+            {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            <span>{isSaving ? 'Menyimpan Pengaturan...' : 'Simpan Pengaturan'}</span>
           </button>
         </form>
       </div>

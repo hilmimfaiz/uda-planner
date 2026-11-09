@@ -9,16 +9,36 @@ export default function AdminLoading() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: '50vh',
+        minHeight: '65vh',
         width: '100%',
-        color: '#16a34a',
-        gap: 12,
+        gap: 16,
       }}
     >
-      <Shield size={28} style={{ color: '#16a34a' }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.88rem', color: '#64748b', fontWeight: 600 }}>
-        <Loader2 size={18} className="animate-spin" />
-        <span>Memuat panel administrasi...</span>
+      <div
+        style={{
+          width: 54,
+          height: 54,
+          borderRadius: '50%',
+          background: '#f8fafc',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          border: '1.5px solid #0f172a',
+          position: 'relative',
+        }}
+      >
+        <Shield size={24} style={{ color: '#16a34a' }} />
+        <div style={{ position: 'absolute', inset: -4 }}>
+          <Loader2 size={62} className="animate-spin" style={{ color: '#16a34a', opacity: 0.7 }} />
+        </div>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+          Memuat Panel Administrasi...
+        </div>
+        <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 4 }}>
+          Mengambil data sistem dan sinkronisasi database
+        </div>
       </div>
     </div>
   );

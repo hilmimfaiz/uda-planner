@@ -40,6 +40,7 @@ export default function AdminPenggunaPage() {
   const [userToDelete, setUserToDelete] = useState<AdminUserItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdatingPlan, setIsUpdatingPlan] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [newPlan, setNewPlan] = useState<'free' | 'pro' | 'team'>('pro');
   const [durationDays, setDurationDays] = useState(30);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -54,28 +55,33 @@ export default function AdminPenggunaPage() {
   const itemsPerPage = 6;
 
   const loadUsers = () => {
-    AdminService.getAdminUsers().then((data) => {
-      if (data) {
-        const seen = new Set<string>();
-        const unique = data.filter((u) => {
-          const em = (u.email || '').toLowerCase().trim();
-          if (!em || seen.has(em)) return false;
-          seen.add(em);
-          return true;
-        });
-        setUsers(unique);
-        setDetailUser((current) => {
-          if (!current) return null;
-          const updated = unique.find(
-            (u) =>
-              u.id === current.id ||
-              u.userId === current.userId ||
-              (current.email && u.email?.toLowerCase() === current.email.toLowerCase())
-          );
-          return updated || current;
-        });
-      }
-    });
+    setIsLoading(true);
+    AdminService.getAdminUsers()
+      .then((data) => {
+        if (data) {
+          const seen = new Set<string>();
+          const unique = data.filter((u) => {
+            const em = (u.email || '').toLowerCase().trim();
+            if (!em || seen.has(em)) return false;
+            seen.add(em);
+            return true;
+          });
+          setUsers(unique);
+          setDetailUser((current) => {
+            if (!current) return null;
+            const updated = unique.find(
+              (u) =>
+                u.id === current.id ||
+                u.userId === current.userId ||
+                (current.email && u.email?.toLowerCase() === current.email.toLowerCase())
+            );
+            return updated || current;
+          });
+        }
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
 
   React.useEffect(() => {
@@ -401,8 +407,29 @@ export default function AdminPenggunaPage() {
       )}
 
       <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Manajemen Pengguna</h1>
-        <p style={{ color: '#64748b', fontSize: '0.88rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>Manajemen Pengguna</h1>
+          {isLoading && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: '0.75rem',
+                color: '#16a34a',
+                fontWeight: 700,
+                background: '#f0fdf4',
+                padding: '3px 10px',
+                borderRadius: 999,
+                border: '1px solid #bbf7d0',
+              }}
+            >
+              <Loader2 size={13} className="animate-spin" />
+              <span>Memuat...</span>
+            </div>
+          )}
+        </div>
+        <p style={{ color: '#64748b', fontSize: '0.88rem', marginTop: 4 }}>
           Kelola seluruh akun terdaftar, pantau paket langganan aktif, sinkronisasi brand & kapasitas penyimpanan, serta klik pengguna untuk melihat pop-up profil detail lengkap.
         </p>
       </div>
@@ -564,7 +591,16 @@ export default function AdminPenggunaPage() {
               </tr>
             </thead>
             <tbody>
-              {paginatedUsers.length === 0 ? (
+              {isLoading && users.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: '60px 18px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                      <Loader2 size={36} className="animate-spin" style={{ color: '#16a34a' }} />
+                      <span style={{ fontSize: '0.92rem', color: '#64748b', fontWeight: 600 }}>Memuat daftar pengguna...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedUsers.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: '32px 18px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
                     Tidak ada pengguna yang cocok dengan pencarian &quot;{searchQuery}&quot;.
@@ -862,7 +898,12 @@ export default function AdminPenggunaPage() {
 
         {/* Mobile & Tablet Card List */}
         <div className="admin-cards-mobile" style={{ padding: 12 }}>
-          {paginatedUsers.length === 0 ? (
+          {isLoading && users.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 14px', gap: 12 }}>
+              <Loader2 size={32} className="animate-spin" style={{ color: '#16a34a' }} />
+              <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 600 }}>Memuat data pengguna...</span>
+            </div>
+          ) : paginatedUsers.length === 0 ? (
             <div style={{ padding: '24px 14px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
               Tidak ada pengguna yang cocok dengan pencarian &quot;{searchQuery}&quot;.
             </div>
