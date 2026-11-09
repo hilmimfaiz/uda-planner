@@ -423,3 +423,61 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { ids, olderThanDays } = body;
+
+    const adminClient = createAdminClient();
+    const serverClient = createServerClient();
+    const db = adminClient || serverClient;
+
+    const backupList = loadBackupPayments();
+    let idsToDelete: string[] = [];
+
+    if (Array.isArray(ids) && ids.length > 0) {
+      idsToDelete = ids;
+    } else if (typeof olderThanDays === 'number') {
+      const cutoffTime = Date.now() - olderThanDays * 86400000;
+      idsToDelete = backupList
+        .filter((p: any) => {
+          const t = p.created_at ? new Date(p.created_at).getTime() : 0;
+          return t > 0 && t <= cutoffTime;
+        })
+        .map((p: any) => p.id);
+    }
+
+    if (idsToDelete.length === 0) {
+      return NextResponse.json({ success: true, message: 'Tidak ada data riwayat yang dihapus', count: 0 });
+    }
+
+    // Hapus HANYA dari tabel payments (data pengguna & status akun tidak disentuh sama sekali)
+    if (db) {
+      try {
+        const uuidList = idsToDelete.filter((id) =>
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+        );
+        if (uuidList.length > 0) {
+          await (db.from('payments' as any) as any).delete().in('id', uuidList);
+        }
+      } catch (dbErr: any) {
+        console.warn('DELETE payments from DB error:', dbErr.message);
+      }
+    }
+
+    // Hapus dari backup file & cache server
+    const deleteSet = new Set(idsToDelete);
+    const updatedBackup = backupList.filter((p: any) => !deleteSet.has(p.id));
+    saveBackupPayments(updatedBackup);
+
+    return NextResponse.json({
+      success: true,
+      message: `${idsToDelete.length} riwayat pembayaran berhasil dihapus`,
+      deletedCount: idsToDelete.length,
+      deletedIds: idsToDelete,
+    });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}

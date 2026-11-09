@@ -19,6 +19,11 @@ import {
   ArrowLeft,
   ArrowRight,
   Loader2,
+  Trash2,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { AdminService, AdminPaymentItem } from '@/services/admin.service';
 import { resolvePaymentDuration } from '@/services/plan.service';
@@ -43,6 +48,15 @@ export default function AdminPembayaranPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(10);
+
+  // Delete History Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
+  const [deleteDurationDays, setDeleteDurationDays] = useState<number | 'all'>(7);
+  const [isDeletingHistory, setIsDeletingHistory] = useState<boolean>(false);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
@@ -106,12 +120,14 @@ export default function AdminPembayaranPage() {
     window.addEventListener('uda_payment_submitted', handleSync);
     window.addEventListener('uda_payment_approved', handleSync);
     window.addEventListener('uda_payment_rejected', handleSync);
+    window.addEventListener('uda_payment_deleted', handleSync);
     window.addEventListener('storage', handleSync);
     window.addEventListener('focus', handleSync);
     return () => {
       window.removeEventListener('uda_payment_submitted', handleSync);
       window.removeEventListener('uda_payment_approved', handleSync);
       window.removeEventListener('uda_payment_rejected', handleSync);
+      window.removeEventListener('uda_payment_deleted', handleSync);
       window.removeEventListener('storage', handleSync);
       window.removeEventListener('focus', handleSync);
     };
@@ -215,10 +231,137 @@ export default function AdminPembayaranPage() {
     }
   };
 
+  const INDO_MONTHS: Record<string, number> = {
+    jan: 0, feb: 1, mar: 2, apr: 3, mei: 4, jun: 5,
+    jul: 6, agu: 7, ags: 7, sep: 8, okt: 9, nov: 10, des: 11,
+  };
+
+  const getPaymentTimestamp = (p: PaymentItem): number => {
+    const rawCreatedAt = (p as any).created_at;
+    if (rawCreatedAt) {
+      const t = new Date(rawCreatedAt).getTime();
+      if (!isNaN(t)) return t;
+    }
+    if (p.date) {
+      try {
+        const match = p.date.match(/(\d{1,2})\s+([a-zA-Z]+)\s+(\d{4})/);
+        if (match) {
+          const d = parseInt(match[1], 10);
+          const mStr = match[2].toLowerCase().slice(0, 3);
+          const y = parseInt(match[3], 10);
+          const m = INDO_MONTHS[mStr] ?? 0;
+          return new Date(y, m, d).getTime();
+        }
+      } catch {}
+    }
+    return 0;
+  };
+
+  const getTargetPaymentsToDelete = (days: number | 'all'): PaymentItem[] => {
+    if (days === 'all') {
+      return payments;
+    }
+    const cutoff = Date.now() - days * 86400000;
+    return payments.filter((p) => {
+      const ts = getPaymentTimestamp(p);
+      return ts > 0 && ts <= cutoff;
+    });
+  };
+
+  const handleExportCSV = (itemsToExport: PaymentItem[] = filteredPayments) => {
+    if (!itemsToExport || itemsToExport.length === 0) {
+      showError('Tidak Ada Data', 'Tidak ada data pembayaran untuk diekspor ke CSV.');
+      return;
+    }
+
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const headers = [
+      'No',
+      'ID Transaksi',
+      'Tanggal Transaksi',
+      'Nama Pengguna',
+      'Email',
+      'Paket Langganan',
+      'Durasi',
+      'Nominal Transfer (Rp)',
+      'Bank Pengirim',
+      'Status Verifikasi',
+      'Catatan / Alasan',
+    ];
+
+    const rows = itemsToExport.map((p, idx) => [
+      idx + 1,
+      escapeCSV(p.id),
+      escapeCSV(p.date),
+      escapeCSV(p.user),
+      escapeCSV(p.email),
+      escapeCSV(p.plan ? `Paket ${p.plan.toUpperCase()}` : '-'),
+      escapeCSV(p.durationLabel || `${p.durationDays || 30} Hari`),
+      p.amount,
+      escapeCSV(p.bank),
+      escapeCSV(p.status === 'approved' ? 'Disetujui' : p.status === 'rejected' ? 'Ditolak' : 'Menunggu Verifikasi'),
+      escapeCSV(p.reason || '-'),
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const filename = `bukti-pembayaran-udaplanner-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    playSuccessSound();
+    showToast(`✅ Berhasil mengekspor ${itemsToExport.length} riwayat bukti pembayaran ke CSV!`);
+  };
+
+  const handleConfirmDeleteHistory = async () => {
+    const targets = getTargetPaymentsToDelete(deleteDurationDays);
+    if (targets.length === 0) {
+      showError('Tidak Ada Data', 'Tidak ditemukan riwayat pembayaran yang cocok dengan kriteria durasi yang dipilih.');
+      return;
+    }
+
+    setIsDeletingHistory(true);
+    try {
+      const ids = targets.map((t) => t.id);
+      await AdminService.deletePayments(ids);
+
+      const deleteSet = new Set(ids);
+      setPayments((prev) => prev.filter((p) => !deleteSet.has(p.id)));
+
+      setShowDeleteModal(false);
+      playSuccessSound();
+      showSuccess(
+        'Riwayat Berhasil Dihapus',
+        `Sebanyak ${targets.length} data riwayat pembayaran berhasil dibersihkan. Akun pengguna dan status langganan aktif tetap aman & tidak terpengaruh.`
+      );
+    } catch (err: any) {
+      showError('Gagal Menghapus Riwayat', err?.message || 'Terjadi kesalahan sistem saat menghapus riwayat.');
+    } finally {
+      setIsDeletingHistory(false);
+    }
+  };
+
   const filteredPayments = payments.filter((p) => {
     if (filterTab === 'all') return true;
     return p.status === filterTab;
   });
+
+  const totalItems = filteredPayments.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * itemsPerPage;
+  const paginatedPayments = filteredPayments.slice(startIndex, startIndex + itemsPerPage);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -249,47 +392,87 @@ export default function AdminPembayaranPage() {
         </p>
       </div>
 
-      {/* Tabs Filter */}
-      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #e2e8f0', paddingBottom: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch', flexWrap: 'nowrap' }}>
-        {[
-          { id: 'pending', label: 'Menunggu Verifikasi', count: payments.filter((p) => p.status === 'pending').length },
-          { id: 'approved', label: 'Disetujui', count: payments.filter((p) => p.status === 'approved').length },
-          { id: 'rejected', label: 'Ditolak', count: payments.filter((p) => p.status === 'rejected').length },
-          { id: 'all', label: 'Semua Riwayat', count: payments.length },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setFilterTab(tab.id as any)}
-            style={{
-              padding: '8px 14px',
-              borderRadius: 8,
-              border: 'none',
-              background: filterTab === tab.id ? '#0f172a' : '#f1f5f9',
-              color: filterTab === tab.id ? '#ffffff' : '#475569',
-              fontWeight: 700,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            <span>{tab.label}</span>
-            <span
+      {/* Tabs Filter & Action Toolbar */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 12,
+          borderBottom: '1px solid #e2e8f0',
+          paddingBottom: 12,
+        }}
+      >
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch', flexWrap: 'nowrap' }}>
+          {[
+            { id: 'pending', label: 'Menunggu Verifikasi', count: payments.filter((p) => p.status === 'pending').length },
+            { id: 'approved', label: 'Disetujui', count: payments.filter((p) => p.status === 'approved').length },
+            { id: 'rejected', label: 'Ditolak', count: payments.filter((p) => p.status === 'rejected').length },
+            { id: 'all', label: 'Semua Riwayat', count: payments.length },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setFilterTab(tab.id as any);
+                setCurrentPage(1);
+              }}
               style={{
-                fontSize: '0.72rem',
-                padding: '1px 6px',
-                borderRadius: 10,
-                background: filterTab === tab.id ? '#334155' : '#e2e8f0',
-                color: filterTab === tab.id ? '#f8fafc' : '#475569',
+                padding: '8px 14px',
+                borderRadius: 8,
+                border: 'none',
+                background: filterTab === tab.id ? '#0f172a' : '#f1f5f9',
+                color: filterTab === tab.id ? '#ffffff' : '#475569',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
               }}
             >
-              {tab.count}
-            </span>
+              <span>{tab.label}</span>
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  padding: '1px 6px',
+                  borderRadius: 10,
+                  background: filterTab === tab.id ? '#334155' : '#e2e8f0',
+                  color: filterTab === tab.id ? '#f8fafc' : '#475569',
+                }}
+              >
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Toolbar: Export CSV & Hapus Riwayat */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto' }}>
+          <button
+            type="button"
+            onClick={() => handleExportCSV(filteredPayments)}
+            className="btn-uda btn-uda-secondary btn-uda-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.82rem', padding: '8px 14px' }}
+            title="Download file CSV bukti pembayaran"
+          >
+            <Download size={14} />
+            <span>Export CSV</span>
           </button>
-        ))}
+
+          <button
+            type="button"
+            onClick={() => setShowDeleteModal(true)}
+            className="btn-uda btn-uda-danger btn-uda-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.82rem', padding: '8px 14px' }}
+            title="Hapus riwayat pembayaran berdasarkan durasi waktu"
+          >
+            <Trash2 size={14} />
+            <span>Hapus Riwayat</span>
+          </button>
+        </div>
       </div>
 
       {/* Tabel Pembayaran */}
@@ -320,7 +503,7 @@ export default function AdminPembayaranPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPayments.map((p) => (
+                  {paginatedPayments.map((p) => (
                     <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '14px 18px', color: '#64748b' }}>{p.date}</td>
                       <td style={{ padding: '14px 18px' }}>
@@ -420,7 +603,7 @@ export default function AdminPembayaranPage() {
 
             {/* Mobile & Tablet Card List */}
             <div className="admin-cards-mobile" style={{ padding: 12 }}>
-              {filteredPayments.map((p) => (
+              {paginatedPayments.map((p) => (
                 <div key={p.id} className="admin-mobile-card-item">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>{p.date}</span>
@@ -519,6 +702,139 @@ export default function AdminPembayaranPage() {
                 </div>
               ))}
             </div>
+
+            {/* Pagination Controls */}
+            {totalItems > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '14px 20px',
+                  borderTop: '1.5px solid #e2e8f0',
+                  backgroundColor: '#f8fafc',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  fontSize: '0.84rem',
+                  color: '#475569',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <span>
+                    Menampilkan <strong>{totalItems === 0 ? 0 : startIndex + 1} - {Math.min(startIndex + itemsPerPage, totalItems)}</strong> dari <strong>{totalItems}</strong> data
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Baris per halaman:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        border: '1.5px solid #0f172a',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        color: '#0f172a',
+                        backgroundColor: '#ffffff',
+                        cursor: 'pointer',
+                        outline: 'none',
+                      }}
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={safeCurrentPage === 1}
+                    className="btn-uda btn-uda-secondary btn-uda-sm"
+                    style={{
+                      padding: '6px 12px',
+                      cursor: safeCurrentPage === 1 ? 'not-allowed' : 'pointer',
+                      opacity: safeCurrentPage === 1 ? 0.45 : 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    <ChevronLeft size={14} />
+                    <span>Sebelumnya</span>
+                  </button>
+
+                  {/* Numbered Page Buttons */}
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter((page) => {
+                        if (totalPages <= 6) return true;
+                        if (page === 1 || page === totalPages) return true;
+                        return Math.abs(page - safeCurrentPage) <= 1;
+                      })
+                      .map((page, idx, arr) => {
+                        const prevPage = arr[idx - 1];
+                        const hasGap = prevPage && page - prevPage > 1;
+                        return (
+                          <React.Fragment key={page}>
+                            {hasGap && <span style={{ padding: '4px 4px', color: '#94a3b8', fontSize: '0.8rem' }}>...</span>}
+                            <button
+                              type="button"
+                              onClick={() => setCurrentPage(page)}
+                              style={{
+                                minWidth: 32,
+                                height: 32,
+                                padding: '0 8px',
+                                borderRadius: 6,
+                                border: '1.5px solid #0f172a',
+                                background: safeCurrentPage === page ? '#0f172a' : '#ffffff',
+                                color: safeCurrentPage === page ? '#ffffff' : '#0f172a',
+                                fontWeight: 800,
+                                fontSize: '0.8rem',
+                                cursor: 'pointer',
+                                boxShadow: safeCurrentPage === page ? '2px 2px 0px #0f172a' : 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              {page}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={safeCurrentPage === totalPages || totalPages === 0}
+                    className="btn-uda btn-uda-secondary btn-uda-sm"
+                    style={{
+                      padding: '6px 12px',
+                      cursor: safeCurrentPage === totalPages || totalPages === 0 ? 'not-allowed' : 'pointer',
+                      opacity: safeCurrentPage === totalPages || totalPages === 0 ? 0.45 : 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    <span>Selanjutnya</span>
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1105,6 +1421,245 @@ export default function AdminPembayaranPage() {
                 }}
               />
               <span>Mohon tunggu, sistem sedang memproses...</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS RIWAYAT PEMBAYARAN */}
+      {showDeleteModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.72)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: 20,
+            animation: 'fadeIn 0.15s ease-out',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingHistory) {
+              setShowDeleteModal(false);
+            }
+          }}
+        >
+          <div
+            className="uda-card"
+            style={{
+              maxWidth: 520,
+              width: '100%',
+              padding: '28px 26px',
+              maxHeight: '92vh',
+              overflowY: 'auto',
+              borderRadius: 18,
+              border: '3px solid #0f172a',
+              boxShadow: '8px 8px 0px #0f172a',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 18,
+            }}
+          >
+            {/* Header Modal */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 12,
+                  background: '#fef2f2',
+                  border: '2px solid #ef4444',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#dc2626',
+                  flexShrink: 0,
+                }}
+              >
+                <Trash2 size={24} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0' }}>
+                  Hapus Riwayat Pembayaran
+                </h3>
+                <p style={{ fontSize: '0.84rem', color: '#64748b', margin: 0, lineHeight: 1.45 }}>
+                  Pilih durasi usia data riwayat transaksi yang ingin dibersihkan dari daftar tabel pembayaran.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isDeletingHistory}
+                onClick={() => setShowDeleteModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748b',
+                  cursor: isDeletingHistory ? 'not-allowed' : 'pointer',
+                  padding: 4,
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Pilihan Durasi Hapus */}
+            <div>
+              <label style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: 8 }}>
+                Pilih Kriteria Usia Riwayat yang Dihapus:
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+                {[
+                  { value: 1, label: '1 Hari Lalu', sub: '> 1 hari lalu' },
+                  { value: 7, label: '7 Hari Lalu', sub: '> 7 hari lalu' },
+                  { value: 14, label: '14 Hari Lalu', sub: '> 14 hari lalu' },
+                  { value: 30, label: '30 Hari Lalu', sub: '> 30 hari lalu' },
+                  { value: 60, label: '2 Bulan Lalu', sub: '> 60 hari lalu' },
+                  { value: 365, label: '1 Tahun Lalu', sub: '> 1 tahun lalu' },
+                  { value: 'all', label: 'Semua Riwayat', sub: 'Seluruh riwayat' },
+                ].map((opt) => {
+                  const isSelected = deleteDurationDays === opt.value;
+                  const matchCount = getTargetPaymentsToDelete(opt.value as any).length;
+                  return (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      onClick={() => setDeleteDurationDays(opt.value as any)}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: isSelected ? '2px solid #0f172a' : '1.5px solid #cbd5e1',
+                        background: isSelected ? '#f8fafc' : '#ffffff',
+                        boxShadow: isSelected ? '3px 3px 0px #0f172a' : 'none',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 2,
+                        transition: 'all 0.1s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.82rem', color: isSelected ? '#0f172a' : '#334155' }}>
+                          {opt.label}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: 10,
+                            background: isSelected ? '#0f172a' : '#f1f5f9',
+                            color: isSelected ? '#ffffff' : '#64748b',
+                          }}
+                        >
+                          {matchCount}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{opt.sub}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Info Jumlah Data Terpilih & Export CSV Shortcut */}
+            {(() => {
+              const targetList = getTargetPaymentsToDelete(deleteDurationDays);
+              return (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    background: targetList.length > 0 ? '#fff7ed' : '#f1f5f9',
+                    border: `1.5px solid ${targetList.length > 0 ? '#fdba74' : '#cbd5e1'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ fontSize: '0.84rem', color: targetList.length > 0 ? '#9a3412' : '#64748b', fontWeight: 600 }}>
+                    {targetList.length > 0 ? (
+                      <>Ditemukan <strong style={{ color: '#c2410c' }}>{targetList.length} data riwayat pembayaran</strong> siap dibersihkan.</>
+                    ) : (
+                      <>Tidak ada data riwayat pembayaran pada rentang durasi ini.</>
+                    )}
+                  </div>
+                  {targetList.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleExportCSV(targetList)}
+                      className="btn-uda btn-uda-secondary btn-uda-sm"
+                      style={{ padding: '6px 12px', fontSize: '0.78rem', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                      title="Unduh salinan CSV bukti pembayaran data yang akan dihapus"
+                    >
+                      <Download size={13} />
+                      <span>Export CSV Bukti</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Safety Notice: Pastikan yang dihapus HANYA riwayat saja */}
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: 10,
+                background: '#f0fdf4',
+                border: '1.5px solid #86efac',
+                display: 'flex',
+                gap: 10,
+                alignItems: 'flex-start',
+              }}
+            >
+              <ShieldCheck size={20} style={{ color: '#16a34a', flexShrink: 0, marginTop: 2 }} />
+              <div style={{ fontSize: '0.78rem', color: '#166534', lineHeight: 1.45 }}>
+                <strong>Jaminan Keamanan:</strong> Tindakan ini <u>hanya menghapus catatan riwayat transaksi</u> dari tabel pembayaran. Akun pengguna, masa aktif langganan, dan status paket Pro/Team <strong>tetap aman & tidak akan terhapus</strong>.
+              </div>
+            </div>
+
+            {/* Tombol Aksi Modal */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button
+                type="button"
+                className="btn-uda btn-uda-secondary"
+                style={{ flex: 1 }}
+                disabled={isDeletingHistory}
+                onClick={() => setShowDeleteModal(false)}
+              >
+                Batal
+              </button>
+
+              {(() => {
+                const targetCount = getTargetPaymentsToDelete(deleteDurationDays).length;
+                return (
+                  <button
+                    type="button"
+                    className="btn-uda btn-uda-danger"
+                    style={{ flex: 1.5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                    disabled={isDeletingHistory || targetCount === 0}
+                    onClick={handleConfirmDeleteHistory}
+                  >
+                    {isDeletingHistory ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Sedang Menghapus...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 size={16} />
+                        <span>Hapus ({targetCount} Data)</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>

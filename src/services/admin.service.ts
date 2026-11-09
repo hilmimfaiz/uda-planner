@@ -16,6 +16,7 @@ export interface AdminPaymentItem {
   proof: string;
   status: 'pending' | 'approved' | 'rejected';
   date: string;
+  created_at?: string;
   reason?: string;
 }
 
@@ -540,6 +541,50 @@ export class AdminService {
     ]);
 
     return true;
+  }
+
+  static async deletePayments(paymentIds: string[]): Promise<{ success: boolean; count: number }> {
+    if (!paymentIds || paymentIds.length === 0) return { success: true, count: 0 };
+
+    const deleteSet = new Set(paymentIds);
+
+    // 1. Bersihkan HANYA dari cache pembayaran lokal (status akun pengguna tidak disentuh)
+    localPayments = localPayments.filter((p) => !deleteSet.has(p.id));
+    const currentStored = getAdminStorage<AdminPaymentItem[]>('uda_admin_payments', []);
+    const updated = currentStored.filter((p) => !deleteSet.has(p.id));
+    setAdminStorage('uda_admin_payments', updated);
+
+    // 2. Dispatch event ke seluruh komponen di browser
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('uda_payment_deleted', {
+            detail: { deletedIds: paymentIds },
+          })
+        );
+      } catch {}
+    }
+
+    // 3. Jalankan penghapusan di database Supabase & server API secara paralel
+    const supabase = createClient();
+    await Promise.allSettled([
+      fetch('/api/payments', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: paymentIds }),
+      }),
+      (async () => {
+        if (!supabase) return;
+        const uuidList = paymentIds.filter((id) =>
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+        );
+        if (uuidList.length > 0) {
+          await (supabase.from('payments' as any) as any).delete().in('id', uuidList);
+        }
+      })(),
+    ]);
+
+    return { success: true, count: paymentIds.length };
   }
 
   // ==========================================
