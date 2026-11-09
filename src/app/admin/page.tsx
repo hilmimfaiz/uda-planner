@@ -57,6 +57,7 @@ export default function AdminDashboardPage() {
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
+  const [approvingPayment, setApprovingPayment] = useState<any | null>(null);
 
   const fetchDashboardStats = React.useCallback(async () => {
     try {
@@ -167,6 +168,7 @@ export default function AdminDashboardPage() {
     if (!item || item.status === 'approved') return;
 
     setIsApproving(true);
+    setApprovingPayment(item);
     try {
       const rawPlan = (item?.plan || 'pro').toLowerCase();
       const targetPlan: 'pro' | 'team' = rawPlan === 'team' ? 'team' : 'pro';
@@ -177,18 +179,30 @@ export default function AdminDashboardPage() {
         targetPlan
       );
 
-      // Optimistic UI update
-      setPendingPayments((prev) => prev.filter((p) => p.id !== id));
-      setAllPayments((prev) => prev.map((p) => (p.id === id ? { ...p, status: 'approved', plan: targetPlan } : p)));
-      setSelectedProof(null);
-
+      const startTime = Date.now();
       await AdminService.approvePayment(id, item?.userId, targetPlan, {
         email: item?.email,
         durationDays: dur.days,
       });
+
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 750) {
+        await new Promise((r) => setTimeout(r, 750 - elapsed));
+      }
+
+      // Optimistic UI update
+      setPendingPayments((prev) => prev.filter((p) => p.id !== id));
+      setAllPayments((prev) => prev.map((p) => (p.id === id ? { ...p, status: 'approved', plan: targetPlan } : p)));
+      setSelectedProof(null);
+      setApprovingPayment(null);
+
       showToast(`✅ Pembayaran disetujui! Pengguna ${item?.user || ''} otomatis ditingkatkan ke paket ${targetPlan.toUpperCase()} (${dur.label} / ${dur.days} Hari).`);
+    } catch (err: any) {
+      setApprovingPayment(null);
+      showToast(`❌ Gagal menyetujui pembayaran: ${err?.message || 'Terjadi kesalahan sistem'}`);
     } finally {
       setIsApproving(false);
+      setApprovingPayment(null);
     }
   };
 
@@ -899,6 +913,111 @@ export default function AdminDashboardPage() {
                   Konfirmasi Tolak
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POP UP MODAL LOADING VERIFIKASI PAKET LANGGANAN */}
+      {approvingPayment && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.72)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999999,
+            padding: 20,
+            animation: 'fadeIn 0.15s ease-out',
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: 20,
+              maxWidth: 440,
+              width: '100%',
+              padding: '36px 30px',
+              border: '3px solid #0f172a',
+              boxShadow: '8px 8px 0px #0f172a',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              gap: 20,
+              position: 'relative',
+            }}
+          >
+            {/* Animasi Ikon Putar / Spinner */}
+            <div
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: '50%',
+                background: '#f0fdf4',
+                border: '3px solid #16a34a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 8px 24px rgba(22, 163, 74, 0.25)',
+                position: 'relative',
+              }}
+            >
+              <Loader2
+                size={44}
+                className="animate-spin"
+                style={{ color: '#16a34a', strokeWidth: 2.6 }}
+              />
+            </div>
+
+            {/* Konten Judul & Pesan Verifikasi Paket Langganan */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <h3 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
+                Verifikasi Paket Langganan
+              </h3>
+              <p style={{ fontSize: '0.9rem', color: '#475569', lineHeight: 1.55, margin: 0 }}>
+                Sedang memverifikasi pembayaran dan mengaktifkan{' '}
+                <span
+                  style={{
+                    fontWeight: 800,
+                    color: (approvingPayment.plan || '').toLowerCase() === 'team' ? '#7c3aed' : '#16a34a',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Paket {approvingPayment.plan || 'PRO'}
+                </span>{' '}
+                untuk pengguna <strong style={{ color: '#0f172a' }}>{approvingPayment.user}</strong>.
+              </p>
+            </div>
+
+            {/* Status Pill Loading */}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '7px 16px',
+                borderRadius: 9999,
+                background: '#f8fafc',
+                border: '1.5px solid #e2e8f0',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                color: '#64748b',
+              }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: '#16a34a',
+                  display: 'inline-block',
+                }}
+              />
+              <span>Mohon tunggu, sistem sedang memproses...</span>
             </div>
           </div>
         </div>
