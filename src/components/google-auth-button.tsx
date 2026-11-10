@@ -30,8 +30,14 @@ export function GoogleAuthButton({
           localStorage.removeItem('uda_google_auth_pending');
           localStorage.removeItem('uda_needs_profile_setup');
           localStorage.setItem('uda_google_auth_mode', 'masuk');
+          if (typeof document !== 'undefined') {
+            document.cookie = 'uda_google_auth_mode=masuk; path=/; max-age=1800; SameSite=Lax';
+          }
         } else {
           localStorage.setItem('uda_google_auth_mode', 'daftar');
+          if (typeof document !== 'undefined') {
+            document.cookie = 'uda_google_auth_mode=daftar; path=/; max-age=1800; SameSite=Lax';
+          }
           // Untuk mode daftar, siapkan status awal namun biarkan sistem auth memverifikasi apakah akun sudah ada
           localStorage.setItem('uda_google_auth_pending', 'true');
         }

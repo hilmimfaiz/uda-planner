@@ -680,7 +680,7 @@ export default function AdminPenggunaPage() {
                               }}
                             >
                               <span style={{ borderBottom: '1px dashed #94a3b8' }}>{u.name}</span>
-                              <Eye size={12} style={{ color: '#16a34a' }} />
+                              <Eye size={12} style={{ color: '#0f172a' }} />
                             </div>
                             <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{u.email}</div>
                           </div>
@@ -693,17 +693,20 @@ export default function AdminPenggunaPage() {
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 5,
-                              background: '#f0fdf4',
-                              color: '#16a34a',
-                              border: '1px solid #bbf7d0',
+                              background: '#ffffff',
+                              color: '#0f172a',
+                              border: '1.5px solid #0f172a',
                               padding: '3px 8px',
                               borderRadius: 6,
                               fontSize: '0.74rem',
-                              fontWeight: 700,
+                              fontWeight: 800,
                             }}
                           >
-                            <CheckCircle2 size={12} />
+                            <CheckCircle2 size={12} style={{ color: '#0f172a' }} />
                             <span>Terverifikasi</span>
+                            {(u.isGoogleUser || u.authMethod === 'google') && (
+                              <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>• Google</span>
+                            )}
                           </span>
                         ) : (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -712,16 +715,16 @@ export default function AdminPenggunaPage() {
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 5,
-                                background: '#fffbeb',
-                                color: '#b45309',
-                                border: '1px solid #fde68a',
+                                background: '#ffffff',
+                                color: '#0f172a',
+                                border: '1.5px dashed #0f172a',
                                 padding: '3px 8px',
                                 borderRadius: 6,
                                 fontSize: '0.74rem',
                                 fontWeight: 700,
                               }}
                             >
-                              <AlertTriangle size={12} />
+                              <AlertTriangle size={12} style={{ color: '#0f172a' }} />
                               <span>Belum Terverifikasi</span>
                             </span>
                             <button
@@ -731,9 +734,9 @@ export default function AdminPenggunaPage() {
                                 handleManualVerifyUser(u);
                               }}
                               style={{
-                                background: '#ecfdf5',
-                                border: '1.5px solid #10b981',
-                                color: '#047857',
+                                background: '#0f172a',
+                                border: '1.5px solid #0f172a',
+                                color: '#ffffff',
                                 padding: '3px 8px',
                                 borderRadius: 6,
                                 fontSize: '0.72rem',
@@ -759,9 +762,9 @@ export default function AdminPenggunaPage() {
                               fontWeight: 800,
                               padding: '4px 10px',
                               borderRadius: 6,
-                              background: '#fef2f2',
-                              color: '#dc2626',
-                              border: '1.5px solid #f87171',
+                              background: '#0f172a',
+                              color: '#ffffff',
+                              border: '1.5px solid #0f172a',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 5,
@@ -777,23 +780,9 @@ export default function AdminPenggunaPage() {
                               fontWeight: 700,
                               padding: '3px 8px',
                               borderRadius: 6,
-                              background:
-                                u.role === 'Owner'
-                                  ? '#f0fdf4'
-                                  : u.role === 'Reviewer'
-                                  ? '#f5f3ff'
-                                  : u.role === 'Editor'
-                                  ? '#eff6ff'
-                                  : '#f1f5f9',
-                              color:
-                                u.role === 'Owner'
-                                  ? '#16a34a'
-                                  : u.role === 'Reviewer'
-                                  ? '#7c3aed'
-                                  : u.role === 'Editor'
-                                  ? '#2563eb'
-                                  : '#475569',
-                              border: '1px solid currentColor',
+                              background: '#ffffff',
+                              color: '#0f172a',
+                              border: '1.5px solid #0f172a',
                             }}
                           >
                             {u.role || 'Owner'}
@@ -810,16 +799,15 @@ export default function AdminPenggunaPage() {
                                 letterSpacing: '0.02em',
                                 padding: '4px 10px',
                                 borderRadius: 8,
-                                background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-                                color: '#38bdf8',
-                                border: '1.5px solid #38bdf8',
-                                boxShadow: '0 2px 6px rgba(56, 189, 248, 0.25)',
+                                background: '#0f172a',
+                                color: '#ffffff',
+                                border: '1.5px solid #0f172a',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 6,
                               }}
                             >
-                              <ShieldCheck size={13} style={{ color: '#38bdf8' }} />
+                              <ShieldCheck size={13} style={{ color: '#ffffff' }} />
                               <span>Akses Sistem (Admin)</span>
                             </span>
                           </div>
@@ -833,31 +821,9 @@ export default function AdminPenggunaPage() {
                                 letterSpacing: '0.04em',
                                 padding: '4px 10px',
                                 borderRadius: 8,
-                                background:
-                                  u.plan === 'team'
-                                    ? 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)'
-                                    : u.plan === 'pro'
-                                    ? 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)'
-                                    : '#f1f5f9',
-                                color:
-                                  u.plan === 'team'
-                                    ? '#6d28d9'
-                                    : u.plan === 'pro'
-                                    ? '#15803d'
-                                    : '#475569',
-                                border: `1.5px solid ${
-                                  u.plan === 'team'
-                                    ? '#c4b5fd'
-                                    : u.plan === 'pro'
-                                    ? '#86efac'
-                                    : '#cbd5e1'
-                                }`,
-                                boxShadow:
-                                  u.plan === 'team'
-                                    ? '0 2px 6px rgba(124, 58, 237, 0.15)'
-                                    : u.plan === 'pro'
-                                    ? '0 2px 6px rgba(22, 163, 74, 0.15)'
-                                    : 'none',
+                                background: '#ffffff',
+                                color: '#0f172a',
+                                border: '1.5px solid #0f172a',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 6,
@@ -868,16 +834,7 @@ export default function AdminPenggunaPage() {
                                   width: 7,
                                   height: 7,
                                   borderRadius: '50%',
-                                  background:
-                                    u.plan === 'team'
-                                      ? '#7c3aed'
-                                      : u.plan === 'pro'
-                                      ? '#16a34a'
-                                      : '#94a3b8',
-                                  boxShadow:
-                                    u.plan !== 'free'
-                                      ? `0 0 6px ${u.plan === 'team' ? '#7c3aed' : '#16a34a'}`
-                                      : 'none',
+                                  background: '#0f172a',
                                 }}
                               />
                               <span>{u.plan}</span>
@@ -934,7 +891,7 @@ export default function AdminPenggunaPage() {
                           height: 38,
                           borderRadius: '50%',
                           overflow: 'hidden',
-                          background: '#16a34a',
+                          background: '#0f172a',
                           color: '#ffffff',
                           display: 'flex',
                           alignItems: 'center',
@@ -969,9 +926,9 @@ export default function AdminPenggunaPage() {
                           textTransform: 'uppercase',
                           padding: '3px 8px',
                           borderRadius: 6,
-                          background: u.plan === 'team' ? '#f5f3ff' : u.plan === 'pro' ? '#f0fdf4' : '#f1f5f9',
-                          color: u.plan === 'team' ? '#7c3aed' : u.plan === 'pro' ? '#16a34a' : '#475569',
-                          border: '1px solid currentColor',
+                          background: '#ffffff',
+                          color: '#0f172a',
+                          border: '1.5px solid #0f172a',
                         }}
                       >
                         {u.plan}
@@ -982,12 +939,12 @@ export default function AdminPenggunaPage() {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, paddingTop: 6, borderTop: '1px dashed #e2e8f0', flexWrap: 'wrap' }}>
                     <div>
                       {u.isEmailVerified ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#16a34a', padding: '2px 7px', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700 }}>
-                          <CheckCircle2 size={11} /> Terverifikasi
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#ffffff', color: '#0f172a', border: '1px solid #0f172a', padding: '2px 7px', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700 }}>
+                          <CheckCircle2 size={11} style={{ color: '#0f172a' }} /> Terverifikasi
                         </span>
                       ) : (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fffbeb', color: '#b45309', padding: '2px 7px', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700 }}>
-                          <AlertTriangle size={11} /> Belum Verif
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#ffffff', color: '#0f172a', border: '1px dashed #0f172a', padding: '2px 7px', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700 }}>
+                          <AlertTriangle size={11} style={{ color: '#0f172a' }} /> Belum Verif
                         </span>
                       )}
                     </div>
@@ -1707,25 +1664,13 @@ export default function AdminPenggunaPage() {
                       borderRadius: 999,
                       background:
                         detailUser.role === 'Admin' || detailUser.role === 'admin' || detailUser.plan === 'admin' || detailUser.email?.toLowerCase().startsWith('admin')
-                          ? '#fef2f2'
-                          : detailUser.role === 'Owner'
-                          ? '#f0fdf4'
-                          : detailUser.role === 'Reviewer'
-                          ? '#f5f3ff'
-                          : detailUser.role === 'Editor'
-                          ? '#eff6ff'
-                          : '#f1f5f9',
+                          ? '#0f172a'
+                          : '#ffffff',
                       color:
                         detailUser.role === 'Admin' || detailUser.role === 'admin' || detailUser.plan === 'admin' || detailUser.email?.toLowerCase().startsWith('admin')
-                          ? '#dc2626'
-                          : detailUser.role === 'Owner'
-                          ? '#16a34a'
-                          : detailUser.role === 'Reviewer'
-                          ? '#7c3aed'
-                          : detailUser.role === 'Editor'
-                          ? '#2563eb'
-                          : '#475569',
-                      border: '1.5px solid currentColor',
+                          ? '#ffffff'
+                          : '#0f172a',
+                      border: '1.5px solid #0f172a',
                     }}
                   >
                     Role: {detailUser.role === 'Admin' || detailUser.role === 'admin' || detailUser.plan === 'admin' || detailUser.email?.toLowerCase().startsWith('admin') ? 'Admin' : (detailUser.role || 'Member')}
@@ -1736,9 +1681,9 @@ export default function AdminPenggunaPage() {
                       fontWeight: 800,
                       padding: '4px 10px',
                       borderRadius: 999,
-                      background: detailUser.isSuspended ? '#fee2e2' : '#dcfce7',
-                      color: detailUser.isSuspended ? '#dc2626' : '#166534',
-                      border: `1.5px solid ${detailUser.isSuspended ? '#f87171' : '#86efac'}`,
+                      background: '#ffffff',
+                      color: '#0f172a',
+                      border: '1.5px solid #0f172a',
                     }}
                   >
                     {detailUser.isSuspended ? '● Ditangguhkan' : '● Akun Aktif'}
@@ -1749,9 +1694,9 @@ export default function AdminPenggunaPage() {
                       fontWeight: 800,
                       padding: '4px 10px',
                       borderRadius: 999,
-                      background: detailUser.isEmailVerified ? '#dcfce7' : '#fef3c7',
-                      color: detailUser.isEmailVerified ? '#166534' : '#92400e',
-                      border: `1.5px solid ${detailUser.isEmailVerified ? '#86efac' : '#fcd34d'}`,
+                      background: '#ffffff',
+                      color: '#0f172a',
+                      border: '1.5px solid #0f172a',
                     }}
                   >
                     {detailUser.isEmailVerified ? '● Email Terverifikasi' : '● Belum Verifikasi'}
@@ -1775,8 +1720,8 @@ export default function AdminPenggunaPage() {
                   marginTop: 14,
                   padding: '12px 14px',
                   borderRadius: 10,
-                  background: detailUser.isEmailVerified ? '#f0fdf4' : '#fffbeb',
-                  border: `1.5px solid ${detailUser.isEmailVerified ? '#bbf7d0' : '#fde68a'}`,
+                  background: '#ffffff',
+                  border: '1.5px solid #0f172a',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -1786,18 +1731,24 @@ export default function AdminPenggunaPage() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   {detailUser.isEmailVerified ? (
-                    <CheckCircle2 size={20} style={{ color: '#16a34a', flexShrink: 0 }} />
+                    <CheckCircle2 size={20} style={{ color: '#0f172a', flexShrink: 0 }} />
                   ) : (
-                    <AlertTriangle size={20} style={{ color: '#d97706', flexShrink: 0 }} />
+                    <AlertTriangle size={20} style={{ color: '#0f172a', flexShrink: 0 }} />
                   )}
                   <div>
-                    <div style={{ fontSize: '0.84rem', fontWeight: 800, color: detailUser.isEmailVerified ? '#166534' : '#92400e' }}>
-                      {detailUser.isEmailVerified ? 'Email Terverifikasi' : 'Email Belum Terverifikasi (Pendaftaran Email)'}
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: detailUser.isEmailVerified ? '#15803d' : '#b45309' }}>
+                    <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a' }}>
                       {detailUser.isEmailVerified
-                        ? 'Pengguna memiliki akses penuh dan status email telah aktif.'
-                        : 'Jika pengguna terkendala menerima pesan email konfirmasi, Admin dapat memverifikasi akun ini secara manual.'}
+                        ? (detailUser.isGoogleUser || detailUser.authMethod === 'google'
+                            ? 'Email Terverifikasi (Akun Google)'
+                            : 'Email Terverifikasi')
+                        : 'Email Belum Terverifikasi (Pendaftaran Email)'}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      {detailUser.isEmailVerified
+                        ? (detailUser.isGoogleUser || detailUser.authMethod === 'google'
+                            ? 'Pengguna mendaftar menggunakan Akun Google sehingga telah terverifikasi secara otomatis.'
+                            : 'Pengguna memiliki akses penuh dan status email telah aktif.')
+                        : 'Pengguna mendaftar dengan email biasa. Jika pengguna terkendala menerima pesan email konfirmasi, Admin dapat memverifikasi akun ini secara manual.'}
                     </div>
                   </div>
                 </div>
@@ -1807,9 +1758,9 @@ export default function AdminPenggunaPage() {
                     type="button"
                     onClick={() => handleManualVerifyUser(detailUser)}
                     style={{
-                      background: '#059669',
+                      background: '#0f172a',
                       color: '#ffffff',
-                      border: 'none',
+                      border: '1.5px solid #0f172a',
                       borderRadius: 8,
                       padding: '7px 14px',
                       fontSize: '0.8rem',
@@ -1818,7 +1769,6 @@ export default function AdminPenggunaPage() {
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 6,
-                      boxShadow: '0 2px 6px rgba(5,150,105,0.3)',
                     }}
                   >
                     <MailCheck size={14} />

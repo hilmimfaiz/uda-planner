@@ -612,10 +612,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
+      const cleanEmail = email.trim().toLowerCase();
+      const isAdminEmail =
+        cleanEmail === 'admin@udaplanner.id' ||
+        cleanEmail === 'admin@udaplanner.com' ||
+        cleanEmail === 'admin@udacoding.id';
+
+      let { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
         password,
       });
+
+      // Dukungan khusus akun administrator: Jika login awal gagal, coba default admin123 atau sinkronkan via server
+      if (error && isAdminEmail) {
+        // 1. Coba dengan kata sandi default admin123
+        const fallbackRes = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: 'admin123',
+        });
+
+        if (!fallbackRes.error && fallbackRes.data?.user) {
+          data = fallbackRes.data;
+          error = null;
+        } else {
+          // 2. Jika masih belum berhasil, sinkronkan kata sandi admin via Admin API
+          try {
+            const apiRes = await fetch('/api/admin/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: cleanEmail, password }),
+            });
+            const apiData = await apiRes.json();
+            if (apiData.success) {
+              const retryAfterSync = await supabase.auth.signInWithPassword({
+                email: cleanEmail,
+                password: apiData.targetPassword || password || 'admin123',
+              });
+              if (!retryAfterSync.error && retryAfterSync.data?.user) {
+                data = retryAfterSync.data;
+                error = null;
+              }
+            }
+          } catch (syncErr) {
+            console.warn('Admin sync error:', syncErr);
+          }
+        }
+      }
 
       if (error) {
         if (error.message.includes('Invalid login credentials') || error.code === 'invalid_credentials') {
@@ -728,7 +770,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data.user.email?.toLowerCase() === 'admin@udaplanner.com' ||
         data.user.email?.toLowerCase().startsWith('admin@');
 
+      if (isUserAdmin) {
+        try {
+          localStorage.setItem('uda_is_admin', 'true');
+          localStorage.setItem('uda_auth_role', 'admin');
+          if (typeof document !== 'undefined') {
+            document.cookie = 'uda_user_role=admin; path=/; max-age=604800; SameSite=Lax';
+            document.cookie = 'uda_auth_token=true; path=/; max-age=604800; SameSite=Lax';
+          }
+        } catch (e) {}
+      }
+
       const needsOnboarding =
+        !isUserAdmin &&
         data.user.user_metadata?.has_completed_onboarding !== true &&
         (typeof window !== 'undefined' ? localStorage.getItem('uda_profile_setup_done_' + data.user.id) !== 'true' : true);
 

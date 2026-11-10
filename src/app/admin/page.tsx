@@ -277,7 +277,7 @@ export default function AdminDashboardPage() {
           <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
             {totalUsersCount}
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>
+          <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginTop: 4 }}>
             {`${freeUsersCount} akun gratis (free)`}
           </div>
         </div>
@@ -288,8 +288,8 @@ export default function AdminDashboardPage() {
           style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
           title="Klik untuk menyaring Pengguna Pro"
         >
-          <div style={{ color: '#3b82f6', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA PRO AKTIF</div>
-          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#1d4ed8', marginTop: 4 }}>
+          <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA PRO AKTIF</div>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
             {proUsersCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Rp 49.000 / 30 hari</div>
@@ -301,8 +301,8 @@ export default function AdminDashboardPage() {
           style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
           title="Klik untuk menyaring Pengguna Tim"
         >
-          <div style={{ color: '#8b5cf6', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA TIM AKTIF</div>
-          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#6d28d9', marginTop: 4 }}>
+          <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>PENGGUNA TIM AKTIF</div>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
             {teamUsersCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>Rp 149.000 / 30 hari</div>
@@ -311,38 +311,38 @@ export default function AdminDashboardPage() {
         <div
           className="uda-card admin-metrics-card"
           onClick={() => router.push('/admin/pembayaran')}
-          style={{ padding: 18, border: '1px solid #fde68a', background: '#fffbeb', cursor: 'pointer', transition: 'transform 0.15s' }}
+          style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
         >
-          <div style={{ color: '#b45309', fontSize: '0.78rem', fontWeight: 700 }}>MENUNGGU VERIFIKASI</div>
-          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#d97706', marginTop: 4 }}>
+          <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>MENUNGGU VERIFIKASI</div>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
             {pendingPayments.length}
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600, marginTop: 4 }}>Klik untuk cek transfer →</div>
+          <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginTop: 4 }}>Klik untuk cek transfer →</div>
         </div>
 
         <div
           className="uda-card admin-metrics-card"
           onClick={() => router.push('/admin/verifikasi-email')}
-          style={{ padding: 18, border: '1px solid #fed7aa', background: '#fff7ed', cursor: 'pointer', transition: 'transform 0.15s' }}
+          style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
         >
-          <div style={{ color: '#c2410c', fontSize: '0.78rem', fontWeight: 700 }}>EMAIL BELUM DIVERIFIKASI</div>
-          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#ea580c', marginTop: 4 }}>
+          <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>EMAIL BELUM DIVERIFIKASI</div>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
             {Math.max(0, adminUsers.filter((u) => !u.isEmailVerified).length)}
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#c2410c', fontWeight: 600, marginTop: 4 }}>Verifikasi akun manual →</div>
+          <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginTop: 4 }}>Verifikasi akun manual →</div>
         </div>
 
         <div
           className="uda-card admin-metrics-card"
           onClick={() => router.push('/admin/pembayaran')}
-          style={{ padding: 18, background: '#f0fdf4', border: '1px solid #bbf7d0', cursor: 'pointer' }}
+          style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
           title="Total Pembayaran Berhasil Disetujui"
         >
-          <div style={{ color: '#15803d', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PEMASUKAN DIVERIFIKASI</div>
-          <div className="admin-metrics-number" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#166534', marginTop: 4 }}>
+          <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PEMASUKAN DIVERIFIKASI</div>
+          <div className="admin-metrics-number" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
             {formattedRevenue}
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: 4 }}>
+          <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginTop: 4 }}>
             {`Dari ${allPayments.filter((p) => p.status === 'approved').length} transaksi berhasil`}
           </div>
         </div>

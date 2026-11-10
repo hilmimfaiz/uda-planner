@@ -40,6 +40,20 @@ import { useModal } from '@/contexts/modal-context';
 import { getSiteUrl } from '@/lib/site-url';
 import { playSuccessSound, playErrorSound, playNotificationSound } from '@/lib/audio-effects';
 import { addAppNotification } from '@/lib/notification-manager';
+import { GuidedTour, TourStep } from '@/components/guided-tour';
+
+const brandDetailTourSteps: TourStep[] = [
+  {
+    title: 'Pengaturan Detail Brand',
+    description: 'Di sini Anda dapat mengelola identitas profil brand, pilar konten, serta kolaborasi tim kerja.',
+    placement: 'bottom',
+  },
+  {
+    title: 'Pilar Konten & Anggota Tim',
+    description: 'Atur kategori pilar konten brand Anda dan undang kolaborator seperti Editor, Reviewer, atau Viewer.',
+    placement: 'bottom',
+  },
+];
 
 const isGenericStockPhoto = (url?: string | null) =>
   !url || url.includes('photo-1534528741775-53994a69daeb');
@@ -142,6 +156,7 @@ export default function PengaturanBrandDetailPage() {
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
   const [isAccessDenied, setIsAccessDenied] = useState<boolean>(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState<boolean>(true);
+  const [brandOrderIndex, setBrandOrderIndex] = useState<number>(-1);
   const [brandOwner, setBrandOwner] = useState<{
     id: string;
     name: string;
@@ -158,6 +173,14 @@ export default function PengaturanBrandDetailPage() {
         setIsAccessDenied(true);
       }
       setIsLoadingAuth(false);
+    });
+
+    BrandService.getBrands(user?.id).then((allBrands) => {
+      if (allBrands && allBrands.length > 0) {
+        const owned = allBrands.filter((b) => !b.owner_id || b.owner_id === user?.id);
+        const idx = owned.findIndex((b) => b.id === brandId);
+        setBrandOrderIndex(idx);
+      }
     });
 
     BrandService.getBrandById(brandId, user?.id).then((b) => {
@@ -928,6 +951,37 @@ export default function PengaturanBrandDetailPage() {
   }
 
   const isBrandOwner = userRole === 'owner';
+  const isBrandLocked = (account?.plan_code || 'free') === 'free' && isBrandOwner && brandOrderIndex > 0;
+
+  if (isBrandLocked) {
+    return (
+      <div className="uda-card" style={{ maxWidth: 560, margin: '60px auto', padding: '40px 32px', textAlign: 'center', border: '2px solid #ef4444' }}>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+          <Lock size={32} />
+        </div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: '#fee2e2', color: '#b91c1c', borderRadius: 999, fontSize: '0.75rem', fontWeight: 800, marginBottom: 12 }}>
+          KUOTA PAKET FREE TERLAMPAUI
+        </div>
+        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+          Brand "{brand.name}" Terkunci
+        </h2>
+        <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: 16 }}>
+          Akun Anda saat ini berstatus <strong>Paket Gratis (Free)</strong> yang hanya dapat mengelola <strong>1 brand aktif</strong>. Brand ini tetap tersimpan aman di database dan tidak dihapus.
+        </p>
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 16px', color: '#334155', fontSize: '0.85rem', marginBottom: 24, textAlign: 'left', lineHeight: 1.5 }}>
+          💡 <strong>Solusi:</strong> Upgrade akun Anda ke <strong>Paket Pro (hingga 5 brand)</strong> atau <strong>Paket Team (hingga 20 brand)</strong> untuk membuka kembali akses pengeditan brand ini.
+        </div>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button className="btn-uda btn-uda-secondary" onClick={() => router.push('/app/brand')}>
+            Kembali ke Daftar Brand
+          </button>
+          <button className="btn-uda btn-uda-primary" onClick={() => router.push('/app/langganan')}>
+            Upgrade ke Paket Pro / Team
+          </button>
+        </div>
+      </div>
+    );
+  }
   const ownerFromMembers = members.find((m) => m.role === 'owner');
   const effectiveOwner =
     ownerFromMembers ||
@@ -2708,6 +2762,8 @@ export default function PengaturanBrandDetailPage() {
           </div>
         </div>
       )}
+
+      <GuidedTour steps={brandDetailTourSteps} tourKey="uda_tour_brand_detail" />
     </div>
   );
 }

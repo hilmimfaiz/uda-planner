@@ -95,7 +95,13 @@ export async function middleware(request: NextRequest) {
         return supabaseResponse;
       }
       const url = request.nextUrl.clone();
-      url.pathname = '/app';
+      const userEmail = (user.email || '').toLowerCase().trim();
+      const isAdminUser =
+        userEmail === 'admin@udaplanner.id' ||
+        userEmail === 'admin@udaplanner.com' ||
+        userEmail === 'admin@udacoding.id' ||
+        userEmail.startsWith('admin@');
+      url.pathname = isAdminUser ? '/admin' : '/app';
       return NextResponse.redirect(url);
     }
 

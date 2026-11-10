@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Layers,
   Plus,
+  Building,
 } from 'lucide-react';
 import { compressImageToBase64 } from '@/lib/image-upload';
 import { DUMMY_BRANDS, DUMMY_SNIPPETS, DummyPost, DummyBrand, DummySnippet } from '@/lib/dummy-data';
@@ -85,6 +86,7 @@ export default function PostEditorDetailPage() {
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>('owner');
   const [isAccessDenied, setIsAccessDenied] = useState(false);
   const [isLoadingPost, setIsLoadingPost] = useState(false);
+  const [isLoadingBrands, setIsLoadingBrands] = useState(true);
 
   const isReadOnly = userRole === 'viewer';
 
@@ -288,17 +290,24 @@ export default function PostEditorDetailPage() {
   };
 
   React.useEffect(() => {
-    BrandService.getBrands(user?.id).then((bList) => {
-      if (bList && bList.length > 0) {
-        setBrands(bList);
-        if (isNew) {
-          const activeBrandId = typeof window !== 'undefined' ? localStorage.getItem('uda_active_brand_id') : null;
-          const targetBrand = (activeBrandId && bList.find((b) => b.id === activeBrandId)) || bList[0];
-          setPost((prev) => ({ ...prev, brand_id: targetBrand.id }));
-          BrandService.getUserBrandRole(targetBrand.id, user?.id).then((r) => setUserRole(r || 'owner'));
+    setIsLoadingBrands(true);
+    BrandService.getBrands(user?.id)
+      .then((bList) => {
+        const validBrands = bList || [];
+        setBrands(validBrands);
+        if (validBrands.length > 0) {
+          if (isNew) {
+            const activeBrandId = typeof window !== 'undefined' ? localStorage.getItem('uda_active_brand_id') : null;
+            const targetBrand = (activeBrandId && validBrands.find((b) => b.id === activeBrandId)) || validBrands[0];
+            setPost((prev) => ({ ...prev, brand_id: targetBrand.id }));
+            BrandService.getUserBrandRole(targetBrand.id, user?.id).then((r) => setUserRole(r || 'owner'));
+          }
         }
-      }
-    });
+        setIsLoadingBrands(false);
+      })
+      .catch(() => {
+        setIsLoadingBrands(false);
+      });
 
     SnippetService.getSnippets(undefined, undefined, user?.id).then((sList) => {
       if (sList && sList.length > 0) setSnippets(sList);
@@ -352,6 +361,15 @@ export default function PostEditorDetailPage() {
   };
 
   const handleSavePost = async () => {
+    if (brands.length === 0) {
+      showError(
+        'Belum Memiliki Brand',
+        'Anda harus membuat atau memilih akun brand terlebih dahulu sebelum dapat menyimpan postingan.'
+      );
+      router.push('/app/brand');
+      return;
+    }
+
     if (!post.title.trim()) {
       showError('Judul Wajib Diisi', 'Silakan masukkan judul postingan sebelum menyimpannya ke database.');
       return;
@@ -509,11 +527,72 @@ END:VCALENDAR`;
     },
   ];
 
-  if (isLoadingPost) {
+  if (isLoadingPost || isLoadingBrands) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: 10, color: '#64748b' }}>
         <Loader2 className="animate-spin" size={24} style={{ color: '#16a34a' }} />
-        <span style={{ fontWeight: 600 }}>Memuat detail postingan...</span>
+        <span style={{ fontWeight: 600 }}>Memuat formulir postingan...</span>
+      </div>
+    );
+  }
+
+  // Guard: Hanya izinkan buat / kelola postingan jika pengguna sudah memiliki brand
+  if (!isLoadingBrands && brands.length === 0) {
+    return (
+      <div
+        className="uda-card"
+        style={{
+          maxWidth: 540,
+          margin: '60px auto',
+          padding: '42px 32px',
+          textAlign: 'center',
+          borderRadius: 18,
+          border: '3px solid #0f172a',
+          boxShadow: '6px 6px 0px #0f172a',
+          backgroundColor: '#ffffff',
+        }}
+      >
+        <div
+          style={{
+            width: 68,
+            height: 68,
+            borderRadius: '50%',
+            background: '#f0fdf4',
+            border: '2.5px solid #16a34a',
+            color: '#16a34a',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 18px',
+            boxShadow: '0 8px 20px rgba(22, 163, 74, 0.18)',
+          }}
+        >
+          <Building size={34} />
+        </div>
+        <h2 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0f172a', marginBottom: 10 }}>
+          Belum Memiliki Akun Brand
+        </h2>
+        <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: 24 }}>
+          Untuk dapat membuat dan menjadwalkan postingan konten, Anda harus memiliki akun brand media sosial terlebih dahulu. Silakan tambahkan brand pertama Anda di menu Brand.
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn-uda btn-uda-secondary"
+            onClick={() => router.push('/app')}
+          >
+            Kembali ke Beranda
+          </button>
+          <button
+            type="button"
+            className="btn-uda btn-uda-primary"
+            onClick={() => router.push('/app/brand')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Plus size={16} />
+            <span>Buat Brand Sekarang</span>
+          </button>
+        </div>
       </div>
     );
   }

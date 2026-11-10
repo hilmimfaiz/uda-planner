@@ -90,12 +90,13 @@ export default function PapanKanbanPage() {
     terposting: 1,
   });
 
-  type ColId = "ide" | "draft" | "review" | "siap" | "terposting";
-  const [activeStatus, setActiveStatus] = useState<ColId>("ide");
+  type ColId = "all" | "ide" | "draft" | "review" | "siap" | "terposting";
+  const [activeStatus, setActiveStatus] = useState<ColId>("all");
   const [isMobile, setIsMobile] = useState(false);
 
   React.useEffect(() => {
-    const mq = window.matchMedia("(max-width: 640px)");
+    // Media query untuk mendeteksi mode Mobile dan Tablet (< 1024px)
+    const mq = window.matchMedia("(max-width: 1024px)");
     const update = () => setIsMobile(mq.matches);
     update();
     mq.addEventListener("change", update);
@@ -427,6 +428,32 @@ export default function PapanKanbanPage() {
             </select>
           </div>
 
+          {/* Filter Status 1 Dropdown Khusus Mode Mobile & Tablet (< 1024px) */}
+          {isMobile && (
+            <div className="kanban-filter-field">
+              <label htmlFor="kanban-status-filter">Filter Status:</label>
+              <select
+                id="kanban-status-filter"
+                className="kanban-select"
+                value={activeStatus}
+                onChange={(e) => {
+                  setActiveStatus(e.target.value as any);
+                  resetPages();
+                }}
+              >
+                <option value="all">Semua Status ({filteredPosts.length})</option>
+                {columns.map((col) => {
+                  const count = filteredPosts.filter((p) => p.status === col.id).length;
+                  return (
+                    <option key={col.id} value={col.id}>
+                      {col.title} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+
           {selectedBrandId !== "all" && currentFilteredRole && (
             <div
               className="kanban-role-badge"
@@ -520,31 +547,6 @@ export default function PapanKanbanPage() {
         </div>
       )}
 
-      {/* Tab status (khusus HP) */}
-      {isMobile && (
-        <div className="kanban-tabs" role="tablist">
-          {columns.map((col) => {
-            const count = filteredPosts.filter(
-              (p) => p.status === col.id,
-            ).length;
-            return (
-              <button
-                key={col.id}
-                type="button"
-                role="tab"
-                aria-selected={activeStatus === col.id}
-                className={`kanban-tab ${activeStatus === col.id ? "active" : ""}`}
-                onClick={() => setActiveStatus(col.id)}
-              >
-                <span className="dot" style={{ background: col.color }} />
-                {col.title}
-                <span className="count">{count}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       {/* 5 Kolom Kanban Responsif */}
       <div className="kanban-board-wrapper" style={{ position: "relative" }}>
         {isLoading && posts.length === 0 ? (
@@ -567,7 +569,7 @@ export default function PapanKanbanPage() {
               }}
             />
             {columns.map((col, idx) => {
-          if (isMobile && col.id !== activeStatus) return null;
+              if (isMobile && activeStatus !== "all" && col.id !== activeStatus) return null;
           const isRow1 = idx < 3; // 0 (ide), 1 (draft), 2 (review) -> Baris Atas 3 Kolom
           const colPosts = filteredPosts.filter((p) => p.status === col.id);
           const totalPages = Math.max(
@@ -892,7 +894,7 @@ export default function PapanKanbanPage() {
                               value={post.status}
                               onChange={(e) =>
                                 handleDropToColumn(
-                                  e.target.value as ColId,
+                                  e.target.value as "ide" | "draft" | "review" | "siap" | "terposting",
                                   post.id,
                                 )
                               }

@@ -18,6 +18,7 @@ import {
   MessageCircle,
   X,
   Sparkles,
+  XCircle,
 } from 'lucide-react';
 import { PlanService, DynamicPlan, PlanDurationItem, resolvePaymentDuration } from '@/services/plan.service';
 import { BankService, BankAccountItem } from '@/services/bank.service';
@@ -88,6 +89,10 @@ export default function LanggananPage() {
   } | null>(null);
   const [showLeaveTeamModal, setShowLeaveTeamModal] = useState(false);
   const [isLeavingTeam, setIsLeavingTeam] = useState(false);
+
+  // Status Berhenti Langganan (Downgrade ke Free)
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [isCancelingSubscription, setIsCancelingSubscription] = useState(false);
 
   // Form Pembayaran
   const [senderName, setSenderName] = useState('');
@@ -304,6 +309,65 @@ export default function LanggananPage() {
     }
   };
 
+  const handleCancelSubscription = async () => {
+    if (!user?.id) return;
+    setIsCancelingSubscription(true);
+
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        await (supabase.from('accounts' as any) as any)
+          .update({
+            plan_code: 'free',
+            plan_until: null,
+          })
+          .or(`user_id.eq.${user.id},id.eq.${user.id}`);
+      }
+
+      // Update local storage & broadcast event
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`uda_user_plan_${user.id}`, 'free');
+          if (user.email) {
+            localStorage.setItem(`uda_user_plan_${user.email.toLowerCase()}`, 'free');
+            localStorage.removeItem(`uda_user_plan_until_${user.email.toLowerCase()}`);
+          }
+          localStorage.removeItem(`uda_user_plan_until_${user.id}`);
+
+          const rawAcc = localStorage.getItem('uda_auth_account');
+          if (rawAcc) {
+            const parsed = JSON.parse(rawAcc);
+            parsed.plan_code = 'free';
+            parsed.plan_until = null;
+            localStorage.setItem('uda_auth_account', JSON.stringify(parsed));
+          }
+
+          window.dispatchEvent(
+            new CustomEvent('uda_account_updated', {
+              detail: { userId: user.id, planCode: 'free', planUntil: null },
+            })
+          );
+          window.dispatchEvent(new Event('storage'));
+        } catch (e) {}
+      }
+
+      setShowCancelModal(false);
+      playSuccessSound();
+      showSuccess(
+        'Berhenti Langganan Berhasil',
+        'Akun Anda kini telah beralih ke Paket Free (Gratis). Jika Anda memiliki lebih dari 1 brand, brand tambahan Anda telah dikunci dengan aman (tidak dihapus) dan dapat diaktifkan kembali kapan saja dengan berlangganan Pro atau Team.'
+      );
+
+      if (refreshUserData) await refreshUserData();
+      await loadData();
+    } catch (err: any) {
+      playErrorSound();
+      showError('Gagal Berhenti Langganan', err?.message || 'Terjadi kesalahan sistem saat memproses pembatalan.');
+    } finally {
+      setIsCancelingSubscription(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
 
@@ -374,10 +438,24 @@ export default function LanggananPage() {
         setUserPayments(fresh);
         userPaymentsRef.current = fresh;
       }
+      AdminService.getAppSettings().then((s) => {
+        if (s?.adminWhatsapp) setAdminWhatsapp(s.adminWhatsapp);
+      });
+    };
+
+    const handleSettingsUpdate = (e?: any) => {
+      if (e?.detail?.adminWhatsapp) {
+        setAdminWhatsapp(e.detail.adminWhatsapp);
+      } else {
+        AdminService.getAppSettings().then((s) => {
+          if (s?.adminWhatsapp) setAdminWhatsapp(s.adminWhatsapp);
+        });
+      }
     };
 
     window.addEventListener('storage', handleSync);
     window.addEventListener('uda_account_updated', handleSync);
+    window.addEventListener('uda_settings_updated', handleSettingsUpdate);
     window.addEventListener('focus', handleSync);
 
     // Polling setiap 8 detik saat ada pembayaran pending (mencegah bandwidth berlebih & lag)
@@ -390,6 +468,7 @@ export default function LanggananPage() {
     return () => {
       window.removeEventListener('storage', handleSync);
       window.removeEventListener('uda_account_updated', handleSync);
+      window.removeEventListener('uda_settings_updated', handleSettingsUpdate);
       window.removeEventListener('focus', handleSync);
       clearInterval(interval);
     };
@@ -547,12 +626,12 @@ export default function LanggananPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 1040, margin: '0 auto', width: '100%', padding: '40px 0' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <ShieldCheck size={26} style={{ color: '#16a34a' }} />
-            <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em' }}>
+            <ShieldCheck size={24} style={{ color: '#16a34a', flexShrink: 0 }} />
+            <h1 style={{ fontSize: 'clamp(1.18rem, 3.8vw, 1.55rem)', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', margin: 0 }}>
               Paket Langganan & Upgrade Akun
             </h1>
           </div>
-          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
+          <p style={{ color: '#64748b', fontSize: 'clamp(0.78rem, 2.2vw, 0.88rem)', lineHeight: 1.5, margin: '4px 0 0' }}>
             Memuat data paket dan status akun Anda...
           </p>
         </div>
@@ -562,15 +641,15 @@ export default function LanggananPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 1040, margin: '0 auto', width: '100%' }}>
-      {/* Header Halaman */}
+      {/* Header Halaman Responsif Mobile & Tablet */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <ShieldCheck size={26} style={{ color: '#16a34a' }} />
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em' }}>
+          <ShieldCheck size={24} style={{ color: '#16a34a', flexShrink: 0 }} />
+          <h1 style={{ fontSize: 'clamp(1.18rem, 3.8vw, 1.55rem)', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', margin: 0 }}>
             Paket Langganan & Upgrade Akun
           </h1>
         </div>
-        <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
+        <p style={{ color: '#64748b', fontSize: 'clamp(0.78rem, 2.2vw, 0.88rem)', lineHeight: 1.5, margin: '4px 0 0' }}>
           Tingkatkan kuota brand bisnis Anda, buka pratinjau Grid Instagram, dan aktifkan alur review kolaborasi tim agensi.
         </p>
       </div>
@@ -725,7 +804,7 @@ export default function LanggananPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             {teamMembership && (
               <button
                 type="button"
@@ -746,6 +825,29 @@ export default function LanggananPage() {
                 <span>Keluar dari Anggota TIM</span>
               </button>
             )}
+
+            {!teamMembership && (account?.plan_code === 'pro' || account?.plan_code === 'team') && (
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(true)}
+                className="btn-uda btn-uda-secondary btn-uda-sm"
+                style={{
+                  color: '#dc2626',
+                  borderColor: '#fca5a5',
+                  backgroundColor: '#ffffff',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+                title="Berhenti berlangganan dan kembali ke paket Free (Gratis)"
+              >
+                <XCircle size={14} />
+                <span>Berhenti Langganan</span>
+              </button>
+            )}
+
             <span
               className="status-pill"
               style={{
@@ -1712,6 +1814,119 @@ export default function LanggananPage() {
                   <>
                     <Trash2 size={15} />
                     <span>Ya, Keluar dari TIM</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI BERHENTI LANGGANAN (DOWNGRADE KE FREE) */}
+      {showCancelModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.72)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: 16,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isCancelingSubscription) setShowCancelModal(false);
+          }}
+        >
+          <div
+            className="uda-card"
+            style={{
+              maxWidth: 480,
+              width: '100%',
+              padding: 26,
+              borderRadius: 18,
+              border: '3px solid #0f172a',
+              boxShadow: '6px 6px 0px #0f172a',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 12,
+                  background: '#fef2f2',
+                  border: '2px solid #ef4444',
+                  color: '#dc2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <XCircle size={26} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', margin: '0 0 3px' }}>
+                  Konfirmasi Berhenti Langganan
+                </h3>
+                <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
+                  Paket aktif Anda: <strong style={{ color: '#16a34a', textTransform: 'uppercase' }}>{account?.plan_code}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#fffbeb',
+                border: '1.5px solid #fde68a',
+                borderRadius: 10,
+                padding: '12px 14px',
+                fontSize: '0.82rem',
+                color: '#92400e',
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>Ketentuan Berhenti Langganan:</strong>
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                <li>Status akun Anda akan langsung beralih ke <strong>Paket Free (Gratis)</strong>.</li>
+                <li>Pada paket Gratis, Anda hanya diperbolehkan mengelola <strong>1 Brand aktif</strong>.</li>
+                <li>Jika sebelumnya Anda memiliki lebih dari 1 brand, <strong>brand tambahan Anda akan dikunci (TIDAK AKAN DIHAPUS)</strong>.</li>
+                <li>Anda dapat membuka kembali dan mengelola seluruh brand tersebut kapan saja dengan berlangganan paket Pro atau Team.</li>
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button
+                type="button"
+                className="btn-uda btn-uda-secondary"
+                style={{ flex: 1 }}
+                disabled={isCancelingSubscription}
+                onClick={() => setShowCancelModal(false)}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                className="btn-uda btn-uda-danger"
+                style={{ flex: 1.3, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                disabled={isCancelingSubscription}
+                onClick={handleCancelSubscription}
+              >
+                {isCancelingSubscription ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Memproses...</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle size={16} />
+                    <span>Ya, Berhenti</span>
                   </>
                 )}
               </button>

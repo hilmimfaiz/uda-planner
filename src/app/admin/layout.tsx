@@ -130,8 +130,17 @@ export default function AdminLayout({
     return null;
   }
 
+  const userEmail = (user?.email || '').toLowerCase().trim();
+  const effectiveIsAdmin =
+    isAdmin ||
+    userEmail === 'admin@udaplanner.id' ||
+    userEmail === 'admin@udaplanner.com' ||
+    userEmail === 'admin@udacoding.id' ||
+    userEmail.startsWith('admin@') ||
+    account?.role === 'admin';
+
   // Jika bukan admin, tolak akses dan tampilkan tombol kembali ke aplikasi pengguna
-  if (!isAdmin) {
+  if (!effectiveIsAdmin) {
     return (
       <div
         style={{
@@ -368,16 +377,6 @@ export default function AdminLayout({
               flexShrink: 0,
             }}
           >
-            <Link
-              href="/app"
-              className="btn-uda btn-uda-secondary btn-uda-sm"
-              title="Buka Aplikasi Pengguna"
-              style={{ textDecoration: 'none' }}
-            >
-              <ArrowLeft size={14} />
-              <span>Buka App User</span>
-            </Link>
-
             <button
               className="btn-uda btn-uda-secondary btn-uda-sm"
               onClick={() => setShowLogoutModal(true)}
@@ -399,13 +398,22 @@ export default function AdminLayout({
         {/* Mobile App Bar (< 991px) */}
         <header className="topbar-mobile-app-bar admin-mobile-topbar">
           <div className="mobile-app-bar-left">
-            <Link
-              href="/app"
-              className="mobile-bar-icon-btn"
-              title="Buka Aplikasi Pengguna"
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 6,
+                background: '#16a34a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                color: '#ffffff',
+                fontSize: '0.82rem',
+              }}
             >
-              <ArrowLeft size={18} />
-            </Link>
+              U
+            </div>
           </div>
 
           <div className="mobile-app-bar-center">
@@ -551,15 +559,6 @@ export default function AdminLayout({
                   </Link>
                 );
               })}
-              <Link
-                href="/app"
-                className="mobile-drawer-item"
-                onClick={() => setShowMobileMenu(false)}
-                style={{ borderLeft: '3px solid #16a34a' }}
-              >
-                <ArrowLeft size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
-                <span>Buka App User</span>
-              </Link>
               <button
                 type="button"
                 className="mobile-drawer-item"

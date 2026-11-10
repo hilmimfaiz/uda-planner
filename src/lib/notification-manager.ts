@@ -164,6 +164,24 @@ export function updateNotificationInviteStatus(notifId: string, status: 'accepte
   return updated;
 }
 
+export function markSingleNotificationAsRead(notifId: string): DummyNotification[] {
+  let rawAll: DummyNotification[] = [];
+  try {
+    const raw = localStorage.getItem(NOTIF_STORAGE_KEY);
+    if (raw) rawAll = JSON.parse(raw);
+  } catch {}
+
+  const updated = rawAll.map((n) => (n.id === notifId ? { ...n, is_read: true } : n));
+  saveStoredNotifications(updated);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('uda_notifications_read'));
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  return updated;
+}
+
 export function markAllNotificationsAsRead(): DummyNotification[] {
   let rawAll: DummyNotification[] = [];
   try {
@@ -297,6 +315,124 @@ export async function syncServerInvitations(userEmail?: string, userId?: string)
     return updatedList;
   } catch (err) {
     console.warn('Sync invitations error:', err);
+    return [];
+  }
+}
+
+export function clearNotificationsByDuration(
+  duration: '1h' | '24h' | '7d' | '30d' | 'all',
+  userEmail?: string,
+  userId?: string
+): DummyNotification[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    let rawAll: DummyNotification[] = [];
+    const raw = localStorage.getItem(NOTIF_STORAGE_KEY);
+    if (raw) rawAll = JSON.parse(raw);
+
+    const targetEmail = userEmail?.trim().toLowerCase();
+    const targetId = userId?.trim();
+
+    const now = Date.now();
+    let maxAgeMs = 0;
+    if (duration === '1h') maxAgeMs = 1 * 60 * 60 * 1000;
+    else if (duration === '24h') maxAgeMs = 24 * 60 * 60 * 1000;
+    else if (duration === '7d') maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+    else if (duration === '30d') maxAgeMs = 30 * 24 * 60 * 60 * 1000;
+
+    const remaining = rawAll.filter((n) => {
+      const inviteTargetEmail = (n.target_email || n.invite_data?.target_email)?.trim().toLowerCase();
+      const inviteTargetId = (n.target_user_id || n.invite_data?.target_user_id)?.trim();
+
+      const isForThisUser =
+        (targetEmail && inviteTargetEmail === targetEmail) ||
+        (targetId && inviteTargetId === targetId) ||
+        (!inviteTargetEmail && !inviteTargetId);
+
+      if (!isForThisUser) return true; // Simpan notifikasi akun lain
+
+      if (duration === 'all') return false; // Hapus semua
+
+      // Cek umur notifikasi
+      let notifTime = 0;
+      if (n.created_at) {
+        const parsed = new Date(n.created_at).getTime();
+        if (!isNaN(parsed)) notifTime = parsed;
+      }
+      if (!notifTime) {
+        const idMatch = n.id.match(/\d+/);
+        if (idMatch) {
+          const num = parseInt(idMatch[0], 10);
+          if (num > 1000000000000) notifTime = num;
+        }
+      }
+      if (!notifTime) {
+        notifTime = now;
+      }
+
+      const diff = now - notifTime;
+      // Jika notifikasi dibuat dalam rentang waktu yang dipilih, maka dihapus
+      if (diff <= maxAgeMs) {
+        return false;
+      }
+
+      return true;
+    });
+
+    saveStoredNotifications(remaining);
+    window.dispatchEvent(new CustomEvent('uda_notifications_cleared'));
+    window.dispatchEvent(new Event('storage'));
+    return getStoredNotifications(userEmail, userId);
+  } catch {
+    return [];
+  }
+}
+
+export function clearAllNotifications(userEmail?: string, userId?: string): DummyNotification[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    let rawAll: DummyNotification[] = [];
+    const raw = localStorage.getItem(NOTIF_STORAGE_KEY);
+    if (raw) rawAll = JSON.parse(raw);
+
+    const targetEmail = userEmail?.trim().toLowerCase();
+    const targetId = userId?.trim();
+
+    // Hapus notifikasi yang relevan dengan user ini atau notifikasi umum
+    const remaining = rawAll.filter((n) => {
+      const inviteTargetEmail = (n.target_email || n.invite_data?.target_email)?.trim().toLowerCase();
+      const inviteTargetId = (n.target_user_id || n.invite_data?.target_user_id)?.trim();
+
+      if (targetEmail && inviteTargetEmail === targetEmail) return false;
+      if (targetId && inviteTargetId === targetId) return false;
+      if (!inviteTargetEmail && !inviteTargetId) return false; // Notifikasi umum juga dibersihkan
+      return true;
+    });
+
+    saveStoredNotifications(remaining);
+
+    window.dispatchEvent(new CustomEvent('uda_notifications_cleared'));
+    window.dispatchEvent(new Event('storage'));
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+export function deleteSingleNotification(notifId: string): DummyNotification[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    let rawAll: DummyNotification[] = [];
+    const raw = localStorage.getItem(NOTIF_STORAGE_KEY);
+    if (raw) rawAll = JSON.parse(raw);
+
+    const remaining = rawAll.filter((n) => n.id !== notifId);
+    saveStoredNotifications(remaining);
+
+    window.dispatchEvent(new CustomEvent('uda_notifications_cleared'));
+    window.dispatchEvent(new Event('storage'));
+    return remaining;
+  } catch {
     return [];
   }
 }

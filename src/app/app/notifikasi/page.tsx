@@ -20,9 +20,20 @@ import {
   CreditCard,
   User,
   ChevronRight,
+  Trash2,
 } from 'lucide-react';
 import { DUMMY_NOTIFICATIONS, DummyNotification, DummyMember } from '@/lib/dummy-data';
-import { getStoredNotifications, markAllNotificationsAsRead, updateNotificationInviteStatus, addAppNotification, syncServerInvitations } from '@/lib/notification-manager';
+import {
+  getStoredNotifications,
+  markAllNotificationsAsRead,
+  markSingleNotificationAsRead,
+  updateNotificationInviteStatus,
+  addAppNotification,
+  syncServerInvitations,
+  clearAllNotifications,
+  clearNotificationsByDuration,
+  deleteSingleNotification,
+} from '@/lib/notification-manager';
 import { GuidedTour, TourStep } from '@/components/guided-tour';
 import { useAuth } from '@/contexts/auth-context';
 import { MemberService } from '@/services/member.service';
@@ -49,10 +60,57 @@ export default function NotifikasiPage() {
   const { user, profile } = useAuth();
   const [notifications, setNotifications] = useState<DummyNotification[]>(DUMMY_NOTIFICATIONS);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [deleteDuration, setDeleteDuration] = useState<'1h' | '24h' | '7d' | '30d' | 'all'>('all');
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const getCountForDuration = (dur: '1h' | '24h' | '7d' | '30d' | 'all') => {
+    if (dur === 'all') return notifications.length;
+    const now = Date.now();
+    let maxAge = 0;
+    if (dur === '1h') maxAge = 1 * 60 * 60 * 1000;
+    else if (dur === '24h') maxAge = 24 * 60 * 60 * 1000;
+    else if (dur === '7d') maxAge = 7 * 24 * 60 * 60 * 1000;
+    else if (dur === '30d') maxAge = 30 * 24 * 60 * 60 * 1000;
+
+    return notifications.filter((n) => {
+      let t = 0;
+      if (n.created_at) {
+        const parsed = new Date(n.created_at).getTime();
+        if (!isNaN(parsed)) t = parsed;
+      }
+      if (!t) {
+        const m = n.id.match(/\d+/);
+        if (m) {
+          const num = parseInt(m[0], 10);
+          if (num > 1000000000000) t = num;
+        }
+      }
+      if (!t) t = now;
+      return now - t <= maxAge;
+    }).length;
+  };
+
+  const handleNotificationClick = (n: DummyNotification) => {
+    if (!n.is_read) {
+      markSingleNotificationAsRead(n.id);
+      setNotifications((prev) =>
+        prev.map((item) => (item.id === n.id ? { ...item, is_read: true } : item))
+      );
+    }
+    if (n.link) {
+      router.push(n.link);
+    }
+  };
+
+  const markAllRead = () => {
+    setNotifications(markAllNotificationsAsRead());
+    playSuccessSound();
+    showToast('Seluruh notifikasi telah ditandai dibaca.');
   };
 
   React.useEffect(() => {
@@ -65,18 +123,16 @@ export default function NotifikasiPage() {
 
     window.addEventListener('uda_notification_added', refresh);
     window.addEventListener('uda_notifications_read', refresh);
+    window.addEventListener('uda_notifications_cleared', refresh);
     window.addEventListener('storage', refresh);
 
     return () => {
       window.removeEventListener('uda_notification_added', refresh);
       window.removeEventListener('uda_notifications_read', refresh);
+      window.removeEventListener('uda_notifications_cleared', refresh);
       window.removeEventListener('storage', refresh);
     };
   }, [user?.email, user?.id]);
-
-  const markAllRead = () => {
-    setNotifications(markAllNotificationsAsRead());
-  };
 
   const getNotifMeta = (n: DummyNotification) => {
     if (n.type === 'team_invite') {
@@ -321,17 +377,41 @@ export default function NotifikasiPage() {
         </div>
       )}
 
-      <div id="tour-notif-header" className="desktop-notif-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div id="tour-notif-header" className="notif-header-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className="btn-uda btn-uda-secondary btn-uda-sm" onClick={() => router.back()}>
+          <button className="btn-uda btn-uda-secondary btn-uda-sm" onClick={() => router.back()} title="Kembali">
             <ArrowLeft size={16} />
           </button>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a' }}>Semua Notifikasi</h1>
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>Semua Notifikasi</h1>
         </div>
-        <button className="btn-uda btn-uda-secondary btn-uda-sm" onClick={markAllRead}>
-          <Check size={14} />
-          <span>Tandai Semua Dibaca</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {notifications.length > 0 && (
+            <>
+              <button
+                type="button"
+                className="btn-uda btn-uda-secondary btn-uda-sm notif-header-btn"
+                onClick={markAllRead}
+                title="Tandai Semua Dibaca"
+              >
+                <Check size={16} />
+                <span className="notif-header-btn-text">Tandai Semua Dibaca</span>
+              </button>
+              <button
+                type="button"
+                className="btn-uda btn-uda-danger btn-uda-sm notif-header-btn"
+                onClick={() => {
+                  setDeleteDuration('all');
+                  setShowClearModal(true);
+                }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                title="Hapus Riwayat Notifikasi"
+              >
+                <Trash2 size={15} />
+                <span className="notif-header-btn-text">Hapus Riwayat</span>
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* List Notifikasi (Sesuai Layout Gambar Referensi 1) */}
@@ -363,6 +443,14 @@ export default function NotifikasiPage() {
               return (
                 <div
                   key={n.id}
+                  onClick={() => {
+                    if (!n.is_read) {
+                      markSingleNotificationAsRead(n.id);
+                      setNotifications((prev) =>
+                        prev.map((item) => (item.id === n.id ? { ...item, is_read: true } : item))
+                      );
+                    }
+                  }}
                   style={{
                     padding: 16,
                     borderRadius: 12,
@@ -533,7 +621,8 @@ export default function NotifikasiPage() {
               <div
                 key={n.id}
                 className={`mobile-notif-item ${!n.is_read ? 'unread' : ''}`}
-                onClick={() => router.push(n.link)}
+                onClick={() => handleNotificationClick(n)}
+                style={{ cursor: 'pointer' }}
               >
                 {/* Left: Soft rounded icon badge */}
                 <div
@@ -570,8 +659,33 @@ export default function NotifikasiPage() {
                     >
                       {n.title || meta.defaultTitle}
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, flexShrink: 0 }}>
-                      {n.time_ago}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+                        {n.time_ago}
+                      </div>
+                      <button
+                        type="button"
+                        title="Hapus notifikasi ini"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteSingleNotification(n.id);
+                          setNotifications((prev) => prev.filter((item) => item.id !== n.id));
+                          showToast('Notifikasi dihapus.');
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#94a3b8',
+                          cursor: 'pointer',
+                          padding: 4,
+                          borderRadius: 6,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
                     </div>
                   </div>
 
@@ -592,6 +706,188 @@ export default function NotifikasiPage() {
           })
         )}
       </div>
+
+      {/* Modal Konfirmasi Hapus Riwayat Notifikasi Berdasarkan Durasi */}
+      {showClearModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: 16,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowClearModal(false);
+          }}
+        >
+          <div
+            className="uda-card"
+            style={{
+              maxWidth: 460,
+              width: '100%',
+              padding: '26px 24px',
+              borderRadius: 18,
+              border: '3px solid #0f172a',
+              boxShadow: '6px 6px 0px #0f172a',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              backgroundColor: '#ffffff',
+            }}
+          >
+            {/* Header Modal */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div
+                style={{
+                  width: 46,
+                  height: 46,
+                  borderRadius: 12,
+                  background: '#fef2f2',
+                  border: '2px solid #ef4444',
+                  color: '#dc2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Trash2 size={22} />
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a', margin: '0 0 4px' }}>
+                  Hapus Riwayat Notifikasi
+                </h3>
+                <p style={{ fontSize: '0.84rem', color: '#64748b', margin: 0, lineHeight: 1.4 }}>
+                  Pilih rentang waktu riwayat notifikasi yang ingin dibersihkan.
+                </p>
+              </div>
+            </div>
+
+            {/* Pilihan Durasi Hapus */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+              {[
+                { value: '1h' as const, label: '1 Jam Terakhir', desc: 'Notifikasi dalam 1 jam terakhir' },
+                { value: '24h' as const, label: '24 Jam Terakhir', desc: 'Notifikasi dalam 24 jam terakhir' },
+                { value: '7d' as const, label: '7 Hari Terakhir', desc: 'Notifikasi dalam 7 hari terakhir' },
+                { value: '30d' as const, label: '1 Bulan Terakhir', desc: 'Notifikasi dalam 30 hari terakhir' },
+                { value: 'all' as const, label: 'Semua Riwayat', desc: 'Seluruh riwayat notifikasi tanpa batas' },
+              ].map((opt) => {
+                const isSelected = deleteDuration === opt.value;
+                const count = getCountForDuration(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setDeleteDuration(opt.value)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      borderRadius: 10,
+                      border: isSelected ? '2px solid #0f172a' : '1.5px solid #e2e8f0',
+                      background: isSelected ? '#f8fafc' : '#ffffff',
+                      boxShadow: isSelected ? '2.5px 2.5px 0px #0f172a' : 'none',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'all 0.1s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div
+                        style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          border: isSelected ? '5px solid #16a34a' : '2px solid #cbd5e1',
+                          backgroundColor: '#ffffff',
+                          flexShrink: 0,
+                          transition: 'all 0.15s ease',
+                        }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.88rem', color: isSelected ? '#0f172a' : '#334155' }}>
+                          {opt.label}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                          {opt.desc}
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '0.74rem',
+                        fontWeight: 800,
+                        padding: '2px 8px',
+                        borderRadius: 999,
+                        background: isSelected ? '#fee2e2' : '#f1f5f9',
+                        color: isSelected ? '#dc2626' : '#64748b',
+                      }}
+                    >
+                      {count} notif
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tombol Aksi */}
+            <div style={{ display: 'flex', gap: 10, width: '100%', marginTop: 6 }}>
+              <button
+                type="button"
+                className="btn-uda btn-uda-secondary"
+                style={{ flex: 1 }}
+                onClick={() => setShowClearModal(false)}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                className="btn-uda btn-uda-danger"
+                style={{ flex: 1.3, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                onClick={() => {
+                  const targetCount = getCountForDuration(deleteDuration);
+                  clearNotificationsByDuration(deleteDuration, user?.email || undefined, user?.id || undefined);
+                  setNotifications(getStoredNotifications(user?.email || undefined, user?.id || undefined));
+                  setShowClearModal(false);
+                  playSuccessSound();
+                  showToast(
+                    deleteDuration === 'all'
+                      ? 'Seluruh riwayat notifikasi berhasil dibersihkan.'
+                      : `Riwayat notifikasi (${deleteDuration === '1h' ? '1 jam terakhir' : deleteDuration === '24h' ? '24 jam terakhir' : deleteDuration === '7d' ? '7 hari terakhir' : '1 bulan terakhir'}) berhasil dibersihkan (${targetCount} notifikasi).`
+                  );
+                }}
+              >
+                <Trash2 size={15} />
+                <span>Hapus ({getCountForDuration(deleteDuration)})</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Responsive Style untuk Tombol Header Notifikasi Mode Mobile & Tablet (Icon Saja) */}
+      <style jsx>{`
+        @media (max-width: 1023px) {
+          :global(.notif-header-btn-text) {
+            display: none !important;
+          }
+          :global(.notif-header-btn) {
+            padding: 8px 10px !important;
+            min-width: 38px !important;
+            height: 36px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
+        }
+      `}</style>
 
       <GuidedTour steps={notifTourSteps} tourKey="uda_tour_notifikasi" />
     </div>

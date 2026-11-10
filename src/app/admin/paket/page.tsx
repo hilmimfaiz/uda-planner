@@ -358,7 +358,7 @@ export default function AdminPaketPage() {
                   <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginBottom: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                       <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Clock size={14} style={{ color: '#0284c7' }} />
+                        <Clock size={14} style={{ color: '#0f172a' }} />
                         <span>Variasi Durasi Berlangganan:</span>
                       </span>
                       <button
@@ -366,7 +366,7 @@ export default function AdminPaketPage() {
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: '#16a34a',
+                          color: '#0f172a',
                           fontSize: '0.76rem',
                           fontWeight: 800,
                           cursor: 'pointer',
@@ -406,7 +406,7 @@ export default function AdminPaketPage() {
                                 Rp {dur.price.toLocaleString('id-ID')}
                               </span>
                               {dur.discountPercent > 0 && (
-                                <span style={{ marginLeft: 6, fontSize: '0.7rem', color: '#16a34a', fontWeight: 800 }}>
+                                <span style={{ marginLeft: 6, fontSize: '0.7rem', color: '#0f172a', fontWeight: 800 }}>
                                   (-{dur.discountPercent}%)
                                 </span>
                               )}
@@ -422,7 +422,7 @@ export default function AdminPaketPage() {
                               </button>
                               <button
                                 onClick={() => handleDeleteDuration(p, dur)}
-                                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 2 }}
+                                style={{ background: 'none', border: 'none', color: '#0f172a', cursor: 'pointer', padding: 2 }}
                                 title="Hapus Variasi"
                               >
                                 <Trash2 size={13} />
@@ -436,11 +436,11 @@ export default function AdminPaketPage() {
 
                   {/* Fitur Aktif Badge */}
                   <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: '0.75rem' }}>
-                    {p.allowVideo && <span style={{ backgroundColor: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>Video</span>}
-                    {p.allowGrid && <span style={{ backgroundColor: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>Grid IG</span>}
-                    {p.allowExport && <span style={{ backgroundColor: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>Ekspor CSV/.ics</span>}
-                    {p.allowApproval && <span style={{ backgroundColor: '#f5f3ff', color: '#7c3aed', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>Wajib Review</span>}
-                    {p.allowComments && <span style={{ backgroundColor: '#f5f3ff', color: '#7c3aed', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>Komentar Tim</span>}
+                    {p.allowVideo && <span style={{ backgroundColor: '#ffffff', color: '#0f172a', border: '1.5px solid #0f172a', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>Video</span>}
+                    {p.allowGrid && <span style={{ backgroundColor: '#ffffff', color: '#0f172a', border: '1.5px solid #0f172a', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>Grid IG</span>}
+                    {p.allowExport && <span style={{ backgroundColor: '#ffffff', color: '#0f172a', border: '1.5px solid #0f172a', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>Ekspor CSV/.ics</span>}
+                    {p.allowApproval && <span style={{ backgroundColor: '#ffffff', color: '#0f172a', border: '1.5px solid #0f172a', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>Wajib Review</span>}
+                    {p.allowComments && <span style={{ backgroundColor: '#ffffff', color: '#0f172a', border: '1.5px solid #0f172a', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>Komentar Tim</span>}
                   </div>
                 </div>
               </div>

@@ -53,6 +53,15 @@ export async function GET() {
       const acc = accMap.get(u.id);
       const emailLower = (u.email || '').toLowerCase().trim();
 
+      // Deteksi pendaftaran akun Google vs Email biasa
+      const isGoogleUser =
+        u.app_metadata?.provider === 'google' ||
+        (Array.isArray(u.app_metadata?.providers) && u.app_metadata.providers.includes('google')) ||
+        (Array.isArray(u.identities) && u.identities.some((i: any) => i.provider === 'google')) ||
+        u.user_metadata?.iss?.includes('accounts.google.com') ||
+        u.user_metadata?.provider === 'google' ||
+        p?.auth_provider === 'google';
+
       // Cek apakah pengguna terverifikasi via SMTP / Google Auth / Admin manual
       const isConfirmedInAuth = !!(u.email_confirmed_at || u.confirmed_at);
       const isManual =
@@ -61,17 +70,20 @@ export async function GET() {
         u.user_metadata?.email_verified === true ||
         u.user_metadata?.manual_verified_by_admin === true;
 
-      const isVerified = isConfirmedInAuth || isManual || emailLower === 'admin@udaplanner.id';
+      // Akun Google: langsung terverifikasi otomatis tanpa perlu konfirmasi manual
+      // Akun Email biasa: wajib verifikasi email masuk via link konfirmasi atau verifikasi manual oleh Admin
+      const isVerified = isGoogleUser || isConfirmedInAuth || isManual || emailLower === 'admin@udaplanner.id';
       const confirmedDate =
         u.email_confirmed_at ||
         u.confirmed_at ||
-        u.user_metadata?.manual_verified_at;
+        u.user_metadata?.manual_verified_at ||
+        (isGoogleUser ? u.created_at : null);
 
       const registeredAt = formatWibDate(u.created_at);
       const emailVerifiedAt = isVerified
         ? confirmedDate
           ? formatWibDate(confirmedDate)
-          : 'Terverifikasi Manual'
+          : 'Terverifikasi Otomatis'
         : null;
 
       const emailDeliveryStatus: EmailDeliveryStatus = isVerified
@@ -98,11 +110,15 @@ export async function GET() {
         registrationStatus,
         role: (acc?.role as 'user' | 'admin') || (emailLower === 'admin@udaplanner.id' ? 'admin' : 'user'),
         planCode: acc?.plan_code || 'free',
-        notes: isManual
+        authMethod: isGoogleUser ? 'google' : 'email',
+        isGoogleUser: !!isGoogleUser,
+        notes: isGoogleUser
+          ? 'Terverifikasi otomatis via Akun Google'
+          : isManual
           ? 'Diverifikasi manual oleh admin'
           : isConfirmedInAuth
-          ? 'Otomatis terverifikasi via SMTP / Google Auth'
-          : 'Pendaftaran email biasa (menunggu verifikasi)',
+          ? 'Terverifikasi via tautan konfirmasi email'
+          : 'Pendaftaran email biasa (wajib verifikasi email masuk)',
       };
     });
 

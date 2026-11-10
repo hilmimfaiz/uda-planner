@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/client';
 import { DUMMY_PLANS } from '@/lib/dummy-data';
 import { resolvePaymentDuration } from './plan.service';
 import { formatWibDate } from '@/lib/date-utils';
+import { VerificationService } from './verification.service';
 
 export interface AdminPaymentItem {
   id: string;
@@ -37,6 +38,8 @@ export interface AdminUserItem {
   createdAt: string;
   isEmailVerified?: boolean;
   registrationStatus?: 'pending' | 'verified' | 'rejected' | string;
+  authMethod?: 'google' | 'email';
+  isGoogleUser?: boolean;
 }
 
 export interface EditablePlan {
@@ -119,7 +122,16 @@ export class AdminService {
   static async getAppSettings(): Promise<AppSettingsData> {
     const stored = getAdminStorage<AppSettingsData | null>('uda_admin_settings', null);
     if (stored) {
-      localSettings = stored;
+      localSettings = { ...localSettings, ...stored };
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const wa = localStorage.getItem('uda_admin_whatsapp');
+        if (wa) {
+          localSettings.adminWhatsapp = wa;
+        }
+      } catch (e) {}
     }
 
     const supabase = createClient();
@@ -135,28 +147,72 @@ export class AdminService {
             adminWhatsapp: d.admin_whatsapp || localSettings.adminWhatsapp,
           };
           setAdminStorage('uda_admin_settings', localSettings);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('uda_admin_whatsapp', localSettings.adminWhatsapp);
+          }
           return localSettings;
         }
       } catch (err) {
         console.warn('AdminService.getAppSettings db fallback:', err);
       }
     }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/settings');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            localSettings = {
+              bankName: json.data.bankName || localSettings.bankName,
+              accountNumber: json.data.accountNumber || localSettings.accountNumber,
+              accountName: json.data.accountName || localSettings.accountName,
+              adminWhatsapp: json.data.adminWhatsapp || localSettings.adminWhatsapp,
+            };
+            setAdminStorage('uda_admin_settings', localSettings);
+            localStorage.setItem('uda_admin_whatsapp', localSettings.adminWhatsapp);
+          }
+        }
+      } catch {}
+    }
+
     return localSettings;
   }
 
-  static async updateAppSettings(settings: AppSettingsData): Promise<boolean> {
-    localSettings = { ...settings };
+  static async updateAppSettings(settings: Partial<AppSettingsData>): Promise<boolean> {
+    localSettings = { ...localSettings, ...settings };
     setAdminStorage('uda_admin_settings', localSettings);
+
+    if (typeof window !== 'undefined') {
+      try {
+        if (localSettings.adminWhatsapp) {
+          localStorage.setItem('uda_admin_whatsapp', localSettings.adminWhatsapp);
+        }
+        window.dispatchEvent(new CustomEvent('uda_settings_updated', { detail: localSettings }));
+        window.dispatchEvent(new Event('storage'));
+      } catch (e) {}
+    }
+
+    // Sinkronisasi via API server
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(localSettings),
+        });
+      } catch (e) {}
+    }
 
     const supabase = createClient();
     if (supabase) {
       try {
         await (supabase.from('app_settings' as any) as any).upsert({
           id: 1,
-          bank_name: settings.bankName,
-          bank_account_number: settings.accountNumber,
-          bank_account_name: settings.accountName,
-          admin_whatsapp: settings.adminWhatsapp,
+          bank_name: localSettings.bankName,
+          bank_account_number: localSettings.accountNumber,
+          bank_account_name: localSettings.accountName,
+          admin_whatsapp: localSettings.adminWhatsapp,
           updated_at: new Date().toISOString(),
         });
         return true;
@@ -595,15 +651,37 @@ export class AdminService {
     const supabase = createClient();
     if (supabase) {
       try {
-        const [accRes, profRes, brandRes, postRes] = await Promise.all([
+        const [accRes, profRes, brandRes, postRes, verifiableUsers] = await Promise.all([
           supabase.from('accounts' as any).select('*'),
           supabase.from('profiles' as any).select('*'),
           supabase.from('brands' as any).select('id, owner_id'),
           supabase.from('posts' as any).select('id, brand_id, media_url, notes'),
+          VerificationService.getVerifiableUsers().catch(() => []),
         ]);
 
         if (!accRes.error && accRes.data && accRes.data.length > 0) {
           const profilesMap = new Map((profRes.data || []).map((p: any) => [p.id, p]));
+
+          // Map status verifikasi & deteksi akun Google aktual dari Supabase Auth
+          const verifiedMap = new Map<string, boolean>();
+          const googleUserSet = new Set<string>();
+          if (Array.isArray(verifiableUsers)) {
+            verifiableUsers.forEach((vu: any) => {
+              const em = (vu.email || '').toLowerCase().trim();
+              if (em) {
+                verifiedMap.set(em, !!vu.isEmailVerified);
+                if (vu.isGoogleUser || vu.authMethod === 'google') googleUserSet.add(em);
+              }
+              if (vu.userId) {
+                verifiedMap.set(vu.userId, !!vu.isEmailVerified);
+                if (vu.isGoogleUser || vu.authMethod === 'google') googleUserSet.add(vu.userId);
+              }
+              if (vu.id) {
+                verifiedMap.set(vu.id, !!vu.isEmailVerified);
+                if (vu.isGoogleUser || vu.authMethod === 'google') googleUserSet.add(vu.id);
+              }
+            });
+          }
 
           // Hitung brand per pengguna
           const brandCountMap = new Map<string, number>();
@@ -655,69 +733,64 @@ export class AdminService {
             const cleanEmail = (prof.email || a.email || 'user@udaplanner.id').toLowerCase();
             const targetId = a.user_id || a.id;
 
-            // 1. Cek fast flags di localStorage untuk verifikasi email
+            const isGoogle =
+              googleUserSet.has(cleanEmail) ||
+              googleUserSet.has(targetId) ||
+              googleUserSet.has(a.id) ||
+              prof.auth_provider === 'google' ||
+              (typeof window !== 'undefined' && localStorage.getItem(`uda_auth_provider_${cleanEmail}`) === 'google');
+
+            // 1. Cek dari verifiedMap aktual Supabase Auth
             let isVerified = false;
             let isPendingUnverified = false;
 
-            if (typeof window !== 'undefined') {
-              try {
-                if (
-                  localStorage.getItem(`uda_manually_verified_${cleanEmail}`) === 'true' ||
-                  localStorage.getItem(`uda_manually_verified_${targetId}`) === 'true' ||
-                  localStorage.getItem(`uda_manually_verified_${a.id}`) === 'true'
-                ) {
+            if (verifiedMap.has(cleanEmail)) {
+              isVerified = !!verifiedMap.get(cleanEmail);
+              isPendingUnverified = !isVerified;
+            } else if (verifiedMap.has(targetId)) {
+              isVerified = !!verifiedMap.get(targetId);
+              isPendingUnverified = !isVerified;
+            } else if (isGoogle) {
+              // Akun Google selalu otomatis terverifikasi tanpa verifikasi manual
+              isVerified = true;
+              isPendingUnverified = false;
+            } else {
+              // Cek fast flags di localStorage
+              if (typeof window !== 'undefined') {
+                try {
+                  if (
+                    localStorage.getItem(`uda_manually_verified_${cleanEmail}`) === 'true' ||
+                    localStorage.getItem(`uda_manually_verified_${targetId}`) === 'true' ||
+                    localStorage.getItem(`uda_manually_verified_${a.id}`) === 'true'
+                  ) {
+                    isVerified = true;
+                  } else if (
+                    localStorage.getItem(`uda_unverified_registration_${cleanEmail}`) === 'true' ||
+                    localStorage.getItem(`uda_unverified_registration_${targetId}`) === 'true' ||
+                    localStorage.getItem(`uda_unverified_registration_${a.id}`) === 'true'
+                  ) {
+                    isPendingUnverified = true;
+                  }
+                } catch {}
+              }
+
+              // Cek profile kolom database
+              if (!isVerified) {
+                if (prof.is_email_verified === true) {
                   isVerified = true;
-                } else if (
-                  localStorage.getItem(`uda_unverified_registration_${cleanEmail}`) === 'true' ||
-                  localStorage.getItem(`uda_unverified_registration_${targetId}`) === 'true' ||
-                  localStorage.getItem(`uda_unverified_registration_${a.id}`) === 'true'
-                ) {
+                } else if (prof.is_email_verified === false) {
                   isPendingUnverified = true;
                 }
-              } catch {}
-            }
-
-            // 2. Cek database profile column jika ada nilainya
-            if (!isVerified) {
-              if (prof.is_email_verified === true) {
-                isVerified = true;
-              } else if (prof.is_email_verified === false) {
-                isPendingUnverified = true;
               }
             }
 
-            // 3. Cek stored di local cache admin
-            if (!isVerified) {
-              const prevStored = stored.find(
-                (st) => st.id === a.id || st.userId === a.user_id || st.email.toLowerCase() === cleanEmail
-              );
-              if (prevStored?.isEmailVerified === true) {
-                isVerified = true;
-              } else if (prevStored?.isEmailVerified === false) {
-                isPendingUnverified = true;
-              }
+            // Akun Google atau akun admin selalu otomatis terverifikasi
+            if (isGoogle || cleanEmail === 'admin@udaplanner.id' || a.role === 'admin') {
+              isVerified = true;
+              isPendingUnverified = false;
             }
 
-            // 4. Cek di verifiable users list
-            if (!isVerified) {
-              const verifiableList = getAdminStorage<any[]>('uda_verifiable_users', []);
-              const verMatch = verifiableList.find(
-                (vu) =>
-                  vu.userId === a.user_id ||
-                  vu.id === a.id ||
-                  vu.email?.toLowerCase() === cleanEmail
-              );
-              if (verMatch?.isEmailVerified === true) {
-                isVerified = true;
-              } else if (verMatch?.isEmailVerified === false) {
-                isPendingUnverified = true;
-              }
-            }
-
-            const finalVerified =
-              isVerified ||
-              (!isPendingUnverified &&
-                (a.role === 'admin' || cleanEmail === 'admin@udaplanner.id'));
+            const finalVerified = isVerified;
 
             // Selesaikan status Paket Aktif secara akurat sesuai paket langganan yang dipilih & disetujui
             let resolvedPlan: 'free' | 'pro' | 'team' | 'admin' = 'free';
@@ -862,6 +935,8 @@ export class AdminService {
               createdAt: a.created_at ? new Date(a.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '10 Okt 2026',
               isEmailVerified: isAdmin ? true : finalVerified,
               registrationStatus: isAdmin ? 'verified' : (finalVerified ? 'verified' : 'pending'),
+              authMethod: isGoogle ? 'google' : 'email',
+              isGoogleUser: isGoogle,
             };
           });
 
@@ -903,6 +978,37 @@ export class AdminService {
               seenEmails.add(em);
             }
             combined.push(u);
+          }
+
+          // Sinkronisasikan pengguna dari Supabase Auth yang belum memiliki baris accounts
+          if (Array.isArray(verifiableUsers)) {
+            for (const vu of verifiableUsers) {
+              if (isDummyUser(vu)) continue;
+              const em = (vu.email || '').toLowerCase().trim();
+              if (em && !seenEmails.has(em)) {
+                seenEmails.add(em);
+                combined.push({
+                  id: vu.id,
+                  userId: vu.userId || vu.id,
+                  name: vu.name || em.split('@')[0],
+                  email: vu.email,
+                  avatarUrl: null,
+                  phone: null,
+                  role: vu.role === 'admin' ? 'Admin' : 'Owner',
+                  plan: (vu.planCode as any) || 'free',
+                  planUntil: null,
+                  brandsCount: 0,
+                  postsCount: 0,
+                  storageMb: 0,
+                  isSuspended: false,
+                  createdAt: vu.registeredAt || 'Terbaru',
+                  isEmailVerified: vu.isEmailVerified,
+                  registrationStatus: vu.registrationStatus,
+                  authMethod: vu.authMethod,
+                  isGoogleUser: !!vu.isGoogleUser,
+                });
+              }
+            }
           }
 
           for (const st of cleanStored) {

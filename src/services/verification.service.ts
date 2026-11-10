@@ -16,6 +16,8 @@ export interface VerifiableUser {
   role: 'user' | 'admin';
   planCode: string;
   notes?: string;
+  authMethod?: 'google' | 'email';
+  isGoogleUser?: boolean;
 }
 
 export interface VerificationStats {

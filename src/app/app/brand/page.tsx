@@ -321,12 +321,65 @@ export default function DaftarBrandPage() {
         )}
       </div>
 
+      {/* Banner Informasi Brand Terkunci (Jika Paket Free memiliki lebih dari 1 brand) */}
+      {planCode === 'free' && brands.length > 1 && (
+        <div
+          style={{
+            background: '#fffbeb',
+            border: '1.5px solid #fde68a',
+            borderRadius: 12,
+            padding: '14px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 14,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                background: '#fef3c7',
+                border: '1.5px solid #d97706',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#b45309',
+                flexShrink: 0,
+              }}
+            >
+              <Lock size={18} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#92400e' }}>
+                {brands.length - 1} Brand Tambahan Terkunci (Paket Free)
+              </div>
+              <div style={{ fontSize: '0.82rem', color: '#b45309', marginTop: 2 }}>
+                Paket Free hanya mengizinkan 1 brand aktif. Brand lainnya tersimpan aman tanpa dihapus. Upgrade ke Pro atau Team untuk membuka akses ke seluruh brand Anda.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-uda btn-uda-primary btn-uda-sm"
+            onClick={() => router.push('/app/langganan')}
+            style={{ fontWeight: 800, fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+          >
+            Upgrade Paket Sekarang
+          </button>
+        </div>
+      )}
+
       {/* Grid Kartu Brand Responsif */}
       <div id="tour-brand-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 290px), 1fr))', gap: 20 }}>
         {brands.map((b, bIdx) => {
+          const isBrandLocked = planCode === 'free' && bIdx > 0;
           const isUpdatingThis = updatingBrandId === b.id;
           const userRoleOnThisBrand = brandRoles[b.id] || (b.owner_id === user?.id ? 'owner' : 'editor');
-          const canEditPhoto = userRoleOnThisBrand === 'owner' || userRoleOnThisBrand === 'editor';
+          const canEditPhoto = (userRoleOnThisBrand === 'owner' || userRoleOnThisBrand === 'editor') && !isBrandLocked;
 
           return (
             <div
@@ -339,11 +392,22 @@ export default function DaftarBrandPage() {
                 justifyContent: 'space-between',
                 gap: 16,
                 cursor: 'pointer',
-                borderTop: `4px solid ${b.color}`,
+                borderTop: `4px solid ${isBrandLocked ? '#94a3b8' : b.color}`,
                 position: 'relative',
                 transition: 'all 0.2s ease',
+                opacity: isBrandLocked ? 0.85 : 1,
+                background: isBrandLocked ? '#fafaf9' : '#ffffff',
               }}
-              onClick={() => router.push(`/app/brand/${b.id}`)}
+              onClick={() => {
+                if (isBrandLocked) {
+                  showError(
+                    'Brand Terkunci (Batas Kuota Paket Free)',
+                    `Brand "${b.name}" saat ini terkunci karena akun Anda berada pada Paket Free (maksimal 1 brand aktif). Brand Anda tetap tersimpan dengan aman dan tidak dihapus. Silakan upgrade ke Paket Pro atau Team untuk mengelola brand ini kembali.`
+                  );
+                  return;
+                }
+                router.push(`/app/brand/${b.id}`);
+              }}
             >
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -440,6 +504,25 @@ export default function DaftarBrandPage() {
                       Diarsipkan
                     </span>
                   )}
+                  {isBrandLocked && (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        background: '#fee2e2',
+                        color: '#b91c1c',
+                        border: '1px solid #fca5a5',
+                      }}
+                    >
+                      <Lock size={12} />
+                      Terkunci (Paket Free)
+                    </span>
+                  )}
                 </div>
 
                 {/* Detail Info */}
@@ -462,10 +545,39 @@ export default function DaftarBrandPage() {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
-                <span style={{ fontSize: '0.78rem', color: '#16a34a', fontWeight: 700 }}>
-                  Buka Pengaturan Brand →
-                </span>
-                <Settings size={16} style={{ color: '#64748b' }} />
+                {isBrandLocked ? (
+                  <span style={{ fontSize: '0.78rem', color: '#dc2626', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Lock size={13} />
+                    Upgrade ke Pro/Team untuk Kelola Brand →
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '0.78rem', color: '#16a34a', fontWeight: 700 }}>
+                    Buka Pengaturan Brand →
+                  </span>
+                )}
+                {isBrandLocked ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push('/app/langganan');
+                    }}
+                    style={{
+                      background: '#fee2e2',
+                      border: '1px solid #fca5a5',
+                      color: '#b91c1c',
+                      borderRadius: 6,
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Upgrade
+                  </button>
+                ) : (
+                  <Settings size={16} style={{ color: '#64748b' }} />
+                )}
               </div>
             </div>
           );

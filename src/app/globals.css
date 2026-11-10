@@ -3209,20 +3209,25 @@ tr:last-child td {
   position: relative;
 }
 
-.mobile-app-bar-left,
-.mobile-app-bar-right {
+.mobile-app-bar-left {
   display: flex;
   align-items: center;
-  width: 44px;
+  min-width: 44px;
   flex-shrink: 0;
 }
 
 .mobile-app-bar-right {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
+  min-width: 44px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .mobile-app-bar-center {
   flex: 1;
+  min-width: 0;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3240,6 +3245,10 @@ tr:last-child td {
 .mobile-bar-icon-btn {
   width: 38px;
   height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  aspect-ratio: 1 / 1;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3252,6 +3261,7 @@ tr:last-child td {
   text-decoration: none;
   transition: all 0.12s ease;
   -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
 }
 
 .mobile-bar-icon-btn:active {

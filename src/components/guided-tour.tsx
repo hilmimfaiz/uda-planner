@@ -163,8 +163,10 @@ export function GuidedTour({
       const windowW = window.innerWidth;
       const windowH = window.innerHeight;
       const tooltipW = Math.min(420, windowW - 32);
+      const isMobile = windowW < 1024;
+      const bottomNavOffset = isMobile ? 76 : 0;
       setTooltipPos({
-        top: Math.max(80, windowH / 2 - 140),
+        top: Math.max(70, (windowH - bottomNavOffset) / 2 - 130),
         left: Math.max(16, (windowW - tooltipW) / 2),
         placement: 'center',
       });
@@ -174,6 +176,8 @@ export function GuidedTour({
   const calculateTooltipPosition = (rect: DOMRect, preferredPlacement: string) => {
     const windowW = window.innerWidth;
     const windowH = window.innerHeight;
+    const isMobileOrTablet = windowW < 1024;
+    const bottomNavOffset = isMobileOrTablet ? 76 : 0;
     const tooltipW = Math.min(420, windowW - 32);
     const tooltipH = 220; // perkiraan tinggi tooltip
     const gap = 16;
@@ -183,7 +187,7 @@ export function GuidedTour({
     let finalPlacement = preferredPlacement;
 
     if (preferredPlacement === 'bottom') {
-      if (rect.bottom + tooltipH + gap < windowH) {
+      if (rect.bottom + tooltipH + gap < windowH - bottomNavOffset) {
         top = rect.bottom + gap;
         left = Math.min(Math.max(16, rect.left + rect.width / 2 - tooltipW / 2), windowW - tooltipW - 16);
       } else {
@@ -197,19 +201,19 @@ export function GuidedTour({
         top = rect.top - tooltipH - gap;
         left = Math.min(Math.max(16, rect.left + rect.width / 2 - tooltipW / 2), windowW - tooltipW - 16);
       } else {
-        // Jangan pernah flip ke bottom! Tempatkan di bagian atas yang nyaman dan terlihat jelas
+        // Jangan pernah flip ke bottom jika akan tertutup navbar bawah
         top = Math.max(76, rect.top + 16);
         left = Math.min(Math.max(16, rect.left + rect.width / 2 - tooltipW / 2), windowW - tooltipW - 16);
         finalPlacement = 'top';
       }
     } else if (preferredPlacement === 'center') {
-      top = Math.max(80, rect.top + Math.max(20, (rect.height - tooltipH) / 3));
+      top = Math.max(70, rect.top + Math.max(20, (rect.height - tooltipH) / 3));
       left = Math.min(Math.max(16, rect.left + rect.width / 2 - tooltipW / 2), windowW - tooltipW - 16);
       finalPlacement = 'center';
     } else if (preferredPlacement === 'right') {
       if (rect.right + tooltipW + gap < windowW) {
         left = rect.right + gap;
-        top = Math.min(Math.max(16, rect.top + rect.height / 2 - tooltipH / 2), windowH - tooltipH - 16);
+        top = Math.min(Math.max(16, rect.top + rect.height / 2 - tooltipH / 2), windowH - tooltipH - bottomNavOffset - 16);
       } else {
         top = rect.bottom + gap;
         left = Math.min(Math.max(16, rect.left), windowW - tooltipW - 16);
@@ -222,7 +226,7 @@ export function GuidedTour({
     }
 
     // Pastikan tooltip selalu berada dalam batas viewport vertikal dan horizontal
-    top = Math.max(16, Math.min(top, windowH - tooltipH - 20));
+    top = Math.max(16, Math.min(top, windowH - tooltipH - bottomNavOffset - 16));
     left = Math.max(16, Math.min(left, windowW - tooltipW - 16));
 
     setTooltipPos({ top, left, placement: finalPlacement });

@@ -16,6 +16,7 @@ import {
   UserCheck,
   AlertCircle,
   FileText,
+  Filter,
 } from 'lucide-react';
 import {
   VerificationService,
@@ -197,7 +198,7 @@ export default function AdminVerifikasiEmailPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <MailCheck size={24} style={{ color: '#16a34a' }} />
+            <MailCheck size={24} style={{ color: '#0f172a' }} />
             <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a' }}>
               Verifikasi Email Pengguna
             </h1>
@@ -219,42 +220,73 @@ export default function AdminVerifikasiEmailPage() {
 
       {/* Ringkasan Statistik */}
       <div className="admin-dashboard-stats-grid">
-        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px', borderLeft: '4px solid #f59e0b' }}>
+        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px' }}>
           <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Belum Terverifikasi</div>
-          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#b45309', margin: '4px 0 2px' }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#0f172a', margin: '4px 0 2px' }}>
             {stats.unverifiedEmailCount}
           </div>
-          <div style={{ fontSize: '0.74rem', color: '#b45309' }}>Perlu penanganan admin</div>
+          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Perlu penanganan admin</div>
         </div>
 
-        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px', borderLeft: '4px solid #dc2626' }}>
+        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px' }}>
           <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Email Gagal Terkirim</div>
-          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#dc2626', margin: '4px 0 2px' }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#0f172a', margin: '4px 0 2px' }}>
             {stats.failedDeliveryCount}
           </div>
-          <div style={{ fontSize: '0.74rem', color: '#dc2626' }}>Terkendala kuota SMTP</div>
+          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Terkendala kuota SMTP</div>
         </div>
 
-        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px', borderLeft: '4px solid #16a34a' }}>
+        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px' }}>
           <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Email Terverifikasi</div>
-          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#15803d', margin: '4px 0 2px' }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#0f172a', margin: '4px 0 2px' }}>
             {stats.verifiedEmailCount}
           </div>
-          <div style={{ fontSize: '0.74rem', color: '#16a34a' }}>Akun aktif sepenuhnya</div>
+          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Akun aktif sepenuhnya</div>
         </div>
 
-        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px', borderLeft: '4px solid #0284c7' }}>
+        <div className="uda-card admin-metrics-card" style={{ padding: '16px 18px' }}>
           <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>Verifikasi Manual Admin</div>
-          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#0284c7', margin: '4px 0 2px' }}>
+          <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 900, color: '#0f172a', margin: '4px 0 2px' }}>
             {stats.manualVerifiedCount}
           </div>
-          <div style={{ fontSize: '0.74rem', color: '#0284c7' }}>Bypass berhasil tersimpan</div>
+          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>Bypass berhasil tersimpan</div>
         </div>
       </div>
 
+      <style>{`
+        @media (max-width: 1024px) {
+          .email-verify-tabs-desktop {
+            display: none !important;
+          }
+          .email-verify-dropdown-mobile {
+            display: flex !important;
+          }
+        }
+        @media (min-width: 1025px) {
+          .email-verify-tabs-desktop {
+            display: flex !important;
+          }
+          .email-verify-dropdown-mobile {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       {/* Tabs Filter & Pencarian */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch', flexWrap: 'nowrap', maxWidth: '100%', paddingBottom: 4 }}>
+        {/* Mode Desktop (> 1024px): Tab Buttons Horizontal */}
+        <div
+          className="email-verify-tabs-desktop"
+          style={{
+            display: 'flex',
+            gap: 8,
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            flexWrap: 'nowrap',
+            maxWidth: '100%',
+            paddingBottom: 4,
+          }}
+        >
           {[
             { id: 'unverified', label: 'Belum Terverifikasi', count: stats.unverifiedEmailCount },
             { id: 'failed', label: 'Gagal Kirim SMTP', count: stats.failedDeliveryCount },
@@ -294,6 +326,76 @@ export default function AdminVerifikasiEmailPage() {
               </span>
             </button>
           ))}
+        </div>
+
+        {/* Khusus Tampilan Mode Mobile dan Tablet (<= 1024px): Filter Status Digabung Menjadi Kolom List (Dropdown) */}
+        <div
+          className="email-verify-dropdown-mobile"
+          style={{
+            display: 'none',
+            alignItems: 'center',
+            gap: 8,
+            width: '100%',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              padding: '6px 12px',
+              backgroundColor: '#ffffff',
+              border: '2px solid #0f172a',
+              borderRadius: 8,
+              boxShadow: '2.5px 2.5px 0px #0f172a',
+            }}
+          >
+            <Filter size={16} style={{ color: '#0f172a', flexShrink: 0 }} />
+            <label
+              htmlFor="mobile-email-status-filter"
+              style={{
+                fontSize: '0.82rem',
+                fontWeight: 800,
+                color: '#0f172a',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              Filter Status:
+            </label>
+            <select
+              id="mobile-email-status-filter"
+              value={activeFilter}
+              onChange={(e) => setActiveFilter(e.target.value as any)}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                padding: '6px 10px',
+                borderRadius: 6,
+                border: '1.5px solid #0f172a',
+                backgroundColor: '#f8fafc',
+                color: '#0f172a',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              <option value="unverified">
+                Belum Terverifikasi ({stats.unverifiedEmailCount})
+              </option>
+              <option value="failed">
+                Gagal Kirim SMTP ({stats.failedDeliveryCount})
+              </option>
+              <option value="verified">
+                Terverifikasi ({stats.verifiedEmailCount})
+              </option>
+              <option value="all">
+                Semua Pengguna ({stats.totalUsers})
+              </option>
+            </select>
+          </div>
         </div>
 
         {/* Search Bar */}

@@ -90,6 +90,16 @@ export default function ProfilAwalPage() {
         const currentUser = session?.user || user;
 
         if (currentUser && isMounted) {
+          // Ambil mode Google Auth
+          let googleAuthMode: string | null = null;
+          try {
+            googleAuthMode = localStorage.getItem('uda_google_auth_mode');
+            if (!googleAuthMode && typeof document !== 'undefined') {
+              const match = document.cookie.match(/uda_google_auth_mode=([^;]+)/);
+              if (match) googleAuthMode = match[1];
+            }
+          } catch (e) {}
+
           // Cek apakah pengguna sudah pernah menyelesaikan onboarding pengisian profil & pemilihan paket
           const hasCompletedOnboarding =
             currentUser.user_metadata?.has_completed_onboarding === true ||
@@ -101,6 +111,10 @@ export default function ProfilAwalPage() {
             try {
               localStorage.removeItem('uda_google_auth_pending');
               localStorage.removeItem('uda_needs_profile_setup');
+              localStorage.removeItem('uda_google_auth_mode');
+              if (typeof document !== 'undefined') {
+                document.cookie = 'uda_google_auth_mode=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+              }
               localStorage.setItem('uda_profile_setup_done_' + currentUser.id, 'true');
             } catch (e) {}
 
@@ -110,6 +124,45 @@ export default function ProfilAwalPage() {
               router.replace('/app');
             }
             return;
+          }
+
+          // JIKA PENGGUNA MENCOBA LOGIN DENGAN GOOGLE (mode='masuk') TETAPI BELUM TERDAFTAR DI SISTEM:
+          if (googleAuthMode === 'masuk') {
+            const [profRes, accRes] = await Promise.all([
+              (supabase.from('profiles' as any) as any)
+                .select('id, full_name, created_at')
+                .eq('id', currentUser.id)
+                .maybeSingle(),
+              (supabase.from('accounts' as any) as any)
+                .select('id, plan_code')
+                .eq('user_id', currentUser.id)
+                .maybeSingle(),
+            ]);
+
+            const hasProfile = !!profRes.data && !!profRes.data.full_name;
+            const isAlreadyRegistered = hasCompletedOnboarding || (hasProfile && !!accRes.data);
+
+            if (!isAlreadyRegistered) {
+              const unregisteredEmail = currentUser.email || '';
+              try {
+                localStorage.removeItem('uda_google_auth_mode');
+                localStorage.removeItem('uda_google_auth_pending');
+                localStorage.removeItem('uda_needs_profile_setup');
+                if (typeof document !== 'undefined') {
+                  document.cookie = 'uda_google_auth_mode=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+                }
+                await fetch('/api/admin/users?id=' + currentUser.id, { method: 'DELETE' }).catch(() => {});
+                await supabase.auth.signOut();
+              } catch (e) {}
+
+              const redirectUrl = `/masuk?unregistered_google=true&email=${encodeURIComponent(unregisteredEmail)}`;
+              if (typeof window !== 'undefined') {
+                window.location.replace(redirectUrl);
+              } else {
+                router.replace(redirectUrl);
+              }
+              return;
+            }
           }
 
           const googleName =

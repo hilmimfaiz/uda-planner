@@ -203,7 +203,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    if (!isLoading && !user && !profile) {
+    if (isLoading) return;
+
+    // Jangan lakukan redirect jika token sesi masih tersimpan di storage lokal atau cookie
+    const hasAuthStorage =
+      typeof window !== 'undefined' &&
+      (!!localStorage.getItem('uda_auth_user') || !!localStorage.getItem('uda_auth_profile'));
+    const hasAuthCookie =
+      typeof document !== 'undefined' &&
+      (document.cookie.includes('uda_auth_token') || document.cookie.includes('sb-'));
+
+    if (!user && !profile && !hasAuthStorage && !hasAuthCookie) {
       if (typeof window !== 'undefined') {
         window.location.replace(`/masuk?redirect=${encodeURIComponent(pathname)}`);
       } else {
@@ -670,6 +680,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
             {/* Right Action */}
             <div className="mobile-app-bar-right">
+              {/* Tombol Panduan Halaman Mobile & Tablet */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('uda_start_guided_tour'));
+                  }
+                }}
+                className="mobile-bar-icon-btn"
+                title="Panduan Halaman"
+                style={{
+                  backgroundColor: '#fef08a',
+                }}
+              >
+                <BookOpen size={18} style={{ color: '#16a34a' }} />
+              </button>
+
               {pathname === '/app/notifikasi' ? (
                 <Link href="/app/akun" className="mobile-bar-icon-btn" title="Pengaturan">
                   <Settings size={18} />
@@ -694,7 +721,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Plus size={19} />
                 </Link>
               ) : (
-                <div style={{ width: 38, height: 38 }} />
+                <div style={{ width: 4 }} />
               )}
             </div>
           </div>

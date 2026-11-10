@@ -24,6 +24,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
+  Filter,
 } from 'lucide-react';
 import { AdminService, AdminPaymentItem } from '@/services/admin.service';
 import { resolvePaymentDuration } from '@/services/plan.service';
@@ -404,7 +405,27 @@ export default function AdminPembayaranPage() {
           paddingBottom: 12,
         }}
       >
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch', flexWrap: 'nowrap' }}>
+        <style>{`
+          @media (max-width: 1024px) {
+            .pembayaran-tabs-desktop {
+              display: none !important;
+            }
+            .pembayaran-dropdown-mobile {
+              display: flex !important;
+            }
+          }
+          @media (min-width: 1025px) {
+            .pembayaran-tabs-desktop {
+              display: flex !important;
+            }
+            .pembayaran-dropdown-mobile {
+              display: none !important;
+            }
+          }
+        `}</style>
+
+        {/* Mode Desktop (> 1024px): Tab Buttons Horizontal */}
+        <div className="pembayaran-tabs-desktop" style={{ display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch', flexWrap: 'nowrap' }}>
           {[
             { id: 'pending', label: 'Menunggu Verifikasi', count: payments.filter((p) => p.status === 'pending').length },
             { id: 'approved', label: 'Disetujui', count: payments.filter((p) => p.status === 'approved').length },
@@ -447,6 +468,79 @@ export default function AdminPembayaranPage() {
               </span>
             </button>
           ))}
+        </div>
+
+        {/* Khusus Tampilan Mode Mobile dan Tablet (<= 1024px): Filter digabung menjadi satu Kolom List (Dropdown) */}
+        <div
+          className="pembayaran-dropdown-mobile"
+          style={{
+            display: 'none',
+            alignItems: 'center',
+            gap: 8,
+            width: '100%',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              padding: '6px 12px',
+              backgroundColor: '#ffffff',
+              border: '2px solid #0f172a',
+              borderRadius: 8,
+              boxShadow: '2.5px 2.5px 0px #0f172a',
+            }}
+          >
+            <Filter size={16} style={{ color: '#0f172a', flexShrink: 0 }} />
+            <label
+              htmlFor="mobile-status-filter"
+              style={{
+                fontSize: '0.82rem',
+                fontWeight: 800,
+                color: '#0f172a',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              Filter Status:
+            </label>
+            <select
+              id="mobile-status-filter"
+              value={filterTab}
+              onChange={(e) => {
+                setFilterTab(e.target.value as any);
+                setCurrentPage(1);
+              }}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                padding: '6px 10px',
+                borderRadius: 6,
+                border: '1.5px solid #0f172a',
+                backgroundColor: '#f8fafc',
+                color: '#0f172a',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              <option value="pending">
+                Menunggu Verifikasi ({payments.filter((p) => p.status === 'pending').length})
+              </option>
+              <option value="approved">
+                Disetujui ({payments.filter((p) => p.status === 'approved').length})
+              </option>
+              <option value="rejected">
+                Ditolak ({payments.filter((p) => p.status === 'rejected').length})
+              </option>
+              <option value="all">
+                Semua Riwayat ({payments.length})
+              </option>
+            </select>
+          </div>
         </div>
 
         {/* Toolbar: Export CSV & Hapus Riwayat */}

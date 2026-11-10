@@ -26,6 +26,26 @@ export function WhatsAppHelpButton({
           setAdminPhone(settings.adminWhatsapp);
         }
       });
+
+      const handleSettingsSync = (e?: any) => {
+        if (e?.detail?.adminWhatsapp) {
+          setAdminPhone(e.detail.adminWhatsapp);
+        } else {
+          AdminService.getAppSettings().then((settings) => {
+            if (settings?.adminWhatsapp) {
+              setAdminPhone(settings.adminWhatsapp);
+            }
+          });
+        }
+      };
+
+      window.addEventListener("uda_settings_updated", handleSettingsSync);
+      window.addEventListener("storage", handleSettingsSync);
+
+      return () => {
+        window.removeEventListener("uda_settings_updated", handleSettingsSync);
+        window.removeEventListener("storage", handleSettingsSync);
+      };
     }
   }, [phoneNumber]);
 

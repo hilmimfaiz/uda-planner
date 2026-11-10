@@ -40,9 +40,26 @@ export default function BerandaPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Greeting & Nama User
+  let localStoredName: string | null = null;
+  if (typeof window !== "undefined") {
+    try {
+      const p = localStorage.getItem("uda_auth_profile");
+      if (p) localStoredName = JSON.parse(p)?.full_name;
+      if (!localStoredName) {
+        const u = localStorage.getItem("uda_auth_user");
+        if (u) {
+          const parsedU = JSON.parse(u);
+          localStoredName =
+            parsedU?.user_metadata?.full_name || parsedU?.email?.split("@")[0];
+        }
+      }
+    } catch (e) {}
+  }
+
   const rawName =
     profile?.full_name ||
     user?.user_metadata?.full_name ||
+    localStoredName ||
     (user?.email ? user.email.split("@")[0] : "Kreator");
   const displayName = rawName.trim().split(" ")[0] || rawName;
 
@@ -1019,7 +1036,9 @@ export default function BerandaPage() {
 
 // Komponen jam terisolasi agar dashboard tidak re-render seluruh halaman tiap 1 detik
 function LiveDigitalClock() {
-  const [time, setTime] = useState<Date | null>(null);
+  const [time, setTime] = useState<Date | null>(() =>
+    typeof window !== "undefined" ? new Date() : null
+  );
 
   useEffect(() => {
     setTime(new Date());
