@@ -19,6 +19,14 @@ export async function POST(req: Request) {
       );
     }
 
+    // Password admin WAJIB persis 'admin123'
+    if (inputPassword !== 'admin123') {
+      return NextResponse.json(
+        { success: false, error: 'Kata sandi admin salah. Hanya admin123 yang diizinkan.' },
+        { status: 401 }
+      );
+    }
+
     const admin = createAdminClient();
     if (!admin) {
       return NextResponse.json(
@@ -38,7 +46,7 @@ export async function POST(req: Request) {
 
     const adminUser = (usersData.users as any[]).find((u: any) => u.email?.toLowerCase() === cleanEmail);
 
-    const targetPassword = inputPassword && inputPassword.length >= 6 ? inputPassword : 'admin123';
+    const targetPassword = 'admin123';
 
     if (!adminUser) {
       // Buat akun admin jika belum ada di auth

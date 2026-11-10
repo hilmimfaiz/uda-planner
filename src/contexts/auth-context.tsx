@@ -618,44 +618,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         cleanEmail === 'admin@udaplanner.com' ||
         cleanEmail === 'admin@udacoding.id';
 
+      // Validasi ketat khusus akun admin: Password WAJIB persis 'admin123'
+      if (isAdminEmail && password !== 'admin123') {
+        return { error: 'Email atau kata sandi salah. Kata sandi akun admin adalah admin123.' };
+      }
+
       let { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
 
-      // Dukungan khusus akun administrator: Jika login awal gagal, coba default admin123 atau sinkronkan via server
-      if (error && isAdminEmail) {
-        // 1. Coba dengan kata sandi default admin123
-        const fallbackRes = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: 'admin123',
-        });
-
-        if (!fallbackRes.error && fallbackRes.data?.user) {
-          data = fallbackRes.data;
-          error = null;
-        } else {
-          // 2. Jika masih belum berhasil, sinkronkan kata sandi admin via Admin API
-          try {
-            const apiRes = await fetch('/api/admin/login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: cleanEmail, password }),
+      // Dukungan khusus akun administrator: Jika password 'admin123' benar tapi auth belum tersinkron
+      if (error && isAdminEmail && password === 'admin123') {
+        try {
+          const apiRes = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cleanEmail, password: 'admin123' }),
+          });
+          const apiData = await apiRes.json();
+          if (apiData.success) {
+            const retryAfterSync = await supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password: 'admin123',
             });
-            const apiData = await apiRes.json();
-            if (apiData.success) {
-              const retryAfterSync = await supabase.auth.signInWithPassword({
-                email: cleanEmail,
-                password: apiData.targetPassword || password || 'admin123',
-              });
-              if (!retryAfterSync.error && retryAfterSync.data?.user) {
-                data = retryAfterSync.data;
-                error = null;
-              }
+            if (!retryAfterSync.error && retryAfterSync.data?.user) {
+              data = retryAfterSync.data;
+              error = null;
             }
-          } catch (syncErr) {
-            console.warn('Admin sync error:', syncErr);
           }
+        } catch (syncErr) {
+          console.warn('Admin sync error:', syncErr);
         }
       }
 
