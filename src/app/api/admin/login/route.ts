@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     // Password admin WAJIB persis 'admin123'
     if (inputPassword !== 'admin123') {
       return NextResponse.json(
-        { success: false, error: 'Kata sandi admin salah. Hanya admin123 yang diizinkan.' },
+        { success: false, error: 'Email atau kata sandi salah.' },
         { status: 401 }
       );
     }

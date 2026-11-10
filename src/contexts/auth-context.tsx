@@ -620,7 +620,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Validasi ketat khusus akun admin: Password WAJIB persis 'admin123'
       if (isAdminEmail && password !== 'admin123') {
-        return { error: 'Email atau kata sandi salah. Kata sandi akun admin adalah admin123.' };
+        return { error: 'Email atau kata sandi salah. Pastikan akun sudah terdaftar di UdaPlanner.' };
       }
 
       let { data, error } = await supabase.auth.signInWithPassword({
