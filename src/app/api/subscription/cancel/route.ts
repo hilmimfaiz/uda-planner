@@ -2,9 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+const LOCAL_BACKUP_FILE = path.join(process.cwd(), '.server_payments.json');
+const TMP_BACKUP_FILE = path.join(os.tmpdir(), '.server_payments.json');
+
+const globalForPayments = globalThis as unknown as {
+  __udaServerPayments?: any[];
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -85,25 +93,29 @@ export async function POST(req: NextRequest) {
     }
 
     // 6. Bersihkan juga file backup server payments (.server_payments.json)
-    try {
-      const backupPath = path.join(process.cwd(), '.server_payments.json');
-      if (fs.existsSync(backupPath)) {
-        const raw = fs.readFileSync(backupPath, 'utf-8');
-        const list = JSON.parse(raw);
-        if (Array.isArray(list)) {
-          const updated = list.map((p: any) => {
-            const matchUser =
-              (targetUserId && (p.user_id === targetUserId || p.userId === targetUserId)) ||
-              (cleanEmail && (p.email?.toLowerCase() === cleanEmail || p.user?.toLowerCase() === cleanEmail));
-            if (matchUser && (p.status === 'approved' || p.status === 'pending')) {
-              return { ...p, status: 'cancelled', reason: 'Langganan dihentikan oleh pengguna' };
+    for (const filePath of [LOCAL_BACKUP_FILE, TMP_BACKUP_FILE]) {
+      try {
+        if (fs.existsSync(filePath)) {
+          const raw = fs.readFileSync(filePath, 'utf-8');
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            const updated = list.map((p: any) => {
+              const matchUser =
+                (targetUserId && (p.user_id === targetUserId || p.userId === targetUserId)) ||
+                (cleanEmail && (p.email?.toLowerCase() === cleanEmail || p.user?.toLowerCase() === cleanEmail));
+              if (matchUser && (p.status === 'approved' || p.status === 'pending')) {
+                return { ...p, status: 'cancelled', reason: 'Langganan dihentikan oleh pengguna' };
+              }
+              return p;
+            });
+            fs.writeFileSync(filePath, JSON.stringify(updated, null, 2), 'utf-8');
+            if (globalForPayments.__udaServerPayments) {
+              globalForPayments.__udaServerPayments = updated;
             }
-            return p;
-          });
-          fs.writeFileSync(backupPath, JSON.stringify(updated, null, 2), 'utf-8');
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
 
     return NextResponse.json({
       success: true,

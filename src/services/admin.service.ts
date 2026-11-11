@@ -838,23 +838,34 @@ export class AdminService {
                   }
                 }
 
-                // 3. Cek daftar pembayaran yang disetujui (uda_admin_payments) — prioritas utama sesuai paket yang dibeli!
-                const rawPayments = localStorage.getItem('uda_admin_payments');
-                if (rawPayments) {
-                  const payList = JSON.parse(rawPayments);
-                  const myApproved = payList.filter(
-                    (p: any) =>
-                      (p.userId === targetId || p.userId === a.id || (p.email && p.email.toLowerCase() === cleanEmail)) &&
-                      p.status === 'approved'
-                  );
-                  if (myApproved.length > 0) {
-                    const latest = myApproved[0];
-                    const latestPlan = (latest.plan || latest.plan_code || '').toLowerCase();
-                    if (latestPlan === 'pro' || latestPlan === 'team') {
-                      resolvedPlan = latestPlan as 'pro' | 'team';
-                      if (!resolvedPlanUntil) {
-                        const days = latest.durationDays || 30;
-                        resolvedPlanUntil = new Date(Date.now() + days * 86400000).toISOString();
+                // 3. Cek daftar pembayaran yang disetujui (uda_admin_payments)
+                const isExplicitlyCancelled =
+                  localStorage.getItem('uda_subscription_cancelled_' + targetId) === 'true' ||
+                  (cleanEmail && localStorage.getItem('uda_subscription_cancelled_' + cleanEmail) === 'true') ||
+                  localStorage.getItem('uda_user_plan_' + targetId) === 'free' ||
+                  (cleanEmail && localStorage.getItem('uda_user_plan_' + cleanEmail) === 'free');
+
+                if (isExplicitlyCancelled || (a.plan_code === 'free' && !a.plan_until)) {
+                  resolvedPlan = 'free';
+                  resolvedPlanUntil = null;
+                } else {
+                  const rawPayments = localStorage.getItem('uda_admin_payments');
+                  if (rawPayments) {
+                    const payList = JSON.parse(rawPayments);
+                    const myApproved = payList.filter(
+                      (p: any) =>
+                        (p.userId === targetId || p.userId === a.id || (p.email && p.email.toLowerCase() === cleanEmail)) &&
+                        p.status === 'approved'
+                    );
+                    if (myApproved.length > 0) {
+                      const latest = myApproved[0];
+                      const latestPlan = (latest.plan || latest.plan_code || '').toLowerCase();
+                      if (latestPlan === 'pro' || latestPlan === 'team') {
+                        resolvedPlan = latestPlan as 'pro' | 'team';
+                        if (!resolvedPlanUntil) {
+                          const days = latest.durationDays || 30;
+                          resolvedPlanUntil = new Date(Date.now() + days * 86400000).toISOString();
+                        }
                       }
                     }
                   }

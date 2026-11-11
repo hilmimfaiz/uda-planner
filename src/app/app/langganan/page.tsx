@@ -93,6 +93,18 @@ export default function LanggananPage() {
   // Status Berhenti Langganan (Downgrade ke Free)
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelingSubscription, setIsCancelingSubscription] = useState(false);
+  const [cancelledLocally, setCancelledLocally] = useState(false);
+
+  const isUserExplicitlyFree =
+    cancelledLocally ||
+    (typeof window !== 'undefined' &&
+      (localStorage.getItem(`uda_subscription_cancelled_${user?.id}`) === 'true' ||
+        (user?.email && localStorage.getItem(`uda_subscription_cancelled_${user.email.toLowerCase()}`) === 'true') ||
+        localStorage.getItem(`uda_user_plan_${user?.id}`) === 'free' ||
+        (user?.email && localStorage.getItem(`uda_user_plan_${user.email.toLowerCase()}`) === 'free')));
+
+  const effectivePlanCode = isUserExplicitlyFree ? 'free' : (account?.plan_code || 'free');
+  const effectivePlanUntil = isUserExplicitlyFree ? null : (account?.plan_until || null);
 
   // Form Pembayaran
   const [senderName, setSenderName] = useState('');
@@ -196,11 +208,14 @@ export default function LanggananPage() {
           }
 
           const isDirectlyFree = typeof window !== 'undefined' && (
+            localStorage.getItem(`uda_subscription_cancelled_${user?.id}`) === 'true' ||
+            (user?.email && localStorage.getItem(`uda_subscription_cancelled_${user.email.toLowerCase()}`) === 'true') ||
             localStorage.getItem(`uda_user_plan_${user?.id}`) === 'free' ||
-            (user?.email && localStorage.getItem(`uda_user_plan_${user.email.toLowerCase()}`) === 'free')
+            (user?.email && localStorage.getItem(`uda_user_plan_${user.email.toLowerCase()}`) === 'free') ||
+            account?.plan_code === 'free'
           );
-          if (account?.plan_code === 'free' && isDirectlyFree) {
-            // Pengguna secara eksplisit memilih paket Free (berhenti langganan), jangan paksa upgrade ulang
+          if (isDirectlyFree) {
+            // Pengguna berstatus paket Free atau telah berhenti langganan, jangan paksa upgrade ulang
             return;
           }
 
@@ -366,20 +381,46 @@ export default function LanggananPage() {
       // 3. Update local storage & broadcast event
       if (typeof window !== 'undefined') {
         try {
+          // Tandai status langganan dibatalkan secara permanen
+          localStorage.setItem(`uda_subscription_cancelled_${user.id}`, 'true');
           localStorage.setItem(`uda_user_plan_${user.id}`, 'free');
           localStorage.removeItem(`uda_user_plan_until_${user.id}`);
           if (user.email) {
-            localStorage.setItem(`uda_user_plan_${user.email.toLowerCase()}`, 'free');
-            localStorage.removeItem(`uda_user_plan_until_${user.email.toLowerCase()}`);
+            const emailLower = user.email.toLowerCase();
+            localStorage.setItem(`uda_subscription_cancelled_${emailLower}`, 'true');
+            localStorage.setItem(`uda_user_plan_${emailLower}`, 'free');
+            localStorage.removeItem(`uda_user_plan_until_${emailLower}`);
           }
           localStorage.removeItem('uda_last_upgraded_user');
 
-          // Hapus semua flag notifikasi approved agar tidak memicu upgrade ulang
-          Object.keys(localStorage).forEach((key) => {
-            if (key.startsWith('uda_notified_approved_')) {
-              localStorage.removeItem(key);
-            }
-          });
+          // Perbarui semua data pembayaran di localStorage (uda_admin_payments) agar statusnya menjadi 'cancelled'
+          const rawAdminPays = localStorage.getItem('uda_admin_payments');
+          if (rawAdminPays) {
+            try {
+              const payList = JSON.parse(rawAdminPays);
+              if (Array.isArray(payList)) {
+                const updated = payList.map((p: any) => {
+                  const isMyPay =
+                    p.userId === user.id ||
+                    (user.email && p.email?.toLowerCase() === user.email.toLowerCase()) ||
+                    (user.email && p.user?.toLowerCase() === user.email.toLowerCase());
+                  if (isMyPay && (p.status === 'approved' || p.status === 'pending')) {
+                    return { ...p, status: 'cancelled', reason: 'Langganan dihentikan oleh pengguna' };
+                  }
+                  return p;
+                });
+                localStorage.setItem('uda_admin_payments', JSON.stringify(updated));
+              }
+            } catch (e) {}
+          }
+
+          // Tandai semua id pembayaran yang ada saat ini sebagai telah dinotifikasi agar tidak memicu pop-up / upgrade
+          if (userPaymentsRef.current) {
+            userPaymentsRef.current.forEach((p: any) => {
+              notifiedPaymentsRef.current.add(p.id);
+              localStorage.setItem('uda_notified_approved_' + p.id, 'true');
+            });
+          }
 
           const rawAcc = localStorage.getItem('uda_auth_account');
           if (rawAcc) {
@@ -399,6 +440,15 @@ export default function LanggananPage() {
           window.dispatchEvent(new Event('storage'));
         } catch (e) {}
       }
+
+      // Update state React secara instan di UI
+      setCancelledLocally(true);
+      setUserPayments((prev) =>
+        prev.map((p) => (p.status === 'approved' || p.status === 'pending' ? { ...p, status: 'cancelled' } : p))
+      );
+      userPaymentsRef.current = userPaymentsRef.current.map((p) =>
+        p.status === 'approved' || p.status === 'pending' ? { ...p, status: 'cancelled' } : p
+      );
 
       setShowCancelModal(false);
       playSuccessSound();
@@ -422,6 +472,15 @@ export default function LanggananPage() {
 
     // Fungsi untuk mengecek apakah pembayaran baru saja disetujui admin
     const checkNewlyApprovedPayment = async () => {
+      const isExplicitlyFree = typeof window !== 'undefined' && (
+        localStorage.getItem(`uda_subscription_cancelled_${user?.id}`) === 'true' ||
+        (user?.email && localStorage.getItem(`uda_subscription_cancelled_${user.email.toLowerCase()}`) === 'true') ||
+        localStorage.getItem(`uda_user_plan_${user?.id}`) === 'free' ||
+        (user?.email && localStorage.getItem(`uda_user_plan_${user.email.toLowerCase()}`) === 'free') ||
+        account?.plan_code === 'free'
+      );
+      if (isExplicitlyFree) return;
+
       const fresh = await PaymentService.getPayments(user?.id, user?.email);
       if (!fresh || fresh.length === 0) return;
 
@@ -655,6 +714,14 @@ export default function LanggananPage() {
         targetAccountName: selectedBank?.accountName,
       });
 
+      if (typeof window !== 'undefined') {
+        try {
+          if (user?.id) localStorage.removeItem(`uda_subscription_cancelled_${user.id}`);
+          if (user?.email) localStorage.removeItem(`uda_subscription_cancelled_${user.email.toLowerCase()}`);
+        } catch (e) {}
+      }
+      setCancelledLocally(false);
+
       playSuccessSound();
       setShowSuccessModal(true);
       showSuccess(
@@ -818,8 +885,8 @@ export default function LanggananPage() {
         id="tour-langganan-status"
         className="uda-card"
         style={{
-          backgroundColor: teamMembership ? '#fdf4ff' : account?.plan_code === 'team' ? '#f5f3ff' : account?.plan_code === 'pro' ? '#f0fdf4' : '#f8fafc',
-          borderColor: teamMembership ? '#f0abfc' : account?.plan_code === 'team' ? '#ddd6fe' : account?.plan_code === 'pro' ? '#bbf7d0' : '#e2e8f0',
+          backgroundColor: teamMembership ? '#fdf4ff' : effectivePlanCode === 'team' ? '#f5f3ff' : effectivePlanCode === 'pro' ? '#f0fdf4' : '#f8fafc',
+          borderColor: teamMembership ? '#f0abfc' : effectivePlanCode === 'team' ? '#ddd6fe' : effectivePlanCode === 'pro' ? '#bbf7d0' : '#e2e8f0',
           padding: '20px 24px',
         }}
       >
@@ -830,8 +897,8 @@ export default function LanggananPage() {
                 width: 44,
                 height: 44,
                 borderRadius: '50%',
-                backgroundColor: teamMembership ? '#fae8ff' : account?.plan_code === 'team' ? '#ede9fe' : account?.plan_code === 'pro' ? '#dcfce7' : '#e2e8f0',
-                color: teamMembership ? '#c026d3' : account?.plan_code === 'team' ? '#7c3aed' : account?.plan_code === 'pro' ? '#16a34a' : '#64748b',
+                backgroundColor: teamMembership ? '#fae8ff' : effectivePlanCode === 'team' ? '#ede9fe' : effectivePlanCode === 'pro' ? '#dcfce7' : '#e2e8f0',
+                color: teamMembership ? '#c026d3' : effectivePlanCode === 'team' ? '#7c3aed' : effectivePlanCode === 'pro' ? '#16a34a' : '#64748b',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -842,8 +909,23 @@ export default function LanggananPage() {
             <div>
               <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#0f172a' }}>
                 Paket Aktif:{' '}
-                <span style={{ textTransform: 'uppercase', color: teamMembership ? '#c026d3' : account?.plan_code === 'team' ? '#7c3aed' : '#16a34a' }}>
-                  {teamMembership ? 'TIM (ANGGOTA TIM)' : account?.plan_code || 'Gratis'}
+                <span
+                  style={{
+                    textTransform: 'uppercase',
+                    color: teamMembership
+                      ? '#c026d3'
+                      : effectivePlanCode === 'team'
+                      ? '#7c3aed'
+                      : effectivePlanCode === 'pro'
+                      ? '#16a34a'
+                      : '#64748b',
+                  }}
+                >
+                  {teamMembership
+                    ? 'TIM (ANGGOTA TIM)'
+                    : effectivePlanCode && effectivePlanCode !== 'free'
+                    ? effectivePlanCode
+                    : 'Gratis (Free)'}
                 </span>
               </div>
               <div style={{ fontSize: '0.84rem', color: '#64748b', marginTop: 2 }}>
@@ -852,8 +934,12 @@ export default function LanggananPage() {
                     Tergabung sebagai <strong>{teamMembership.role.toUpperCase()}</strong> di brand{' '}
                     <strong style={{ color: '#0f172a' }}>"{teamMembership.brand_name}"</strong>.
                   </>
-                ) : account?.plan_until ? (
-                  `Masa aktif paket berlaku hingga: ${new Date(account.plan_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                ) : effectivePlanUntil && effectivePlanCode && effectivePlanCode !== 'free' ? (
+                  `Masa aktif paket berlaku hingga: ${new Date(effectivePlanUntil).toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })}`
                 ) : (
                   'Paket dasar gratis tanpa batasan waktu.'
                 )}
@@ -883,7 +969,7 @@ export default function LanggananPage() {
               </button>
             )}
 
-            {!teamMembership && (account?.plan_code === 'pro' || account?.plan_code === 'team') && (
+            {!teamMembership && effectivePlanCode && effectivePlanCode !== 'free' && (
               <button
                 type="button"
                 onClick={() => setShowCancelModal(true)}
@@ -908,12 +994,28 @@ export default function LanggananPage() {
             <span
               className="status-pill"
               style={{
-                backgroundColor: teamMembership ? '#fae8ff' : account?.plan_code === 'team' ? '#ede9fe' : account?.plan_code === 'pro' ? '#dcfce7' : '#f1f5f9',
-                color: teamMembership ? '#a21caf' : account?.plan_code === 'team' ? '#7c3aed' : account?.plan_code === 'pro' ? '#15803d' : '#475569',
+                backgroundColor: teamMembership
+                  ? '#fae8ff'
+                  : effectivePlanCode === 'team'
+                  ? '#ede9fe'
+                  : effectivePlanCode === 'pro'
+                  ? '#dcfce7'
+                  : '#f1f5f9',
+                color: teamMembership
+                  ? '#a21caf'
+                  : effectivePlanCode === 'team'
+                  ? '#7c3aed'
+                  : effectivePlanCode === 'pro'
+                  ? '#15803d'
+                  : '#475569',
                 fontWeight: 800,
               }}
             >
-              {teamMembership ? 'Anggota Tim' : account?.plan_code && account.plan_code !== 'free' ? 'Langganan Aktif' : 'Paket Free'}
+              {teamMembership
+                ? 'Anggota Tim'
+                : effectivePlanCode && effectivePlanCode !== 'free'
+                ? 'Langganan Aktif'
+                : 'Paket Free'}
             </span>
           </div>
         </div>

@@ -243,11 +243,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {}
       }
 
+      // Cek apakah pengguna telah membatalkan langganan atau secara eksplisit diset ke free
+      const isExplicitlyFree = typeof window !== 'undefined' && (
+        localStorage.getItem(`uda_subscription_cancelled_${currentUser.id}`) === 'true' ||
+        (emailLower && localStorage.getItem(`uda_subscription_cancelled_${emailLower}`) === 'true') ||
+        localStorage.getItem(`uda_user_plan_${currentUser.id}`) === 'free' ||
+        (emailLower && localStorage.getItem(`uda_user_plan_${emailLower}`) === 'free')
+      );
+
       // Cek apakah ada pembayaran approved terbaru di localStorage atau Supabase
       let latestApprovedPlan: string | null = null;
       let latestApprovedUntil: string | null = null;
 
-      if (typeof window !== 'undefined') {
+      if (!isExplicitlyFree && typeof window !== 'undefined') {
         try {
           const rawAdminPays = localStorage.getItem('uda_admin_payments');
           if (rawAdminPays) {
@@ -276,7 +284,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const dbApproved = dbApprovedRes?.data;
-      if (dbApproved && dbApproved.plan_code) {
+      if (!isExplicitlyFree && dbApproved && dbApproved.plan_code && dbApproved.status === 'approved') {
         const dbPlan = String(dbApproved.plan_code).toLowerCase();
         const dDays = Number(dbApproved.duration_days) || 30;
         const payTime = dbApproved.created_at ? new Date(dbApproved.created_at).getTime() : Date.now();
@@ -298,28 +306,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Prioritas resolusi paket:
         let resolvedPlan = 'free';
-        if (latestApprovedPlan) {
-          resolvedPlan = latestApprovedPlan;
-        } else if (cleanDbPlan && cleanDbPlan !== 'free') {
-          resolvedPlan = cleanDbPlan;
-        } else if (currentUser.user_metadata?.plan_code && currentUser.user_metadata.plan_code !== 'free') {
-          resolvedPlan = String(currentUser.user_metadata.plan_code).toLowerCase();
+        if (isExplicitlyFree) {
+          resolvedPlan = 'free';
         } else if (cleanDbPlan === 'free') {
           resolvedPlan = 'free';
+        } else if (cleanDbPlan && cleanDbPlan !== 'free') {
+          resolvedPlan = cleanDbPlan;
+        } else if (latestApprovedPlan) {
+          resolvedPlan = latestApprovedPlan;
+        } else if (currentUser.user_metadata?.plan_code && currentUser.user_metadata.plan_code !== 'free') {
+          resolvedPlan = String(currentUser.user_metadata.plan_code).toLowerCase();
         } else if (cachedLocalPlan) {
           resolvedPlan = cachedLocalPlan;
         }
 
         let resolvedUntil = resolvedPlan === 'free' ? null : (
-          latestApprovedUntil ||
           accRes.data.plan_until ||
+          latestApprovedUntil ||
           currentUser.user_metadata?.plan_until ||
           cachedLocalPlanUntil ||
           null
         );
 
         // Cek juga keanggotaan brand_members (HANYA anggota yang diundang, BUKAN owner!)
-        if (currentUser.id && (resolvedPlan === 'free' || !resolvedPlan)) {
+        if (!isExplicitlyFree && currentUser.id && (resolvedPlan === 'free' || !resolvedPlan)) {
           let isInvitedTeamMember = false;
           if (supabase) {
             try {
@@ -444,17 +454,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           is_suspended: !!accRes.data.is_suspended,
         };
       } else {
-        let fallbackPlan =
-          latestApprovedPlan ||
-          (currentUser.user_metadata?.plan_code && currentUser.user_metadata.plan_code !== 'free'
-            ? String(currentUser.user_metadata.plan_code).toLowerCase()
-            : null) ||
-          cachedLocalPlan ||
-          'free';
-        let fallbackUntil = latestApprovedUntil || currentUser.user_metadata?.plan_until || cachedLocalPlanUntil || null;
+        let fallbackPlan = isExplicitlyFree
+          ? 'free'
+          : latestApprovedPlan ||
+            (currentUser.user_metadata?.plan_code && currentUser.user_metadata.plan_code !== 'free'
+              ? String(currentUser.user_metadata.plan_code).toLowerCase()
+              : null) ||
+            cachedLocalPlan ||
+            'free';
+        let fallbackUntil = fallbackPlan === 'free' ? null : (latestApprovedUntil || currentUser.user_metadata?.plan_until || cachedLocalPlanUntil || null);
 
         // Cek juga keanggotaan brand_members (HANYA anggota yang diundang, BUKAN owner)
-        if (currentUser.id && (fallbackPlan === 'free' || !fallbackPlan)) {
+        if (!isExplicitlyFree && currentUser.id && (fallbackPlan === 'free' || !fallbackPlan)) {
           let isInvitedTeamMember = false;
           if (supabase) {
             try {
