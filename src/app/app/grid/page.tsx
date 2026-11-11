@@ -814,36 +814,99 @@ export default function GridInstagramPage() {
             </div>
           </div>
 
-          {/* 3-Column Instagram Feed */}
-          <div style={{ position: "relative" }}>
+          {/* Jika Belum Ada Postingan yang Dibuat untuk Brand Ini */}
+          {igPosts.length === 0 ? (
             <div
+              id="tour-grid-feed"
+              className="uda-card"
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 4,
+                padding: "48px 24px",
+                textAlign: "center",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 16,
+                backgroundColor: "#ffffff",
+                border: "2px dashed #cbd5e1",
+                boxShadow: "none",
                 borderRadius: 14,
-                overflow: "hidden",
-                background: "#0f172a",
-                padding: 4,
               }}
             >
-              {/* Baris 3 Grid Pertama */}
               <div
-                id="tour-grid-feed"
                 style={{
-                  gridColumn: "1 / -1",
+                  width: 64,
+                  height: 64,
+                  borderRadius: "50%",
+                  background: "#f8fafc",
+                  border: "2px solid #e2e8f0",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#64748b",
+                }}
+              >
+                <ImageIcon size={30} />
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: "1.18rem", fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
+                  Belum Ada Postingan yang Dibuat
+                </h3>
+                <p style={{ color: "#64748b", fontSize: "0.88rem", maxWidth: 460, margin: "0 auto", lineHeight: 1.6 }}>
+                  Brand <strong>@{activeBrand.handle}</strong> belum memiliki postingan terencana untuk pratinjau feed Instagram. Buat postingan feed atau carousel pertama Anda sekarang untuk melihat visual susunan grid 3 kolom.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => router.push(`/app/postingan/baru?brandId=${activeBrand.id}`)}
+                className="btn-uda btn-uda-primary"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "10px 22px",
+                  fontWeight: 800,
+                  fontSize: "0.9rem",
+                  marginTop: 4,
+                }}
+              >
+                <Plus size={18} />
+                <span>Buat Postingan Baru</span>
+              </button>
+            </div>
+          ) : (
+            /* 3-Column Instagram Feed */
+            <div style={{ position: "relative" }}>
+              <div
+                style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(3, 1fr)",
                   gap: 4,
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  background: "#0f172a",
+                  padding: 4,
                 }}
               >
-                {igPosts.slice(0, 3).map((post) => renderGridTile(post))}
-              </div>
+                {/* Baris 3 Grid Pertama */}
+                <div
+                  id="tour-grid-feed"
+                  style={{
+                    gridColumn: "1 / -1",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: 4,
+                  }}
+                >
+                  {igPosts.slice(0, 3).map((post) => renderGridTile(post))}
+                </div>
 
-              {/* Sisa Grid Postingan Berikutnya */}
-              {igPosts.slice(3).map((post) => renderGridTile(post))}
+                {/* Sisa Grid Postingan Berikutnya */}
+                {igPosts.slice(3).map((post) => renderGridTile(post))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

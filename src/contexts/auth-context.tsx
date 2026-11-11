@@ -296,22 +296,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const isStaleOwnerTeamBug = rawDbPlan === 'team' && !accRes.data.plan_until && latestApprovedPlan !== 'team';
         const cleanDbPlan = isStaleOwnerTeamBug ? 'free' : rawDbPlan;
 
-        // Prioritas utama: Pembayaran yang di-approve Admin (Pro -> Pro, Team -> Team) > Plan dari user_metadata > Plan DB > Cache Lokal
-        let resolvedPlan =
-          latestApprovedPlan ||
-          (currentUser.user_metadata?.plan_code && currentUser.user_metadata.plan_code !== 'free'
-            ? String(currentUser.user_metadata.plan_code).toLowerCase()
-            : null) ||
-          (cleanDbPlan !== 'free' ? cleanDbPlan : null) ||
-          cachedLocalPlan ||
-          'free';
+        // Prioritas resolusi paket:
+        let resolvedPlan = 'free';
+        if (latestApprovedPlan) {
+          resolvedPlan = latestApprovedPlan;
+        } else if (cleanDbPlan && cleanDbPlan !== 'free') {
+          resolvedPlan = cleanDbPlan;
+        } else if (currentUser.user_metadata?.plan_code && currentUser.user_metadata.plan_code !== 'free') {
+          resolvedPlan = String(currentUser.user_metadata.plan_code).toLowerCase();
+        } else if (cleanDbPlan === 'free') {
+          resolvedPlan = 'free';
+        } else if (cachedLocalPlan) {
+          resolvedPlan = cachedLocalPlan;
+        }
 
-        let resolvedUntil =
+        let resolvedUntil = resolvedPlan === 'free' ? null : (
           latestApprovedUntil ||
           accRes.data.plan_until ||
           currentUser.user_metadata?.plan_until ||
           cachedLocalPlanUntil ||
-          null;
+          null
+        );
 
         // Cek juga keanggotaan brand_members (HANYA anggota yang diundang, BUKAN owner!)
         if (currentUser.id && (resolvedPlan === 'free' || !resolvedPlan)) {
@@ -670,16 +675,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             (detail.email && authUser?.email?.toLowerCase() === detail.email.toLowerCase()) ||
             (!detail.userId && !detail.email);
 
-          if (isTarget && detail.planCode) {
+          if (isTarget && detail.planCode !== undefined) {
             const targetPlan = String(detail.planCode).toLowerCase();
+            const targetUntil = targetPlan === 'free' ? null : (detail.planUntil !== undefined ? detail.planUntil : null);
+
             setAccount((prev) => {
               const updated = {
                 ...(prev || { id: authUser?.id || 'acc-001', user_id: authUser?.id || 'acc-001', role: 'user' as const }),
                 plan_code: targetPlan,
-                plan_until: detail.planUntil || prev?.plan_until,
+                plan_until: targetUntil,
               };
               try {
                 localStorage.setItem('uda_auth_account', JSON.stringify(updated));
+                if (targetPlan === 'free') {
+                  localStorage.removeItem('uda_last_upgraded_user');
+                }
               } catch (e) {}
               return updated;
             });

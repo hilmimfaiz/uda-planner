@@ -195,6 +195,15 @@ export default function LanggananPage() {
             } catch (e) {}
           }
 
+          const isDirectlyFree = typeof window !== 'undefined' && (
+            localStorage.getItem(`uda_user_plan_${user?.id}`) === 'free' ||
+            (user?.email && localStorage.getItem(`uda_user_plan_${user.email.toLowerCase()}`) === 'free')
+          );
+          if (account?.plan_code === 'free' && isDirectlyFree) {
+            // Pengguna secara eksplisit memilih paket Free (berhenti langganan), jangan paksa upgrade ulang
+            return;
+          }
+
           const currentExpiry = currentPlanUntil ? new Date(currentPlanUntil).getTime() : 0;
           const isExpiredOrMissing = isNaN(currentExpiry) || currentExpiry <= Date.now();
           const needsPlanUpgrade =
@@ -314,37 +323,77 @@ export default function LanggananPage() {
     setIsCancelingSubscription(true);
 
     try {
-      const supabase = createClient();
-      if (supabase) {
-        await (supabase.from('accounts' as any) as any)
-          .update({
-            plan_code: 'free',
-            plan_until: null,
-          })
-          .or(`user_id.eq.${user.id},id.eq.${user.id}`);
+      // 1. Panggil API server untuk batalkan langganan di database Supabase (bypass RLS)
+      try {
+        const cancelRes = await fetch('/api/subscription/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            email: user.email,
+          }),
+        });
+        const cancelJson = await cancelRes.json();
+        if (!cancelJson.success) {
+          console.warn('API cancel subscription warning:', cancelJson.error);
+        }
+      } catch (apiErr) {
+        console.warn('API cancel subscription error:', apiErr);
       }
 
-      // Update local storage & broadcast event
+      // 2. Jika user adalah anggota tim brand lain, batalkan keanggotaannya
+      if (teamMembership) {
+        try {
+          await MemberService.leaveTeam(user.id, user.email, teamMembership.brand_id);
+          setTeamMembership(null);
+        } catch (teamErr) {
+          console.warn('Leave team error:', teamErr);
+        }
+      }
+
+      const supabase = createClient();
+      if (supabase) {
+        try {
+          await (supabase.from('accounts' as any) as any)
+            .update({
+              plan_code: 'free',
+              plan_until: null,
+            })
+            .or(`user_id.eq.${user.id},id.eq.${user.id}`);
+        } catch {}
+      }
+
+      // 3. Update local storage & broadcast event
       if (typeof window !== 'undefined') {
         try {
           localStorage.setItem(`uda_user_plan_${user.id}`, 'free');
+          localStorage.removeItem(`uda_user_plan_until_${user.id}`);
           if (user.email) {
             localStorage.setItem(`uda_user_plan_${user.email.toLowerCase()}`, 'free');
             localStorage.removeItem(`uda_user_plan_until_${user.email.toLowerCase()}`);
           }
-          localStorage.removeItem(`uda_user_plan_until_${user.id}`);
+          localStorage.removeItem('uda_last_upgraded_user');
+
+          // Hapus semua flag notifikasi approved agar tidak memicu upgrade ulang
+          Object.keys(localStorage).forEach((key) => {
+            if (key.startsWith('uda_notified_approved_')) {
+              localStorage.removeItem(key);
+            }
+          });
 
           const rawAcc = localStorage.getItem('uda_auth_account');
           if (rawAcc) {
             const parsed = JSON.parse(rawAcc);
             parsed.plan_code = 'free';
             parsed.plan_until = null;
+            delete parsed.team_member_brand_id;
+            delete parsed.team_member_brand_name;
             localStorage.setItem('uda_auth_account', JSON.stringify(parsed));
           }
 
           window.dispatchEvent(
             new CustomEvent('uda_account_updated', {
-              detail: { userId: user.id, planCode: 'free', planUntil: null },
+              detail: { userId: user.id, email: user.email, planCode: 'free', planUntil: null },
             })
           );
           window.dispatchEvent(new Event('storage'));
