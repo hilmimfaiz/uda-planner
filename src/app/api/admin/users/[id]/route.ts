@@ -25,6 +25,20 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     }
     const targetEmail = body.email;
 
+    const cleanEmail = (targetEmail || '').trim().toLowerCase();
+    const isAdminEmail =
+      cleanEmail === 'admin@udaplanner.id' ||
+      cleanEmail === 'admin@udaplanner.com' ||
+      cleanEmail === 'admin@udacoding.id' ||
+      cleanEmail.startsWith('admin@');
+
+    if (isAdminEmail) {
+      return NextResponse.json(
+        { success: false, error: 'Sebagai sesama admin, Anda tidak diberikan hak untuk menghapus user admin.' },
+        { status: 403 }
+      );
+    }
+
     const isUuid = (val?: string | null) =>
       !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
@@ -32,6 +46,18 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     const adminClient = createAdminClient();
     if (adminClient) {
       try {
+        const { data: listData } = await adminClient.auth.admin.listUsers();
+        const matchUser = ((listData as any)?.users || []).find(
+          (u: any) => u.id === targetUserId || (cleanEmail && u.email?.toLowerCase() === cleanEmail)
+        );
+
+        if (matchUser && (matchUser.user_metadata?.role === 'admin' || matchUser.email?.toLowerCase().startsWith('admin@'))) {
+          return NextResponse.json(
+            { success: false, error: 'Sebagai sesama admin, Anda tidak diberikan hak untuk menghapus user admin.' },
+            { status: 403 }
+          );
+        }
+
         if (isUuid(targetUserId)) {
           const { error: authErr } = await adminClient.auth.admin.deleteUser(targetUserId);
           if (authErr) {
@@ -40,10 +66,6 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
         }
 
         if (targetEmail) {
-          const { data: listData } = await adminClient.auth.admin.listUsers();
-          const matchUser = ((listData as any)?.users || []).find(
-            (u: any) => u.email?.toLowerCase() === targetEmail.toLowerCase()
-          );
           if (matchUser && matchUser.id !== targetUserId) {
             await adminClient.auth.admin.deleteUser(matchUser.id);
           }

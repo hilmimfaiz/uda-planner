@@ -43,3 +43,4 @@ ehthumbs.db
 .server_invitations.json
 .server_payments.json
 .server_inquiries.json
+.admin-credentials.json

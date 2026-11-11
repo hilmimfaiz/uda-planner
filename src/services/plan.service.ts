@@ -179,6 +179,21 @@ export class PlanService {
    * Mengambil semua paket untuk Panel Admin
    */
   static async getAllPlans(): Promise<DynamicPlan[]> {
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/admin/plans');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+            setStorage(json.data);
+            return json.data;
+          }
+        }
+      } catch (apiErr) {
+        console.warn('PlanService.getAllPlans api fallback:', apiErr);
+      }
+    }
+
     const local = getStorage();
     const supabase = createClient();
 
@@ -324,6 +339,18 @@ export class PlanService {
    * Memperbarui data paket
    */
   static async updatePlan(code: string, updates: Partial<DynamicPlan>): Promise<boolean> {
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/admin/plans', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, updates }),
+        });
+      } catch (err) {
+        console.warn('PlanService.updatePlan api error:', err);
+      }
+    }
+
     const supabase = createClient();
 
     if (supabase) {
@@ -364,6 +391,35 @@ export class PlanService {
    * Menambahkan variasi durasi pada paket
    */
   static async addDurationVariant(planCode: string, variant: Omit<PlanDurationItem, 'id' | 'planCode'>): Promise<PlanDurationItem> {
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/admin/plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'add_duration', planCode, variant }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            const current = getStorage();
+            const updated = current.map((p) => {
+              if (p.code === planCode) {
+                return {
+                  ...p,
+                  durations: [...(p.durations || []), json.data].sort((a, b) => a.sortOrder - b.sortOrder),
+                };
+              }
+              return p;
+            });
+            setStorage(updated);
+            return json.data;
+          }
+        }
+      } catch (err) {
+        console.warn('PlanService.addDurationVariant api error:', err);
+      }
+    }
+
     const supabase = createClient();
     const newId = `dur-${planCode}-${Date.now()}`;
     const newVariant: PlanDurationItem = {
@@ -413,6 +469,18 @@ export class PlanService {
    * Memperbarui variasi durasi paket
    */
   static async updateDurationVariant(planCode: string, durationId: string, updates: Partial<PlanDurationItem>): Promise<boolean> {
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/admin/plans', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update_duration', planCode, durationId, updates }),
+        });
+      } catch (err) {
+        console.warn('PlanService.updateDurationVariant api error:', err);
+      }
+    }
+
     const supabase = createClient();
 
     if (supabase) {
@@ -450,6 +518,16 @@ export class PlanService {
    * Menghapus variasi durasi paket
    */
   static async deleteDurationVariant(planCode: string, durationId: string): Promise<boolean> {
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch(`/api/admin/plans?durationId=${encodeURIComponent(durationId)}&planCode=${encodeURIComponent(planCode)}`, {
+          method: 'DELETE',
+        });
+      } catch (err) {
+        console.warn('PlanService.deleteDurationVariant api error:', err);
+      }
+    }
+
     const supabase = createClient();
 
     if (supabase) {

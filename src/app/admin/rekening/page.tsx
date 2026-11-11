@@ -51,6 +51,18 @@ export default function AdminRekeningPage() {
 
   useEffect(() => {
     loadData();
+
+    const handleUpdate = () => {
+      loadData();
+    };
+
+    window.addEventListener('uda_bank_accounts_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
+    return () => {
+      window.removeEventListener('uda_bank_accounts_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
   const openAddModal = () => {
@@ -58,7 +70,7 @@ export default function AdminRekeningPage() {
     setBankName('');
     setBankCode('');
     setAccountNumber('');
-    setAccountName('PT. Koding Teknologi Asia');
+    setAccountName(bankAccounts[0]?.accountName || 'PT UdaCoding Digital Indonesia');
     setLogoUrl('');
     setIsActive(true);
     setSortOrder(bankAccounts.length + 1);
@@ -88,22 +100,22 @@ export default function AdminRekeningPage() {
     try {
       if (editingAccount) {
         await BankService.updateBankAccount(editingAccount.id, {
-          bankName,
-          bankCode: bankCode || bankName.toLowerCase().replace(/[^a-z0-9]/g, ''),
-          accountNumber,
-          accountName,
-          logoUrl: logoUrl || null,
+          bankName: bankName.trim(),
+          bankCode: (bankCode || bankName).toLowerCase().replace(/[^a-z0-9]/g, '').trim(),
+          accountNumber: accountNumber.trim(),
+          accountName: accountName.trim(),
+          logoUrl: logoUrl.trim() || null,
           isActive,
           sortOrder,
         });
-        showSuccess('Rekening Diperbarui!', `Data rekening ${bankName} berhasil disimpan ke database.`);
+        showSuccess('Rekening Diperbarui!', `Data rekening ${bankName} berhasil disimpan.`);
       } else {
         await BankService.createBankAccount({
-          bankName,
-          bankCode: bankCode || bankName.toLowerCase().replace(/[^a-z0-9]/g, ''),
-          accountNumber,
-          accountName,
-          logoUrl: logoUrl || null,
+          bankName: bankName.trim(),
+          bankCode: (bankCode || bankName).toLowerCase().replace(/[^a-z0-9]/g, '').trim(),
+          accountNumber: accountNumber.trim(),
+          accountName: accountName.trim(),
+          logoUrl: logoUrl.trim() || null,
           isActive,
           sortOrder,
         });
@@ -113,21 +125,31 @@ export default function AdminRekeningPage() {
       setShowModal(false);
       await loadData();
     } catch (err: any) {
-      showError('Gagal Menyimpan Rekening', err.message);
+      showError('Gagal Menyimpan Rekening', err.message || 'Terjadi kesalahan saat menyimpan rekening.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleToggleActive = async (acc: BankAccountItem) => {
-    await BankService.updateBankAccount(acc.id, { isActive: !acc.isActive });
+    const nextActive = !acc.isActive;
+    // Optimistic update
     setBankAccounts((prev) =>
-      prev.map((b) => (b.id === acc.id ? { ...b, isActive: !acc.isActive } : b))
+      prev.map((b) => (b.id === acc.id ? { ...b, isActive: nextActive } : b))
     );
-    showSuccess(
-      'Status Rekening Diperbarui',
-      `Rekening ${acc.bankName} sekarang berstatus ${!acc.isActive ? 'Aktif (dapat dipilih pengguna)' : 'Nonaktif'}.`
-    );
+
+    try {
+      await BankService.updateBankAccount(acc.id, { isActive: nextActive });
+      showSuccess(
+        'Status Rekening Diperbarui',
+        `Rekening ${acc.bankName} sekarang berstatus ${nextActive ? 'Aktif (dapat dipilih pengguna)' : 'Nonaktif (disembunyikan dari pengguna)'}.`
+      );
+    } catch (err: any) {
+      setBankAccounts((prev) =>
+        prev.map((b) => (b.id === acc.id ? { ...b, isActive: acc.isActive } : b))
+      );
+      showError('Gagal Mengubah Status', err?.message || 'Terjadi kesalahan sistem.');
+    }
   };
 
   const handleDelete = (acc: BankAccountItem) => {
@@ -137,9 +159,13 @@ export default function AdminRekeningPage() {
       danger: true,
       confirmText: 'Ya, Hapus',
       onConfirm: async () => {
-        await BankService.deleteBankAccount(acc.id);
-        await loadData();
-        showSuccess('Rekening Dihapus', `Rekening ${acc.bankName} berhasil dihapus.`);
+        try {
+          await BankService.deleteBankAccount(acc.id);
+          await loadData();
+          showSuccess('Rekening Dihapus', `Rekening ${acc.bankName} berhasil dihapus.`);
+        } catch (err: any) {
+          showError('Gagal Menghapus Rekening', err?.message || 'Terjadi kesalahan sistem.');
+        }
       },
     });
   };

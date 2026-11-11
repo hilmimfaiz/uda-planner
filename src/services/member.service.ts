@@ -95,17 +95,7 @@ export class MemberService {
   }
 
   static async removeMember(brandId: string, userId: string): Promise<boolean> {
-    const supabase = createClient();
-    if (supabase) {
-      const { error } = await supabase
-        .from('brand_members')
-        .delete()
-        .match({ brand_id: brandId, user_id: userId });
-      if (!error) return true;
-    }
-
-    mockMembers = mockMembers.filter((m) => !(m.brand_id === brandId && m.user_id === userId));
-    return true;
+    return MemberService.leaveTeam(userId, undefined, brandId);
   }
 
   static async createInvitation(payload: {
@@ -225,7 +215,23 @@ export class MemberService {
   static async leaveTeam(userId: string, userEmail?: string, brandId?: string): Promise<boolean> {
     const supabase = createClient();
 
-    // 1. Hapus record dari database brand_members
+    // 1. Panggil server API /api/invitations dengan admin client agar update ke database Supabase dan auth user_metadata terjamin tanpa terhalang RLS
+    try {
+      await fetch('/api/invitations', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'leave',
+          userId,
+          userEmail,
+          brandId,
+        }),
+      });
+    } catch (apiErr) {
+      console.warn('API leave team fetch warning:', apiErr);
+    }
+
+    // 2. Hapus record dari database brand_members via client jika ada sesi
     if (supabase && userId) {
       try {
         let query = (supabase.from('brand_members' as any) as any).delete().eq('user_id', userId);
@@ -234,19 +240,43 @@ export class MemberService {
         }
         await query;
       } catch (e) {}
+
+      try {
+        await (supabase.from('accounts' as any) as any)
+          .update({
+            plan_code: 'free',
+            plan_until: null,
+            role: 'user',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', userId);
+      } catch (e) {}
     }
 
-    // 2. Bersihkan local storage keanggotaan
+    // 3. Bersihkan local storage keanggotaan dan paksa status menjadi 'free'
     if (typeof window !== 'undefined') {
       try {
         if (userId) {
           localStorage.removeItem('uda_team_membership_' + userId);
           localStorage.removeItem('uda_system_role_' + userId);
           localStorage.removeItem('uda_last_upgraded_user');
+          localStorage.removeItem('uda_user_plan_' + userId);
+        }
+        localStorage.removeItem('uda_team_membership');
+        if (userEmail) {
+          localStorage.removeItem('uda_user_plan_' + userEmail.toLowerCase());
         }
 
-        // Bersihkan dari uda_brand_members_[brandId]
+        // Hapus brand dari cache daftar brand lokal jika user bukan owner
         if (brandId) {
+          const rawCustom = localStorage.getItem('uda_custom_brands');
+          if (rawCustom) {
+            const bList = JSON.parse(rawCustom);
+            const filteredB = bList.filter((b: any) => !(b.id === brandId && b.owner_id !== userId));
+            localStorage.setItem('uda_custom_brands', JSON.stringify(filteredB));
+          }
+
+          // Bersihkan dari uda_brand_members_[brandId]
           const key = 'uda_brand_members_' + brandId;
           const rawM = localStorage.getItem(key);
           if (rawM) {
@@ -255,6 +285,20 @@ export class MemberService {
               !(m.id === userId || (userEmail && m.email?.toLowerCase() === userEmail.toLowerCase()))
             );
             localStorage.setItem(key, JSON.stringify(filtered));
+          }
+
+          // Reset active brand jika yang aktif adalah brand yang ditinggalkan
+          const currentActive = localStorage.getItem('uda_active_brand_id');
+          if (currentActive === brandId) {
+            localStorage.removeItem('uda_active_brand_id');
+            localStorage.removeItem('uda_active_brand_name');
+          }
+        } else {
+          const rawCustom = localStorage.getItem('uda_custom_brands');
+          if (rawCustom && userId) {
+            const bList = JSON.parse(rawCustom);
+            const ownedOnly = bList.filter((b: any) => b.owner_id === userId);
+            localStorage.setItem('uda_custom_brands', JSON.stringify(ownedOnly));
           }
         }
 
@@ -282,27 +326,25 @@ export class MemberService {
           delete acc.team_member_brand_id;
           delete acc.team_member_brand_name;
           acc.plan_code = 'free';
+          acc.plan_until = null;
           localStorage.setItem('uda_auth_account', JSON.stringify(acc));
         }
       } catch (e) {}
     }
 
-    // 3. Kembalikan paket akun di database Supabase ke 'free'
-    if (supabase && userId) {
-      try {
-        await (supabase.from('accounts' as any) as any)
-          .update({
-            plan_code: 'free',
-            role: 'user',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', userId);
-      } catch (e) {}
-    }
-
-    // 4. Dispatch event realtime agar seluruh UI (sidebar, header, halaman langganan) sinkron
+    // 4. Dispatch event realtime agar seluruh UI (sidebar, header, halaman langganan, brand) sinkron seketika
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('uda_account_updated', { detail: { planCode: 'free' } }));
+      window.dispatchEvent(
+        new CustomEvent('uda_account_updated', {
+          detail: {
+            userId,
+            email: userEmail,
+            planCode: 'free',
+            planUntil: null,
+          },
+        })
+      );
+      window.dispatchEvent(new CustomEvent('uda_brand_switched', { detail: { brandId: null } }));
       window.dispatchEvent(new Event('storage'));
     }
 

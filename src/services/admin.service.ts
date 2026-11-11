@@ -910,9 +910,12 @@ export class AdminService {
             }
 
             const isAdmin =
+              a.role === 'admin' ||
+              prof.role === 'admin' ||
               cleanEmail === 'admin@udaplanner.id' ||
-              (cleanEmail.startsWith('admin@') && cleanEmail.includes('udaplanner')) ||
-              (a.role === 'admin' && (cleanEmail === 'admin@udaplanner.id' || cleanEmail.startsWith('admin@')));
+              cleanEmail.startsWith('admin@') ||
+              (typeof window !== 'undefined' && localStorage.getItem(`uda_is_admin_${cleanEmail}`) === 'true') ||
+              (typeof window !== 'undefined' && localStorage.getItem(`uda_is_admin_${targetId}`) === 'true');
 
             const resolvedRole = isAdmin ? 'Admin' : (localRole === 'Admin' ? 'Owner' : (localRole || 'Owner'));
             const finalPlan: 'free' | 'pro' | 'team' | 'admin' = isAdmin ? 'admin' : resolvedPlan;

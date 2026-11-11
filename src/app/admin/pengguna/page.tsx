@@ -25,6 +25,10 @@ import {
   User,
   MailCheck,
   MailWarning,
+  UserPlus,
+  Shield,
+  Lock,
+  EyeOff,
 } from 'lucide-react';
 import { AdminService, AdminUserItem } from '@/services/admin.service';
 import { VerificationService } from '@/services/verification.service';
@@ -44,6 +48,17 @@ export default function AdminPenggunaPage() {
   const [newPlan, setNewPlan] = useState<'free' | 'pro' | 'team'>('pro');
   const [durationDays, setDurationDays] = useState(30);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Tab State: 'regular' (Pengguna Biasa) vs 'admin' (User Admin)
+  const [activeTab, setActiveTab] = useState<'regular' | 'admin'>('regular');
+
+  // Modal Tambah Admin Baru State
+  const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [adminName, setAdminName] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('admin123');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
 
   // Bulk Selection & Deletion State
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -287,6 +302,11 @@ export default function AdminPenggunaPage() {
 
   const handleConfirmDeletePermanent = async () => {
     if (!userToDelete) return;
+    if (isAdminUser(userToDelete)) {
+      showError('Tidak Diizinkan', 'Sebagai sesama admin, Anda tidak diberikan hak untuk menghapus user admin.');
+      setUserToDelete(null);
+      return;
+    }
     setIsDeleting(true);
 
     try {
@@ -303,20 +323,102 @@ export default function AdminPenggunaPage() {
       setUserToDelete(null);
 
       showSuccess(
-        'Pengguna Berhasil Dihapus Permanen!',
-        `Semua data akun "${targetName}" (${targetEmail}) telah dihapus secara permanen dari sistem. Email tersebut sekarang dapat didaftarkan kembali sebagai akun baru dari awal.`
+        'Akun Berhasil Dihapus Permanen!',
+        `Semua data akun "${targetName}" (${targetEmail}) telah dihapus secara permanen dari sistem.`
       );
     } catch (err: any) {
-      showToast('Gagal menghapus pengguna: ' + (err.message || 'Terjadi kesalahan'));
+      showToast('Gagal menghapus akun: ' + (err.message || 'Terjadi kesalahan'));
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const filteredUsers = users.filter((u) =>
+  // Helper untuk memisahkan akun administrator dari akun reguler
+  const isAdminUser = (u: AdminUserItem) => {
+    const email = (u.email || '').toLowerCase().trim();
+    const role = (u.role || '').toLowerCase().trim();
+    return (
+      role === 'admin' ||
+      u.plan === 'admin' ||
+      email === 'admin@udaplanner.id' ||
+      email === 'admin@udaplanner.com' ||
+      email === 'admin@udacoding.id' ||
+      email.startsWith('admin@') ||
+      (typeof window !== 'undefined' && localStorage.getItem(`uda_is_admin_${email}`) === 'true') ||
+      (typeof window !== 'undefined' && localStorage.getItem(`uda_is_admin_${u.id}`) === 'true') ||
+      (typeof window !== 'undefined' && localStorage.getItem(`uda_is_admin_${u.userId}`) === 'true')
+    );
+  };
+
+  const adminUsersList = users.filter((u) => isAdminUser(u));
+  const regularUsersList = users.filter((u) => !isAdminUser(u));
+
+  // Daftar pengguna yang aktif sesuai tab yang dipilih
+  const activeList = activeTab === 'admin' ? adminUsersList : regularUsersList;
+
+  const filteredUsers = activeList.filter((u) =>
     u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     u.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Fungsi Tambah Administrator Baru
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = adminEmail.trim().toLowerCase();
+    const cleanName = adminName.trim();
+
+    if (!cleanEmail) {
+      showError('Gagal', 'Email administrator wajib diisi.');
+      return;
+    }
+    if (!adminPassword || adminPassword.length < 6) {
+      showError('Gagal', 'Kata sandi minimal 6 karakter.');
+      return;
+    }
+
+    setIsCreatingAdmin(true);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cleanName || 'Administrator UdaPlanner',
+          email: cleanEmail,
+          password: adminPassword,
+          role: 'admin',
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        showError('Gagal Membuat Admin', data.error || 'Terjadi kesalahan sistem.');
+        setIsCreatingAdmin(false);
+        return;
+      }
+
+      try {
+        localStorage.setItem(`uda_is_admin_${cleanEmail}`, 'true');
+        if (data.userId) {
+          localStorage.setItem(`uda_is_admin_${data.userId}`, 'true');
+        }
+      } catch {}
+
+      playSuccessSound();
+      showSuccess(
+        'Admin Baru Berhasil Dibuat!',
+        `Akun administrator "${cleanName || cleanEmail}" (${cleanEmail}) berhasil dibuat dan langsung aktif.`
+      );
+      setShowAddAdminModal(false);
+      setAdminName('');
+      setAdminEmail('');
+      setAdminPassword('admin123');
+      setActiveTab('admin');
+      loadUsers();
+    } catch (err: any) {
+      showError('Gagal Membuat Admin', err.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsCreatingAdmin(false);
+    }
+  };
 
   // Pagination calculation
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
@@ -434,12 +536,141 @@ export default function AdminPenggunaPage() {
         </p>
       </div>
 
+      {/* Tab Switcher: Pengguna Reguler vs User Admin */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('regular');
+              setCurrentPage(1);
+              setSearchQuery('');
+              setSelectedUserIds([]);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 18px',
+              borderRadius: 10,
+              fontSize: '0.88rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              background: activeTab === 'regular' ? '#0f172a' : '#ffffff',
+              color: activeTab === 'regular' ? '#ffffff' : '#0f172a',
+              border: '2px solid #0f172a',
+              boxShadow: activeTab === 'regular' ? '3px 3px 0px #0f172a' : 'none',
+            }}
+          >
+            <Users size={16} />
+            <span>Pengguna Reguler ({regularUsersList.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('admin');
+              setCurrentPage(1);
+              setSearchQuery('');
+              setSelectedUserIds([]);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 18px',
+              borderRadius: 10,
+              fontSize: '0.88rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              background: activeTab === 'admin' ? '#0f172a' : '#ffffff',
+              color: activeTab === 'admin' ? '#ffffff' : '#0f172a',
+              border: '2px solid #0f172a',
+              boxShadow: activeTab === 'admin' ? '3px 3px 0px #0f172a' : 'none',
+            }}
+          >
+            <ShieldAlert size={16} />
+            <span>User Admin ({adminUsersList.length})</span>
+          </button>
+        </div>
+
+        {activeTab === 'admin' && (
+          <button
+            type="button"
+            onClick={() => setShowAddAdminModal(true)}
+            style={{
+              background: '#0f172a',
+              color: '#ffffff',
+              border: '2px solid #0f172a',
+              boxShadow: '3px 3px 0px #0f172a',
+              padding: '10px 18px',
+              borderRadius: 8,
+              fontSize: '0.85rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <UserPlus size={16} />
+            <span>+ Tambah Admin Baru</span>
+          </button>
+        )}
+      </div>
+
+      {/* Info Banner khusus Tab Admin */}
+      {activeTab === 'admin' && (
+        <div
+          style={{
+            background: '#f8fafc',
+            border: '2px solid #0f172a',
+            boxShadow: '3px 3px 0px #0f172a',
+            borderRadius: 10,
+            padding: '14px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: '#0f172a',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Shield size={18} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
+                Manajemen Khusus Administrator Sistem ({adminUsersList.length} Akun)
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                Akun administrator memiliki izin penuh ke panel admin UdaPlanner termasuk verifikasi bukti transfer, email pengguna, konfigurasi paket, dan pengelolaan akun.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Search Bar & Total Counter */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ maxWidth: 380, width: '100%', position: 'relative' }}>
           <input
             type="text"
-            placeholder="Cari nama atau email pengguna..."
+            placeholder={activeTab === 'admin' ? "Cari nama atau email admin..." : "Cari nama atau email pengguna..."}
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -451,7 +682,11 @@ export default function AdminPenggunaPage() {
         </div>
 
         <div style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 600 }}>
-          Total Terdaftar: <strong style={{ color: '#0f172a' }}>{users.length} Pengguna</strong>
+          {activeTab === 'admin' ? (
+            <>Total Admin: <strong style={{ color: '#0f172a' }}>{adminUsersList.length} Akun</strong></>
+          ) : (
+            <>Total Pengguna: <strong style={{ color: '#0f172a' }}>{regularUsersList.length} Pengguna</strong></>
+          )}
         </div>
       </div>
 
@@ -571,23 +806,31 @@ export default function AdminPenggunaPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.86rem' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
-                <th style={{ width: 44, padding: '14px 14px', textAlign: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={isAllPageSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = isSomePageSelected;
-                    }}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
-                    title="Pilih semua di halaman ini"
-                    style={{ width: 17, height: 17, cursor: 'pointer', accentColor: '#e11d48' }}
-                  />
+                {activeTab === 'regular' ? (
+                  <th style={{ width: 44, padding: '14px 14px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={isAllPageSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = isSomePageSelected;
+                      }}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      title="Pilih semua di halaman ini"
+                      style={{ width: 17, height: 17, cursor: 'pointer', accentColor: '#e11d48' }}
+                    />
+                  </th>
+                ) : (
+                  <th style={{ width: 44, padding: '14px 14px', textAlign: 'center' }}>#</th>
+                )}
+                <th style={{ padding: '14px 18px' }}>
+                  {activeTab === 'admin' ? 'Administrator (Klik Nama / Email)' : 'Pengguna (Klik Nama / Email)'}
                 </th>
-                <th style={{ padding: '14px 18px' }}>Pengguna (Klik Nama / Email)</th>
                 <th style={{ padding: '14px 18px' }}>Verifikasi Email</th>
                 <th style={{ padding: '14px 18px' }}>Role Sistem</th>
                 <th style={{ padding: '14px 18px' }}>Paket Aktif</th>
-                <th style={{ padding: '14px 18px' }}>Penyimpanan</th>
+                <th style={{ padding: '14px 18px' }}>
+                  {activeTab === 'admin' ? 'Pengelolaan & Aksi' : 'Penyimpanan'}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -596,18 +839,22 @@ export default function AdminPenggunaPage() {
                   <td colSpan={6} style={{ padding: '60px 18px', textAlign: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
                       <Loader2 size={36} className="animate-spin" style={{ color: '#16a34a' }} />
-                      <span style={{ fontSize: '0.92rem', color: '#64748b', fontWeight: 600 }}>Memuat daftar pengguna...</span>
+                      <span style={{ fontSize: '0.92rem', color: '#64748b', fontWeight: 600 }}>
+                        {activeTab === 'admin' ? 'Memuat daftar administrator...' : 'Memuat daftar pengguna...'}
+                      </span>
                     </div>
                   </td>
                 </tr>
               ) : paginatedUsers.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: '32px 18px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
-                    Tidak ada pengguna yang cocok dengan pencarian &quot;{searchQuery}&quot;.
+                    {activeTab === 'admin'
+                      ? `Tidak ada administrator yang cocok dengan pencarian "${searchQuery}".`
+                      : `Tidak ada pengguna yang cocok dengan pencarian "${searchQuery}".`}
                   </td>
                 </tr>
               ) : (
-                paginatedUsers.map((u) => {
+                paginatedUsers.map((u, index) => {
                   const initial = (u.name || u.email || 'U').charAt(0).toUpperCase();
                   const isChecked = selectedUserIds.includes(u.id);
                   return (
@@ -621,13 +868,17 @@ export default function AdminPenggunaPage() {
                       className="hover:bg-slate-50"
                     >
                       <td style={{ width: 44, padding: '14px 14px', textAlign: 'center' }}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleToggleSelectUser(u.id)}
-                          title={`Pilih ${u.name}`}
-                          style={{ width: 17, height: 17, cursor: 'pointer', accentColor: '#e11d48' }}
-                        />
+                        {activeTab === 'regular' ? (
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleToggleSelectUser(u.id)}
+                            title={`Pilih ${u.name}`}
+                            style={{ width: 17, height: 17, cursor: 'pointer', accentColor: '#e11d48' }}
+                          />
+                        ) : (
+                          <span style={{ fontWeight: 800, color: '#64748b', fontSize: '0.8rem' }}>{startIndex + index + 1}</span>
+                        )}
                       </td>
                       <td style={{ padding: '14px 18px' }}>
                         <div
@@ -843,7 +1094,51 @@ export default function AdminPenggunaPage() {
                         )}
                       </td>
                       <td style={{ padding: '14px 18px', color: '#475569', fontWeight: 600 }}>
-                        {u.storageMb} MB
+                        {activeTab === 'admin' ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <button
+                              type="button"
+                              onClick={() => setDetailUser(u)}
+                              style={{
+                                background: '#ffffff',
+                                border: '1.5px solid #0f172a',
+                                color: '#0f172a',
+                                padding: '4px 9px',
+                                borderRadius: 6,
+                                fontSize: '0.74rem',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                              }}
+                              title="Lihat Detail Profil Admin"
+                            >
+                              <Eye size={12} />
+                              <span>Detail</span>
+                            </button>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                background: '#f1f5f9',
+                                border: '1px solid #cbd5e1',
+                                color: '#475569',
+                                padding: '4px 9px',
+                                borderRadius: 6,
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                              }}
+                              title="Akun Administrator Terproteksi (Tidak Dapat Dihapus)"
+                            >
+                              <Shield size={11} />
+                              <span>{u.email?.toLowerCase() === 'admin@udaplanner.id' ? 'Admin Utama' : 'Akses Admin'}</span>
+                            </span>
+                          </div>
+                        ) : (
+                          <span>{u.storageMb} MB</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -879,12 +1174,14 @@ export default function AdminPenggunaPage() {
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => handleToggleSelectUser(u.id)}
-                        style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#e11d48', flexShrink: 0 }}
-                      />
+                      {activeTab === 'regular' && (
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleToggleSelectUser(u.id)}
+                          style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#e11d48', flexShrink: 0 }}
+                        />
+                      )}
                       <div
                         style={{
                           width: 38,
@@ -949,7 +1246,11 @@ export default function AdminPenggunaPage() {
                       )}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
-                      Penyimpanan: <strong style={{ color: '#0f172a' }}>{u.storageMb} MB</strong>
+                      {activeTab === 'admin' ? (
+                        <span>Role: <strong style={{ color: '#0f172a' }}>Administrator</strong></span>
+                      ) : (
+                        <>Penyimpanan: <strong style={{ color: '#0f172a' }}>{u.storageMb} MB</strong></>
+                      )}
                     </div>
                   </div>
 
@@ -963,7 +1264,7 @@ export default function AdminPenggunaPage() {
                       <Eye size={13} />
                       <span>Detail</span>
                     </button>
-                    {!u.isEmailVerified && (
+                    {!u.isEmailVerified && activeTab === 'regular' && (
                       <button
                         type="button"
                         className="btn-uda btn-uda-primary btn-uda-sm"
@@ -974,15 +1275,34 @@ export default function AdminPenggunaPage() {
                         <span>Verif</span>
                       </button>
                     )}
-                    <button
-                      type="button"
-                      className="btn-uda btn-uda-danger btn-uda-sm"
-                      style={{ padding: '6px 10px' }}
-                      onClick={() => setUserToDelete(u)}
-                      title="Hapus Pengguna"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    {activeTab === 'admin' ? (
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          padding: '6px 10px',
+                          borderRadius: 8,
+                          background: '#f1f5f9',
+                          border: '1px solid #cbd5e1',
+                          color: '#475569',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <Shield size={12} /> {u.email?.toLowerCase() === 'admin@udaplanner.id' ? 'Admin Utama' : 'Akses Admin'}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn-uda btn-uda-danger btn-uda-sm"
+                        style={{ padding: '6px 10px' }}
+                        onClick={() => setUserToDelete(u)}
+                        title="Hapus Pengguna"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -1008,7 +1328,7 @@ export default function AdminPenggunaPage() {
             <strong style={{ color: '#0f172a' }}>
               {filteredUsers.length === 0 ? 0 : startIndex + 1} - {Math.min(startIndex + itemsPerPage, filteredUsers.length)}
             </strong>{' '}
-            dari <strong style={{ color: '#0f172a' }}>{filteredUsers.length}</strong> pengguna
+            dari <strong style={{ color: '#0f172a' }}>{filteredUsers.length}</strong> {activeTab === 'admin' ? 'administrator' : 'pengguna'}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1706,10 +2026,19 @@ export default function AdminPenggunaPage() {
 
               {/* User Names */}
               <div style={{ marginTop: 12 }}>
+                {isAdminUser(detailUser) && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 6, padding: '3px 8px', borderRadius: 6, background: '#0f172a', color: '#ffffff', fontSize: '0.74rem', fontWeight: 800 }}>
+                    <Shield size={12} />
+                    <span>Profil User Administrator</span>
+                  </div>
+                )}
+                <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', marginBottom: 2 }}>
+                  Nama Lengkap:
+                </div>
                 <h2 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0f172a', lineHeight: 1.2 }}>
                   {detailUser.name}
                 </h2>
-                <div style={{ color: '#64748b', fontSize: '0.86rem', marginTop: 2 }}>
+                <div style={{ color: '#64748b', fontSize: '0.86rem', marginTop: 4 }}>
                   {detailUser.email}
                 </div>
               </div>
@@ -1896,81 +2225,378 @@ export default function AdminPenggunaPage() {
 
               {/* Tombol Aksi Admin */}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {!(detailUser.role === 'Admin' || detailUser.role === 'admin' || detailUser.plan === 'admin' || detailUser.email?.toLowerCase().startsWith('admin')) && (
-                  <button
-                    type="button"
-                    className="btn-uda btn-uda-primary"
-                    style={{ flex: 1, minWidth: 120, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                    onClick={() => {
-                      setSelectedUser(detailUser);
-                      setNewPlan(detailUser.plan === 'admin' ? 'pro' : detailUser.plan);
+                {isAdminUser(detailUser) ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      gap: 12,
+                      flexWrap: 'wrap',
                     }}
                   >
-                    <Edit size={14} />
-                    <span>Ubah Paket</span>
-                  </button>
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '9px 14px',
+                        background: '#f1f5f9',
+                        border: '1.5px solid #cbd5e1',
+                        borderRadius: 8,
+                        color: '#334155',
+                        fontSize: '0.82rem',
+                        fontWeight: 800,
+                      }}
+                    >
+                      <Shield size={15} style={{ color: '#0f172a' }} />
+                      <span>Akun Administrator Terproteksi (Tidak Dapat Dihapus)</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn-uda btn-uda-secondary"
+                      onClick={() => setDetailUser(null)}
+                      style={{ padding: '0 24px', height: 40, fontWeight: 800 }}
+                    >
+                      Tutup
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="btn-uda btn-uda-primary"
+                      style={{ flex: 1, minWidth: 120, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                      onClick={() => {
+                        setSelectedUser(detailUser);
+                        setNewPlan(detailUser.plan === 'admin' ? 'pro' : detailUser.plan);
+                      }}
+                    >
+                      <Edit size={14} />
+                      <span>Ubah Paket</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSuspend(detailUser.id, detailUser.isSuspended)}
+                      style={{
+                        flex: 1,
+                        minWidth: 130,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        fontWeight: 700,
+                        fontSize: '0.84rem',
+                        border: `1.5px solid ${detailUser.isSuspended ? '#16a34a' : '#ef4444'}`,
+                        background: detailUser.isSuspended ? '#f0fdf4' : '#fff1f2',
+                        color: detailUser.isSuspended ? '#16a34a' : '#dc2626',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {detailUser.isSuspended ? 'Aktifkan Akun' : 'Bekukan Akun'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const u = detailUser;
+                        setDetailUser(null);
+                        setUserToDelete(u);
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        fontWeight: 700,
+                        fontSize: '0.84rem',
+                        border: '1.5px solid #fecaca',
+                        background: '#fff1f2',
+                        color: '#e11d48',
+                        cursor: 'pointer',
+                      }}
+                      title="Hapus Akun Pengguna"
+                    >
+                      <Trash2 size={14} />
+                      <span>Hapus</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn-uda btn-uda-secondary"
+                      onClick={() => setDetailUser(null)}
+                      style={{ padding: '0 18px' }}
+                    >
+                      Tutup
+                    </button>
+                  </>
                 )}
-
-                <button
-                  type="button"
-                  onClick={() => handleToggleSuspend(detailUser.id, detailUser.isSuspended)}
-                  style={{
-                    flex: 1,
-                    minWidth: 130,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                    padding: '10px 14px',
-                    borderRadius: 8,
-                    fontWeight: 700,
-                    fontSize: '0.84rem',
-                    border: `1.5px solid ${detailUser.isSuspended ? '#16a34a' : '#ef4444'}`,
-                    background: detailUser.isSuspended ? '#f0fdf4' : '#fff1f2',
-                    color: detailUser.isSuspended ? '#16a34a' : '#dc2626',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {detailUser.isSuspended ? 'Aktifkan Akun' : 'Bekukan Akun'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const u = detailUser;
-                    setDetailUser(null);
-                    setUserToDelete(u);
-                  }}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                    padding: '10px 14px',
-                    borderRadius: 8,
-                    fontWeight: 700,
-                    fontSize: '0.84rem',
-                    border: '1.5px solid #fecaca',
-                    background: '#fff1f2',
-                    color: '#e11d48',
-                    cursor: 'pointer',
-                  }}
-                  title="Hapus Akun Pengguna"
-                >
-                  <Trash2 size={14} />
-                  <span>Hapus</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="btn-uda btn-uda-secondary"
-                  onClick={() => setDetailUser(null)}
-                  style={{ padding: '0 18px' }}
-                >
-                  Tutup
-                </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TAMBAH ADMINISTRATOR BARU */}
+      {showAddAdminModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: 16,
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+          onClick={() => setShowAddAdminModal(false)}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: 14,
+              border: '2px solid #0f172a',
+              boxShadow: '6px 6px 0px #0f172a',
+              width: '100%',
+              maxWidth: 480,
+              overflow: 'hidden',
+              animation: 'modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '16px 20px',
+                borderBottom: '2px solid #0f172a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#f8fafc',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    background: '#0f172a',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1.5px solid #0f172a',
+                  }}
+                >
+                  <ShieldAlert size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>
+                    Tambah Administrator Baru
+                  </h3>
+                  <p style={{ fontSize: '0.76rem', color: '#64748b', margin: 0 }}>
+                    Berikan hak akses administrator sistem UdaPlanner
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddAdminModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 4,
+                  color: '#64748b',
+                  display: 'flex',
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form onSubmit={handleCreateAdmin} style={{ padding: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
+                    Nama Lengkap Administrator <span style={{ color: '#e11d48' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Admin Operasional"
+                    value={adminName}
+                    onChange={(e) => setAdminName(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      border: '1.5px solid #0f172a',
+                      fontSize: '0.88rem',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
+                    Alamat Email Admin <span style={{ color: '#e11d48' }}>*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="admin2@udaplanner.id"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      border: '1.5px solid #0f172a',
+                      fontSize: '0.88rem',
+                      outline: 'none',
+                    }}
+                  />
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>
+                    Email ini akan digunakan untuk login ke panel admin UdaPlanner.
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
+                    Kata Sandi <span style={{ color: '#e11d48' }}>*</span>
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showAdminPassword ? 'text' : 'password'}
+                      required
+                      placeholder="Minimal 6 karakter"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 38px 10px 12px',
+                        borderRadius: 8,
+                        border: '1.5px solid #0f172a',
+                        fontSize: '0.88rem',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPassword(!showAdminPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: 10,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#64748b',
+                        display: 'flex',
+                      }}
+                    >
+                      {showAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>
+                    Disarankan menggunakan kata sandi &quot;admin123&quot; atau kata sandi aman lainnya.
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: '#f8fafc',
+                    border: '1.5px dashed #cbd5e1',
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                    fontSize: '0.75rem',
+                    color: '#475569',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <ShieldCheck size={18} style={{ color: '#0f172a', flexShrink: 0 }} />
+                  <div>
+                    Akun administrator baru otomatis aktif dengan status <strong>Terverifikasi</strong> dan memiliki izin penuh ke panel admin.
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: 10,
+                  marginTop: 20,
+                  paddingTop: 16,
+                  borderTop: '1px solid #e2e8f0',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowAddAdminModal(false)}
+                  disabled={isCreatingAdmin}
+                  style={{
+                    background: '#ffffff',
+                    border: '1.5px solid #cbd5e1',
+                    padding: '9px 16px',
+                    borderRadius: 8,
+                    fontSize: '0.84rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    color: '#475569',
+                  }}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingAdmin}
+                  style={{
+                    background: '#0f172a',
+                    color: '#ffffff',
+                    border: '2px solid #0f172a',
+                    boxShadow: '3px 3px 0px #0f172a',
+                    padding: '9px 20px',
+                    borderRadius: 8,
+                    fontSize: '0.84rem',
+                    fontWeight: 900,
+                    cursor: isCreatingAdmin ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  {isCreatingAdmin ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus size={15} />
+                      <span>Simpan & Buat Admin</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -441,6 +441,12 @@ export default function LanggananPage() {
       AdminService.getAppSettings().then((s) => {
         if (s?.adminWhatsapp) setAdminWhatsapp(s.adminWhatsapp);
       });
+      BankService.getActiveBankAccounts().then((bList) => {
+        if (bList && bList.length > 0) {
+          setBankAccounts(bList);
+          setSelectedBankId((prev) => (bList.some((b) => b.id === prev) ? prev : bList[0].id));
+        }
+      });
     };
 
     const handleSettingsUpdate = (e?: any) => {
@@ -455,6 +461,7 @@ export default function LanggananPage() {
 
     window.addEventListener('storage', handleSync);
     window.addEventListener('uda_account_updated', handleSync);
+    window.addEventListener('uda_bank_accounts_updated', handleSync);
     window.addEventListener('uda_settings_updated', handleSettingsUpdate);
     window.addEventListener('focus', handleSync);
 
@@ -468,6 +475,7 @@ export default function LanggananPage() {
     return () => {
       window.removeEventListener('storage', handleSync);
       window.removeEventListener('uda_account_updated', handleSync);
+      window.removeEventListener('uda_bank_accounts_updated', handleSync);
       window.removeEventListener('uda_settings_updated', handleSettingsUpdate);
       window.removeEventListener('focus', handleSync);
       clearInterval(interval);

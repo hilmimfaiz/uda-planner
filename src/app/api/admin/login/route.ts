@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { getValidAdminPassword } from '@/lib/admin-password-store';
 
 export async function POST(req: Request) {
   try {
@@ -19,8 +20,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // Password admin WAJIB persis 'admin123'
-    if (inputPassword !== 'admin123') {
+    // Password admin WAJIB persis sesuai sandi admin yang aktif (default 'admin123' atau yang telah diubah)
+    const targetPassword = getValidAdminPassword();
+    if (inputPassword !== targetPassword) {
       return NextResponse.json(
         { success: false, error: 'Email atau kata sandi salah.' },
         { status: 401 }
@@ -45,8 +47,6 @@ export async function POST(req: Request) {
     }
 
     const adminUser = (usersData.users as any[]).find((u: any) => u.email?.toLowerCase() === cleanEmail);
-
-    const targetPassword = 'admin123';
 
     if (!adminUser) {
       // Buat akun admin jika belum ada di auth

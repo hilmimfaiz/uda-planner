@@ -671,6 +671,35 @@ export class BrandService {
           saveCustomBrands([created, ...currentStored.filter((b) => b.id !== created.id)]);
           return created;
         }
+
+        // Jika insert client gagal karena RLS atau auth token expired, gunakan server endpoint
+        if (typeof window !== 'undefined') {
+          try {
+            const apiRes = await fetch('/api/brands', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ownerId: effectiveOwnerId,
+                name: payload.name,
+                handle: cleanHandle,
+                platforms: newBrand.platforms,
+                color: newBrand.color,
+                avatarUrl: newBrand.avatar_url,
+                requireApproval: newBrand.require_approval,
+              }),
+            });
+            const apiJson = await apiRes.json();
+            if (apiJson.success && apiJson.data) {
+              const apiBrand: DummyBrand = apiJson.data;
+              localBrands.unshift(apiBrand);
+              const currentStored = getStoredCustomBrands();
+              saveCustomBrands([apiBrand, ...currentStored.filter((b) => b.id !== apiBrand.id)]);
+              return apiBrand;
+            }
+          } catch (apiErr) {
+            console.warn('BrandService API fallback notice:', apiErr);
+          }
+        }
       } catch (err) {
         console.warn('BrandService.createBrand db error, using local:', err);
       }
@@ -703,6 +732,15 @@ export class BrandService {
           .eq('id', id);
       } catch (err) {
         console.warn('BrandService.updateBrand db error:', err);
+        if (typeof window !== 'undefined') {
+          try {
+            await fetch('/api/brands', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id, ...updates }),
+            });
+          } catch {}
+        }
       }
     }
 

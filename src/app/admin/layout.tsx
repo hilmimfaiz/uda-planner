@@ -20,6 +20,7 @@ import {
   Landmark,
   Layers,
   X,
+  Clock,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -30,11 +31,91 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, account, isLoading, isAdmin, signOut } = useAuth();
+  const { user, profile, account, isLoading, isAdmin, signOut } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [adminFullName, setAdminFullName] = useState<string>('Administrator');
+
+  // Live Timer Jam Waktu Header (Update tiap 1 detik)
+  useEffect(() => {
+    setCurrentTime(new Date());
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Sinkronisasi Nama Lengkap Admin dari Profile / Auth / Event Realtime
+  useEffect(() => {
+    const resolveAdminName = () => {
+      if (profile?.full_name?.trim()) return profile.full_name.trim();
+      if (user?.user_metadata?.full_name?.trim()) return user.user_metadata.full_name.trim();
+      try {
+        const rawProf = localStorage.getItem('uda_auth_profile');
+        if (rawProf) {
+          const p = JSON.parse(rawProf);
+          if (p?.full_name?.trim()) return p.full_name.trim();
+        }
+        const rawUser = localStorage.getItem('uda_auth_user');
+        if (rawUser) {
+          const u = JSON.parse(rawUser);
+          if (u?.user_metadata?.full_name?.trim()) return u.user_metadata.full_name.trim();
+        }
+      } catch {}
+      if (user?.email) {
+        if (user.email.toLowerCase() === 'admin@udaplanner.id' || user.email.toLowerCase() === 'admin@udaplanner.com') {
+          return 'Administrator UdaPlanner';
+        }
+        return user.email.split('@')[0];
+      }
+      return 'Administrator';
+    };
+
+    setAdminFullName(resolveAdminName());
+
+    const handleUpdate = (e?: any) => {
+      if (e?.detail?.full_name) {
+        setAdminFullName(e.detail.full_name);
+      } else {
+        setAdminFullName(resolveAdminName());
+      }
+    };
+
+    window.addEventListener('uda_account_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('uda_account_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, [profile, user]);
+
+  // Format Ucapan Salam Waktu (Pagi / Siang / Sore / Malam)
+  const currentHour = currentTime ? currentTime.getHours() : new Date().getHours();
+  let greetingText = 'Selamat Pagi';
+  if (currentHour >= 4 && currentHour < 11) {
+    greetingText = 'Selamat Pagi';
+  } else if (currentHour >= 11 && currentHour < 15) {
+    greetingText = 'Selamat Siang';
+  } else if (currentHour >= 15 && currentHour < 18) {
+    greetingText = 'Selamat Sore';
+  } else {
+    greetingText = 'Selamat Malam';
+  }
+
+  // Format Jam Waktu Realtime
+  const timeString = currentTime
+    ? currentTime
+        .toLocaleTimeString('id-ID', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        })
+        .replace(/\./g, ':')
+    : '--:--:--';
 
   useEffect(() => {
     setShowMobileMenu(false);
@@ -341,6 +422,7 @@ export default function AdminLayout({
                 Admin
               </span>
             </div>
+            {/* Lencana Status Admin */}
             <span
               style={{
                 fontSize: "0.75rem",
@@ -356,16 +438,19 @@ export default function AdminLayout({
             >
               ADMIN
             </span>
+
+            {/* Ucapan Salam dan Nama Lengkap Profil Admin */}
             <span
               style={{
-                fontSize: "0.85rem",
-                color: "#64748b",
+                fontSize: "0.94rem",
+                fontWeight: 800,
+                color: "#0f172a",
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
               }}
             >
-              {user?.email || "Admin"}
+              {greetingText}, <strong style={{ color: "#16a34a" }}>{adminFullName}</strong>
             </span>
           </div>
 
@@ -373,10 +458,32 @@ export default function AdminLayout({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 10,
+              gap: 12,
               flexShrink: 0,
             }}
           >
+            {/* Jam Waktu Header Realtime */}
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                padding: "6px 12px",
+                borderRadius: 8,
+                background: "#f8fafc",
+                border: "1.5px solid #0f172a",
+                boxShadow: "2px 2px 0px #0f172a",
+                color: "#0f172a",
+                fontSize: "0.84rem",
+                fontWeight: 800,
+                fontVariantNumeric: "tabular-nums",
+              }}
+              title="Waktu Sistem (WIB)"
+            >
+              <Clock size={15} style={{ color: "#16a34a" }} />
+              <span>{timeString} WIB</span>
+            </div>
+
             <button
               className="btn-uda btn-uda-secondary btn-uda-sm"
               onClick={() => setShowLogoutModal(true)}
@@ -420,7 +527,26 @@ export default function AdminLayout({
             <div className="mobile-app-bar-title">{getMobileAdminTitle()}</div>
           </div>
 
-          <div className="mobile-app-bar-right">
+          <div className="mobile-app-bar-right" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 800,
+                color: '#15803d',
+                background: '#f0fdf4',
+                padding: '3px 7px',
+                borderRadius: 6,
+                border: '1px solid #bbf7d0',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+              title="Waktu Sistem (WIB)"
+            >
+              <Clock size={11} />
+              <span>{timeString.slice(0, 5)}</span>
+            </span>
             <button
               type="button"
               className="mobile-bar-icon-btn"
@@ -510,10 +636,12 @@ export default function AdminLayout({
                 </div>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', lineHeight: 1.2 }}>
-                    Admin UdaPlanner
+                    {greetingText}, {adminFullName}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                    {user?.email || 'Administrator'}
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                    <span>{user?.email || 'Administrator'}</span>
+                    <span>•</span>
+                    <span style={{ color: '#16a34a', fontWeight: 700 }}>{timeString} WIB</span>
                   </div>
                 </div>
               </div>

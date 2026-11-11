@@ -503,9 +503,34 @@ export default function NotifikasiPage() {
                         </div>
                       </div>
                     </div>
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', whiteSpace: 'nowrap' }}>
-                      {n.time_ago}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b', whiteSpace: 'nowrap' }}>
+                        {n.time_ago}
+                      </span>
+                      <button
+                        type="button"
+                        title="Hapus notifikasi ini"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteSingleNotification(n.id);
+                          setNotifications((prev) => prev.filter((item) => item.id !== n.id));
+                          showToast('Notifikasi dihapus.');
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#94a3b8',
+                          cursor: 'pointer',
+                          padding: 4,
+                          borderRadius: 6,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Status Actions */}

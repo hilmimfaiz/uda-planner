@@ -451,6 +451,43 @@ export class PostService {
           return created;
         } else if (error) {
           console.warn('PostService.createPost Supabase insert notice:', error.message);
+          if (typeof window !== 'undefined') {
+            try {
+              const res = await fetch('/api/posts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  brand_id: realBrandId || payload.brand_id,
+                  pillar_id: payload.pillar_id,
+                  title: payload.title,
+                  caption: payload.caption,
+                  hashtags: payload.hashtags,
+                  platforms: payload.platforms,
+                  content_type: payload.content_type,
+                  assigned_to: payload.assigned_to,
+                  scheduled_at: payload.scheduled_at,
+                  status: payload.status,
+                  user_id: effectiveUserId,
+                  notes: payload.notes,
+                  media_url: primaryMediaUrl,
+                  media_urls: resolvedMediaUrls,
+                }),
+              });
+              const resJson = await res.json();
+              if (resJson.success && resJson.data) {
+                const apiPost = resJson.data;
+                localPosts.unshift(apiPost);
+                const currentStored = getStoredPosts();
+                saveStoredPosts([apiPost, ...currentStored.filter((p) => p.id !== apiPost.id)]);
+                window.dispatchEvent(new CustomEvent('uda_post_created', { detail: apiPost }));
+                window.dispatchEvent(new CustomEvent('uda_post_updated', { detail: apiPost }));
+                window.dispatchEvent(new Event('storage'));
+                return apiPost;
+              }
+            } catch (apiErr) {
+              console.warn('PostService API fallback notice:', apiErr);
+            }
+          }
         }
       } catch (err) {
         console.warn('PostService.createPost db error, using local fallback:', err);

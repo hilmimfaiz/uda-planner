@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { uploadBrandLogo } from '@/lib/image-upload';
 import { BrandService } from '@/services/brand.service';
+import { MemberService } from '@/services/member.service';
 import { useModal } from '@/contexts/modal-context';
 import { GuidedTour, TourStep } from '@/components/guided-tour';
 
@@ -48,8 +49,8 @@ const brandTourSteps: TourStep[] = [
 
 export default function DaftarBrandPage() {
   const router = useRouter();
-  const { user, account } = useAuth();
-  const { showSuccess, showError } = useModal();
+  const { user, account, refreshUserData } = useAuth();
+  const { showSuccess, showError, confirmAction } = useModal();
   const supabase = createClient();
   const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
   const [showAddBrandModal, setShowAddBrandModal] = useState(false);
@@ -575,6 +576,38 @@ export default function DaftarBrandPage() {
                   >
                     Upgrade
                   </button>
+                ) : userRoleOnThisBrand && userRoleOnThisBrand !== 'owner' ? (
+                  <button
+                    type="button"
+                    className="btn-uda btn-uda-secondary btn-uda-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      confirmAction({
+                        title: `Keluar dari Brand "${b.name}"?`,
+                        message: `Apakah Anda yakin ingin keluar dari brand "${b.name}"? Akses kolaborator Anda pada brand ini akan berakhir, dan status paket akun Anda akan kembali menjadi Free.`,
+                        confirmText: 'Ya, Keluar dari Brand',
+                        danger: true,
+                        onConfirm: async () => {
+                          await MemberService.leaveTeam(user?.id || '', user?.email, b.id);
+                          setBrands((prev) => prev.filter((item) => item.id !== b.id));
+                          showSuccess(
+                            'Berhasil Keluar',
+                            `Anda telah berhasil keluar dari brand "${b.name}". Status paket akun Anda kembali menjadi Free.`
+                          );
+                          if (refreshUserData) await refreshUserData();
+                        },
+                      });
+                    }}
+                    style={{
+                      color: '#dc2626',
+                      borderColor: '#fca5a5',
+                      padding: '4px 10px',
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                    }}
+                  >
+                    Keluar dari Brand
+                  </button>
                 ) : (
                   <Settings size={16} style={{ color: '#64748b' }} />
                 )}
@@ -638,21 +671,61 @@ export default function DaftarBrandPage() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.5)',
+            background: 'rgba(0,0,0,0.6)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 100,
-            padding: 20,
+            zIndex: 99999,
+            padding: '16px 12px',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isCreatingBrand) {
+              setShowAddBrandModal(false);
+            }
           }}
         >
-          <div className="uda-card" style={{ maxWidth: 460, width: '100%', padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Tambah Brand Baru</h3>
+          <div
+            className="uda-card"
+            style={{
+              maxWidth: 480,
+              width: '100%',
+              maxHeight: 'min(90vh, 90dvh)',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0,
+              overflow: 'hidden',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+              position: 'relative',
+            }}
+          >
+            {/* Header Modal - Pinned at top */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '16px 20px',
+                borderBottom: '1px solid #f1f5f9',
+                background: '#ffffff',
+                flexShrink: 0,
+              }}
+            >
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>Tambah Brand Baru</h3>
               <button
                 type="button"
                 onClick={() => setShowAddBrandModal(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: 8,
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                }}
               >
                 <X size={18} />
               </button>
@@ -695,135 +768,178 @@ export default function DaftarBrandPage() {
                   setIsCreatingBrand(false);
                 }
               }}
-              style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: 1,
+                minHeight: 0,
+                overflow: 'hidden',
+              }}
             >
-              {/* Bagian Unggah Foto / Logo Brand */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
-                  Foto / Logo Brand
-                </label>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    padding: 12,
-                    background: '#f8fafc',
-                    borderRadius: 10,
-                    border: '1px dashed #cbd5e1',
-                  }}
-                >
-                  <div style={{ position: 'relative' }}>
-                    <img
-                      src={newAvatarUrl}
-                      alt="Preview Logo"
-                      style={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: '50%',
-                        objectFit: 'cover',
-                        border: `2px solid ${newColor}`,
-                      }}
-                    />
-                    {isUploadingNewAvatar && (
-                      <div
+              {/* Form Body - Scrollable content */}
+              <div
+                style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  WebkitOverflowScrolling: 'touch',
+                  padding: '16px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 16,
+                }}
+              >
+                {/* Bagian Unggah Foto / Logo Brand */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
+                    Foto / Logo Brand
+                  </label>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 14,
+                      padding: 12,
+                      background: '#f8fafc',
+                      borderRadius: 10,
+                      border: '1px dashed #cbd5e1',
+                    }}
+                  >
+                    <div style={{ position: 'relative' }}>
+                      <img
+                        src={newAvatarUrl}
+                        alt="Preview Logo"
                         style={{
-                          position: 'absolute',
-                          inset: 0,
+                          width: 56,
+                          height: 56,
                           borderRadius: '50%',
-                          background: 'rgba(0,0,0,0.5)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#ffffff',
+                          objectFit: 'cover',
+                          border: `2px solid ${newColor}`,
                         }}
+                      />
+                      {isUploadingNewAvatar && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            borderRadius: '50%',
+                            background: 'rgba(0,0,0,0.5)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#ffffff',
+                          }}
+                        >
+                          <Loader2 size={18} className="animate-spin" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ flex: 1 }}>
+                      <input
+                        type="file"
+                        ref={newBrandFileInputRef}
+                        accept="image/png, image/jpeg, image/jpg, image/webp, image/svg+xml"
+                        style={{ display: 'none' }}
+                        onChange={handleNewBrandPhotoSelect}
+                      />
+                      <button
+                        type="button"
+                        className="btn-uda btn-uda-secondary btn-uda-sm"
+                        onClick={() => newBrandFileInputRef.current?.click()}
+                        disabled={isUploadingNewAvatar}
+                        style={{ fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: 6 }}
                       >
-                        <Loader2 size={18} className="animate-spin" />
+                        <Upload size={14} />
+                        <span>{isUploadingNewAvatar ? 'Memproses...' : 'Unggah Foto / Logo'}</span>
+                      </button>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>
+                        PNG, JPG, atau WebP (Maks. 5 MB)
                       </div>
-                    )}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Nama Brand *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: UdaCoding Lab"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    style={{
+                      padding: '8px 12px',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 8,
+                      outline: 'none',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Username Handle (tanpa @)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="udacoding_lab"
+                    value={newHandle}
+                    onChange={(e) => setNewHandle(e.target.value)}
+                    style={{
+                      padding: '8px 12px',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 8,
+                      outline: 'none',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
+
+                {/* Kolom Platform: Input dengan Enter menjadi Checkbox */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
+                      Platform Media Sosial
+                    </label>
+                    <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                      Tekan <strong>Enter</strong> untuk menambah
+                    </span>
                   </div>
 
-                  <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
                     <input
-                      type="file"
-                      ref={newBrandFileInputRef}
-                      accept="image/png, image/jpeg, image/jpg, image/webp, image/svg+xml"
-                      style={{ display: 'none' }}
-                      onChange={handleNewBrandPhotoSelect}
+                      type="text"
+                      placeholder="Contoh: Instagram, TikTok, LinkedIn, Twitter..."
+                      value={platformInput}
+                      onChange={(e) => setPlatformInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = platformInput.trim().toLowerCase().replace(/\s+/g, '-');
+                          if (val) {
+                            if (!brandPlatforms.includes(val)) {
+                              setBrandPlatforms((prev) => [...prev, val]);
+                            }
+                            if (!selectedPlatforms.includes(val)) {
+                              setSelectedPlatforms((prev) => [...prev, val]);
+                            }
+                            setPlatformInput('');
+                          }
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 8,
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                      }}
                     />
                     <button
                       type="button"
                       className="btn-uda btn-uda-secondary btn-uda-sm"
-                      onClick={() => newBrandFileInputRef.current?.click()}
-                      disabled={isUploadingNewAvatar}
-                      style={{ fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: 6 }}
-                    >
-                      <Upload size={14} />
-                      <span>{isUploadingNewAvatar ? 'Memproses...' : 'Unggah Foto / Logo'}</span>
-                    </button>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>
-                      PNG, JPG, atau WebP (Maks. 5 MB)
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Nama Brand *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: UdaCoding Lab"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  style={{
-                    padding: '8px 12px',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 8,
-                    outline: 'none',
-                    fontSize: '0.9rem',
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Username Handle (tanpa @)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="udacoding_lab"
-                  value={newHandle}
-                  onChange={(e) => setNewHandle(e.target.value)}
-                  style={{
-                    padding: '8px 12px',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 8,
-                    outline: 'none',
-                    fontSize: '0.9rem',
-                  }}
-                />
-              </div>
-
-              {/* Kolom Platform: Input dengan Enter menjadi Checkbox */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
-                    Platform Media Sosial
-                  </label>
-                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                    Tekan <strong>Enter</strong> untuk menambah
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input
-                    type="text"
-                    placeholder="Contoh: Instagram, TikTok, LinkedIn, Twitter..."
-                    value={platformInput}
-                    onChange={(e) => setPlatformInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
+                      onClick={() => {
                         const val = platformInput.trim().toLowerCase().replace(/\s+/g, '-');
                         if (val) {
                           if (!brandPlatforms.includes(val)) {
@@ -834,124 +950,122 @@ export default function DaftarBrandPage() {
                           }
                           setPlatformInput('');
                         }
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '8px 12px',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: 8,
-                      outline: 'none',
-                      fontSize: '0.88rem',
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="btn-uda btn-uda-secondary btn-uda-sm"
-                    onClick={() => {
-                      const val = platformInput.trim().toLowerCase().replace(/\s+/g, '-');
-                      if (val) {
-                        if (!brandPlatforms.includes(val)) {
-                          setBrandPlatforms((prev) => [...prev, val]);
-                        }
-                        if (!selectedPlatforms.includes(val)) {
-                          setSelectedPlatforms((prev) => [...prev, val]);
-                        }
-                        setPlatformInput('');
-                      }
-                    }}
-                    style={{ padding: '0 12px' }}
-                  >
-                    + Tambah
-                  </button>
-                </div>
+                      }}
+                      style={{ padding: '0 12px' }}
+                    >
+                      + Tambah
+                    </button>
+                  </div>
 
-                {/* List Checkbox Platform */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                  {brandPlatforms.map((plt) => {
-                    const isChecked = selectedPlatforms.includes(plt);
-                    return (
-                      <label
-                        key={plt}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          padding: '5px 10px',
-                          borderRadius: 8,
-                          border: `1.5px solid ${isChecked ? '#16a34a' : '#cbd5e1'}`,
-                          backgroundColor: isChecked ? '#f0fdf4' : '#ffffff',
-                          cursor: 'pointer',
-                          fontSize: '0.82rem',
-                          fontWeight: 600,
-                          color: isChecked ? '#15803d' : '#475569',
-                          transition: 'all 0.15s ease',
-                          userSelect: 'none',
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedPlatforms((prev) => [...prev, plt]);
-                            } else {
-                              setSelectedPlatforms((prev) => prev.filter((p) => p !== plt));
-                            }
+                  {/* List Checkbox Platform */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                    {brandPlatforms.map((plt) => {
+                      const isChecked = selectedPlatforms.includes(plt);
+                      return (
+                        <label
+                          key={plt}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '5px 10px',
+                            borderRadius: 8,
+                            border: `1.5px solid ${isChecked ? '#16a34a' : '#cbd5e1'}`,
+                            backgroundColor: isChecked ? '#f0fdf4' : '#ffffff',
+                            cursor: 'pointer',
+                            fontSize: '0.82rem',
+                            fontWeight: 600,
+                            color: isChecked ? '#15803d' : '#475569',
+                            transition: 'all 0.15s ease',
+                            userSelect: 'none',
                           }}
-                          style={{ accentColor: '#16a34a', cursor: 'pointer' }}
-                        />
-                        <span style={{ textTransform: 'capitalize' }}>{plt}</span>
-                        {/* Hapus platform custom */}
-                        {!['instagram', 'tiktok'].includes(plt) && (
-                          <span
-                            role="button"
-                            title="Hapus platform ini"
-                            onClick={(ev) => {
-                              ev.preventDefault();
-                              ev.stopPropagation();
-                              setBrandPlatforms((prev) => prev.filter((p) => p !== plt));
-                              setSelectedPlatforms((prev) => prev.filter((p) => p !== plt));
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedPlatforms((prev) => [...prev, plt]);
+                              } else {
+                                setSelectedPlatforms((prev) => prev.filter((p) => p !== plt));
+                              }
                             }}
-                            style={{
-                              marginLeft: 4,
-                              color: '#94a3b8',
-                              fontWeight: 800,
-                              fontSize: '0.9rem',
-                              lineHeight: 1,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            ×
-                          </span>
-                        )}
-                      </label>
-                    );
-                  })}
+                            style={{ accentColor: '#16a34a', cursor: 'pointer' }}
+                          />
+                          <span style={{ textTransform: 'capitalize' }}>{plt}</span>
+                          {/* Hapus platform custom */}
+                          {!['instagram', 'tiktok'].includes(plt) && (
+                            <span
+                              role="button"
+                              title="Hapus platform ini"
+                              onClick={(ev) => {
+                                ev.preventDefault();
+                                ev.stopPropagation();
+                                setBrandPlatforms((prev) => prev.filter((p) => p !== plt));
+                                setSelectedPlatforms((prev) => prev.filter((p) => p !== plt));
+                              }}
+                              style={{
+                                marginLeft: 4,
+                                color: '#94a3b8',
+                                fontWeight: 800,
+                                fontSize: '0.9rem',
+                                lineHeight: 1,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              ×
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                    Platform yang dicentang akan otomatis muncul sebagai pilihan di <strong>Form Konten</strong>.
+                  </div>
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                  Platform yang dicentang akan otomatis muncul sebagai pilihan di <strong>Form Konten</strong>.
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Warna Identitas Brand</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <input
+                      type="color"
+                      value={newColor}
+                      onChange={(e) => setNewColor(e.target.value)}
+                      style={{ height: 40, width: 60, borderRadius: 8, border: '1px solid #e2e8f0', padding: 2, cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: '0.85rem', color: '#475569', fontWeight: 600 }}>{newColor}</span>
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Warna Identitas Brand</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <input
-                    type="color"
-                    value={newColor}
-                    onChange={(e) => setNewColor(e.target.value)}
-                    style={{ height: 40, width: 60, borderRadius: 8, border: '1px solid #e2e8f0', padding: 2, cursor: 'pointer' }}
-                  />
-                  <span style={{ fontSize: '0.85rem', color: '#475569', fontWeight: 600 }}>{newColor}</span>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
-                <button type="button" className="btn-uda btn-uda-secondary" onClick={() => setShowAddBrandModal(false)} disabled={isCreatingBrand}>
+              {/* Modal Footer - Always pinned & visible */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '14px 20px',
+                  borderTop: '1px solid #f1f5f9',
+                  background: '#f8fafc',
+                  flexShrink: 0,
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn-uda btn-uda-secondary"
+                  onClick={() => setShowAddBrandModal(false)}
+                  disabled={isCreatingBrand}
+                >
                   Batal
                 </button>
-                <button type="submit" className="btn-uda btn-uda-primary" disabled={isUploadingNewAvatar || isCreatingBrand} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="submit"
+                  className="btn-uda btn-uda-primary"
+                  disabled={isUploadingNewAvatar || isCreatingBrand}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
                   {isCreatingBrand && <Loader2 size={16} className="animate-spin" />}
                   <span>{isCreatingBrand ? 'Menyimpan Brand...' : 'Buat Brand'}</span>
                 </button>

@@ -358,6 +358,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // Jika status terdeteksi 'team' namun bukan dari pembayaran disetujui 'team' (misal dulunya anggota tim):
+        // Pastikan keanggotaan timnya di brand_members memang masih aktif. Jika sudah keluar -> kembalikan ke 'free'!
+        if (resolvedPlan === 'team' && latestApprovedPlan !== 'team') {
+          let hasActiveTeam = false;
+          if (supabase && currentUser.id) {
+            try {
+              const { data: activeMems } = await (supabase.from('brand_members' as any) as any)
+                .select('id, role')
+                .eq('user_id', currentUser.id)
+                .neq('role', 'owner')
+                .limit(1);
+              if (activeMems && activeMems.length > 0) {
+                hasActiveTeam = true;
+              }
+            } catch (e) {}
+          }
+          if (!hasActiveTeam && typeof window !== 'undefined') {
+            try {
+              const uId = currentUser.id;
+              const rawTeam = uId ? localStorage.getItem('uda_team_membership_' + uId) : null;
+              if (rawTeam) {
+                const parsedT = JSON.parse(rawTeam);
+                if (parsedT?.brand_id) {
+                  const rawInv = localStorage.getItem('uda_brand_invitations');
+                  if (rawInv) {
+                    const invList = JSON.parse(rawInv);
+                    const match = invList.find((i: any) => i.brand_id === parsedT.brand_id && (i.status === 'left' || i.status === 'cancelled'));
+                    if (!match) hasActiveTeam = true;
+                  } else {
+                    hasActiveTeam = true;
+                  }
+                }
+              }
+            } catch (e) {}
+          }
+
+          if (!hasActiveTeam) {
+            resolvedPlan = 'free';
+            resolvedUntil = null;
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.removeItem(`uda_user_plan_${currentUser.id}`);
+                if (emailLower) localStorage.removeItem(`uda_user_plan_${emailLower}`);
+                localStorage.removeItem(`uda_team_membership_${currentUser.id}`);
+                localStorage.removeItem(`uda_system_role_${currentUser.id}`);
+                localStorage.removeItem('uda_team_membership');
+                localStorage.removeItem('uda_last_upgraded_user');
+              } catch (e) {}
+            }
+          }
+        }
+
         const resolvedRole: 'user' | 'admin' = isEmailAdmin ? 'admin' : ((accRes.data.role as 'user' | 'admin') || 'user');
 
         // Sinkronkan kembali ke tabel accounts jika plan_code atau role di DB belum sesuai
@@ -438,6 +490,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           if (isInvitedTeamMember) {
             fallbackPlan = 'team';
+          }
+        }
+
+        // Validasi fallback: jika 'team' tapi bukan pembayaran disetujui, pastikan keanggotaan aktif
+        if (fallbackPlan === 'team' && latestApprovedPlan !== 'team') {
+          let hasActiveTeam = false;
+          if (supabase && currentUser.id) {
+            try {
+              const { data: activeMems } = await (supabase.from('brand_members' as any) as any)
+                .select('id, role')
+                .eq('user_id', currentUser.id)
+                .neq('role', 'owner')
+                .limit(1);
+              if (activeMems && activeMems.length > 0) {
+                hasActiveTeam = true;
+              }
+            } catch (e) {}
+          }
+          if (!hasActiveTeam && typeof window !== 'undefined') {
+            try {
+              const uId = currentUser.id;
+              const rawTeam = uId ? localStorage.getItem('uda_team_membership_' + uId) : null;
+              if (rawTeam) {
+                const parsedT = JSON.parse(rawTeam);
+                if (parsedT?.brand_id) {
+                  const rawInv = localStorage.getItem('uda_brand_invitations');
+                  if (rawInv) {
+                    const invList = JSON.parse(rawInv);
+                    const match = invList.find((i: any) => i.brand_id === parsedT.brand_id && (i.status === 'left' || i.status === 'cancelled'));
+                    if (!match) hasActiveTeam = true;
+                  } else {
+                    hasActiveTeam = true;
+                  }
+                }
+              }
+            } catch (e) {}
+          }
+
+          if (!hasActiveTeam) {
+            fallbackPlan = 'free';
+            fallbackUntil = null;
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.removeItem(`uda_user_plan_${currentUser.id}`);
+                if (emailLower) localStorage.removeItem(`uda_user_plan_${emailLower}`);
+                localStorage.removeItem(`uda_team_membership_${currentUser.id}`);
+                localStorage.removeItem(`uda_system_role_${currentUser.id}`);
+                localStorage.removeItem('uda_team_membership');
+                localStorage.removeItem('uda_last_upgraded_user');
+              } catch (e) {}
+            }
           }
         }
 
@@ -618,9 +721,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         cleanEmail === 'admin@udaplanner.com' ||
         cleanEmail === 'admin@udacoding.id';
 
-      // Validasi ketat khusus akun admin: Password WAJIB persis 'admin123'
-      if (isAdminEmail && password !== 'admin123') {
-        return { error: 'Email atau kata sandi salah. Pastikan akun sudah terdaftar di UdaPlanner.' };
+      // Validasi ketat khusus akun admin melalui endpoint verifikasi password server
+      let adminLoginSuccess = false;
+      if (isAdminEmail) {
+        try {
+          const apiRes = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cleanEmail, password }),
+          });
+          const apiData = await apiRes.json();
+          if (!apiData.success) {
+            return { error: 'Email atau kata sandi salah. Pastikan akun sudah terdaftar di UdaPlanner.' };
+          }
+          adminLoginSuccess = true;
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('uda_admin_custom_password', password);
+            } catch (e) {}
+          }
+        } catch (apiErr) {
+          console.warn('Admin login validation error:', apiErr);
+        }
       }
 
       let { data, error } = await supabase.auth.signInWithPassword({
@@ -628,24 +750,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
       });
 
-      // Dukungan khusus akun administrator: Jika password 'admin123' benar tapi auth belum tersinkron
-      if (error && isAdminEmail && password === 'admin123') {
+      // Dukungan khusus akun administrator: Jika password benar tapi auth belum tersinkron
+      if (error && isAdminEmail && adminLoginSuccess) {
         try {
-          const apiRes = await fetch('/api/admin/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: cleanEmail, password: 'admin123' }),
+          const retryAfterSync = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password,
           });
-          const apiData = await apiRes.json();
-          if (apiData.success) {
-            const retryAfterSync = await supabase.auth.signInWithPassword({
+          if (!retryAfterSync.error && retryAfterSync.data?.user) {
+            data = retryAfterSync.data;
+            error = null;
+          } else {
+            // Jika auth supabase tetap terkendala tapi validasi /api/admin/login sukses
+            const adminUser: any = {
+              id: `admin-${cleanEmail}`,
               email: cleanEmail,
-              password: 'admin123',
-            });
-            if (!retryAfterSync.error && retryAfterSync.data?.user) {
-              data = retryAfterSync.data;
-              error = null;
-            }
+              app_metadata: { provider: 'email', providers: ['email'] },
+              user_metadata: {
+                full_name: 'Administrator UdaPlanner',
+                role: 'admin',
+                has_completed_onboarding: true,
+                has_logged_in_before: true,
+              },
+              aud: 'authenticated',
+              created_at: new Date().toISOString(),
+              email_confirmed_at: new Date().toISOString(),
+            };
+            setUser(adminUser);
+            try {
+              localStorage.setItem('uda_auth_user', JSON.stringify(adminUser));
+              localStorage.setItem('uda_is_admin', 'true');
+              localStorage.setItem('uda_auth_role', 'admin');
+              if (typeof document !== 'undefined') {
+                document.cookie = 'uda_user_role=admin; path=/; max-age=604800; SameSite=Lax';
+                document.cookie = 'uda_auth_token=true; path=/; max-age=604800; SameSite=Lax';
+              }
+            } catch (e) {}
+            const loaded = await loadUserData(adminUser);
+            return { error: null, isAdmin: true, needsOnboarding: false };
           }
         } catch (syncErr) {
           console.warn('Admin sync error:', syncErr);

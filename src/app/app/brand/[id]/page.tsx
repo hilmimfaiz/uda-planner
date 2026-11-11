@@ -82,7 +82,7 @@ const getSyncedAvatar = (
 export default function PengaturanBrandDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user, account } = useAuth();
+  const { user, account, refreshUserData } = useAuth();
   const { confirmDelete, showSuccess, showError } = useModal();
   const supabase = createClient();
   const brandId = (params?.id as string) || 'brand-1';
@@ -1719,7 +1719,7 @@ export default function PengaturanBrandDetailPage() {
                                   setMembers(updated);
                                   localStorage.setItem('uda_brand_members_' + brand.id, JSON.stringify(updated));
                                   playSuccessSound();
-                                  showSuccess('Anggota Dihapus', `${m.name} telah berhasil dihapus dari brand.`);
+                                  showSuccess('Anggota Dihapus', `${m.name} telah berhasil dihapus dari brand dan status paketnya dikembalikan menjadi Free.`);
                                 },
                               });
                             }}
@@ -1738,12 +1738,13 @@ export default function PengaturanBrandDetailPage() {
                             onClick={() => {
                               confirmDelete({
                                 title: `Keluar dari Brand "${brand.name}"?`,
-                                message: `Apakah Anda yakin ingin keluar dari brand "${brand.name}"? Status akses kolaborator Anda pada brand ini akan berakhir.`,
+                                message: `Apakah Anda yakin ingin keluar dari brand "${brand.name}"? Status akses kolaborator Anda pada brand ini akan berakhir dan paket akun Anda akan kembali menjadi Free.`,
                                 confirmText: 'Ya, Keluar dari Brand',
                                 onConfirm: async () => {
                                   await MemberService.leaveTeam(user?.id || '', user?.email, brand.id);
                                   playSuccessSound();
-                                  showSuccess('Berhasil Keluar', `Anda telah berhasil keluar dari brand "${brand.name}".`);
+                                  if (refreshUserData) await refreshUserData();
+                                  showSuccess('Berhasil Keluar', `Anda telah berhasil keluar dari brand "${brand.name}". Status akun Anda kembali menjadi Free.`);
                                   router.push('/app/brand');
                                 },
                               });

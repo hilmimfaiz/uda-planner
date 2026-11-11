@@ -351,8 +351,29 @@ export class PaymentService {
     notes?: string,
     extra?: { userId?: string; planCode?: string; durationDays?: number }
   ): Promise<any> {
-    const supabase = createClient();
     const targetPlan = (extra?.planCode || 'pro').toLowerCase();
+
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/payments', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paymentId,
+            status,
+            notes,
+            userId: extra?.userId,
+            planCode: targetPlan,
+            durationDays: extra?.durationDays,
+            customPlanUntil: (extra as any)?.customPlanUntil,
+          }),
+        });
+      } catch (apiErr) {
+        console.warn('PaymentService.updatePaymentStatus api error:', apiErr);
+      }
+    }
+
+    const supabase = createClient();
     if (supabase) {
       try {
         const { data, error } = await (supabase.from('payments' as any) as any)

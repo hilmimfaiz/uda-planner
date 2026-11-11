@@ -64,6 +64,7 @@ export default function BerandaPage() {
   const displayName = rawName.trim().split(" ")[0] || rawName;
 
   const [localAvatar, setLocalAvatar] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -262,6 +263,7 @@ export default function BerandaPage() {
       {/* Sapaan Header & Waktu Live */}
       <div
         id="tour-welcome"
+        className="dashboard-welcome-card"
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -275,13 +277,16 @@ export default function BerandaPage() {
           boxShadow: "0 4px 20px rgba(15, 23, 42, 0.04)",
         }}
       >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            {currentAvatarUrl ? (
+        <div className="dashboard-welcome-info">
+          <div className="dashboard-welcome-profile" style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            {currentAvatarUrl && !avatarError ? (
               <img
                 src={currentAvatarUrl}
                 alt={displayName}
-                onError={() => setLocalAvatar(null)}
+                onError={() => {
+                  setAvatarError(true);
+                  setLocalAvatar(null);
+                }}
                 style={{
                   width: 54,
                   height: 54,
@@ -356,6 +361,7 @@ export default function BerandaPage() {
         {/* Tombol Aksi Utama */}
         <div
           id="tour-actions"
+          className="dashboard-welcome-actions"
           style={{ display: "flex", alignItems: "center", gap: 10 }}
         >
           <button
@@ -391,6 +397,7 @@ export default function BerandaPage() {
       {/* Baris Navigasi Brand & Tanggal */}
       <div
         id="tour-nav"
+        className="dashboard-filter-nav"
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -405,8 +412,9 @@ export default function BerandaPage() {
         }}
       >
         {/* Brand Filter */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="dashboard-filter-brand" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span
+            className="dashboard-filter-label"
             style={{
               fontSize: "0.82rem",
               fontWeight: 700,
@@ -420,6 +428,7 @@ export default function BerandaPage() {
             <span>Filter Brand:</span>
           </span>
           <select
+            className="dashboard-filter-select"
             value={selectedBrandFilter}
             onChange={(e) => {
               setSelectedBrandFilter(e.target.value);
@@ -451,8 +460,9 @@ export default function BerandaPage() {
         </div>
 
         {/* Date Selector Tabs */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div className="dashboard-filter-dates" style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <button
+            className="dashboard-filter-date-btn"
             onClick={() => handleDateChange(new Date(Date.now() - 86400000))}
             style={{
               padding: "6px 12px",
@@ -469,6 +479,7 @@ export default function BerandaPage() {
             Kemarin
           </button>
           <button
+            className="dashboard-filter-date-btn dashboard-filter-date-btn-today"
             onClick={() => handleDateChange(new Date())}
             style={{
               padding: "6px 14px",
@@ -485,6 +496,7 @@ export default function BerandaPage() {
             Hari Ini
           </button>
           <button
+            className="dashboard-filter-date-btn"
             onClick={() => handleDateChange(new Date(Date.now() + 86400000))}
             style={{
               padding: "6px 12px",
@@ -502,6 +514,7 @@ export default function BerandaPage() {
           </button>
 
           <div
+            className="dashboard-filter-date-wrapper"
             style={{
               position: "relative",
               display: "inline-flex",
@@ -510,6 +523,7 @@ export default function BerandaPage() {
           >
             <input
               type="date"
+              className="dashboard-filter-date-input"
               value={selectedDate.toISOString().split("T")[0]}
               onChange={(e) => {
                 if (e.target.value) handleDateChange(new Date(e.target.value));
@@ -529,6 +543,157 @@ export default function BerandaPage() {
           </div>
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .dashboard-welcome-card {
+            justify-content: center !important;
+            padding: 20px 18px !important;
+            gap: 16px !important;
+          }
+
+          .dashboard-welcome-info {
+            width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
+          }
+
+          .dashboard-welcome-profile {
+            display: flex !important;
+            align-items: center !important;
+            gap: 14px !important;
+            max-width: 100% !important;
+          }
+
+          .dashboard-welcome-actions {
+            width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            gap: 10px !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .dashboard-welcome-card {
+            padding: 16px 14px !important;
+          }
+
+          .dashboard-welcome-profile {
+            gap: 12px !important;
+          }
+
+          .dashboard-welcome-actions {
+            gap: 8px !important;
+          }
+
+          .dashboard-welcome-actions button {
+            flex: 1 1 0 !important;
+            justify-content: center !important;
+            padding: 6px 10px !important;
+            font-size: 0.78rem !important;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .dashboard-filter-nav {
+            padding: 10px 12px !important;
+            gap: 8px !important;
+            border-width: 2px !important;
+            box-shadow: 3px 3px 0px #0f172a !important;
+            border-radius: 10px !important;
+          }
+
+          .dashboard-filter-brand {
+            width: 100% !important;
+            gap: 8px !important;
+            display: flex !important;
+            align-items: center !important;
+          }
+
+          .dashboard-filter-label {
+            font-size: 0.74rem !important;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+            gap: 4px !important;
+          }
+
+          .dashboard-filter-label svg {
+            width: 13px !important;
+            height: 13px !important;
+          }
+
+          .dashboard-filter-select {
+            padding: 4px 8px !important;
+            font-size: 0.75rem !important;
+            border-radius: 6px !important;
+            border-width: 1.5px !important;
+            box-shadow: 1.5px 1.5px 0px #0f172a !important;
+            flex: 1 !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            height: 30px !important;
+          }
+
+          .dashboard-filter-dates {
+            width: 100% !important;
+            gap: 4px !important;
+            display: flex !important;
+            align-items: center !important;
+          }
+
+          .dashboard-filter-date-btn {
+            padding: 4px 6px !important;
+            font-size: 0.72rem !important;
+            border-radius: 6px !important;
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
+            text-align: center !important;
+            height: 30px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            white-space: nowrap !important;
+          }
+
+          .dashboard-filter-date-wrapper {
+            flex: 1.2 1 0 !important;
+            min-width: 0 !important;
+          }
+
+          .dashboard-filter-date-input {
+            width: 100% !important;
+            padding: 4px 6px !important;
+            font-size: 0.72rem !important;
+            border-radius: 6px !important;
+            border-width: 1.5px !important;
+            box-shadow: 1.5px 1.5px 0px #0f172a !important;
+            height: 30px !important;
+            min-width: 0 !important;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .dashboard-filter-nav {
+            padding: 8px 10px !important;
+            gap: 6px !important;
+          }
+
+          .dashboard-filter-label span {
+            display: none !important;
+          }
+
+          .dashboard-filter-date-btn {
+            padding: 3px 4px !important;
+            font-size: 0.68rem !important;
+          }
+
+          .dashboard-filter-date-input {
+            font-size: 0.68rem !important;
+            padding: 3px 4px !important;
+          }
+        }
+      `}</style>
 
       {/* Summary Metrics */}
       <div id="tour-summary" className="dashboard-summary-grid">

@@ -38,6 +38,58 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: quotaCheck.message }, { status: 403 });
     }
 
+    const { createAdminClient } = await import('@/lib/supabase/server');
+    const admin = createAdminClient();
+
+    if (admin && body.brand_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.brand_id)) {
+      try {
+        const finalNotes = PostService.embedMediaInNotes(body.notes, body.media_url, body.media_urls);
+        const insertPayload: any = {
+          brand_id: body.brand_id,
+          title: body.title,
+          caption: body.caption || '',
+          hashtags: body.hashtags || '',
+          platforms: body.platforms || ['instagram'],
+          content_type: body.content_type || 'feed',
+          status: body.status || 'draft',
+          scheduled_at: body.scheduled_at || null,
+          pillar_id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.pillar_id || '') ? body.pillar_id : null,
+          notes: finalNotes,
+        };
+
+        if (body.user_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.user_id)) {
+          insertPayload.created_by = body.user_id;
+        }
+
+        const { data: dbPost, error: dbErr } = await (admin.from('posts' as any) as any).insert(insertPayload).select().single();
+        if (!dbErr && dbPost) {
+          const { notes: cleanNotes, mediaUrl, mediaUrls } = PostService.extractMediaAndNotes(dbPost.notes);
+          return NextResponse.json({
+            success: true,
+            data: {
+              id: dbPost.id,
+              brand_id: dbPost.brand_id,
+              title: dbPost.title,
+              caption: dbPost.caption || '',
+              hashtags: dbPost.hashtags || '',
+              platforms: dbPost.platforms || ['instagram'],
+              content_type: dbPost.content_type || 'feed',
+              status: dbPost.status || 'draft',
+              scheduled_at: dbPost.scheduled_at,
+              pillar_id: dbPost.pillar_id,
+              assignee_id: dbPost.assigned_to,
+              notes: cleanNotes,
+              media_url: mediaUrl,
+              media_urls: mediaUrls,
+              comments_count: 0,
+            },
+          }, { status: 201 });
+        }
+      } catch (adminErr) {
+        console.warn('Admin POST posts insert warning:', adminErr);
+      }
+    }
+
     const post = await PostService.createPost({
       brand_id: body.brand_id,
       pillar_id: body.pillar_id,
@@ -110,6 +162,16 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id');
     if (!id) {
       return NextResponse.json({ success: false, error: 'Post ID is required' }, { status: 400 });
+    }
+
+    const { createAdminClient } = await import('@/lib/supabase/server');
+    const adminSupabase = createAdminClient();
+    if (adminSupabase && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      try {
+        await adminSupabase.from('posts' as any).delete().eq('id', id);
+      } catch (delErr) {
+        console.warn('Admin DELETE post error:', delErr);
+      }
     }
 
     await PostService.deletePost(id);

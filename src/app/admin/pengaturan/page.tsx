@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Save,
@@ -11,30 +11,129 @@ import {
   ExternalLink,
   PhoneCall,
   CheckCircle2,
+  Lock,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  AlertCircle,
+  User,
+  Shield,
 } from 'lucide-react';
 import { AdminService } from '@/services/admin.service';
 import { useModal } from '@/contexts/modal-context';
+import { useAuth } from '@/contexts/auth-context';
 
 export default function AdminPengaturanPage() {
   const { showSuccess, showError } = useModal();
+  const { user } = useAuth();
+
+  // State Kontak WhatsApp
   const [adminWhatsapp, setAdminWhatsapp] = useState('6281234567890');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingWhatsapp, setIsSavingWhatsapp] = useState(false);
 
-  React.useEffect(() => {
+  // State Nama Lengkap Admin
+  const [adminFullName, setAdminFullName] = useState('Administrator UdaPlanner');
+  const [isSavingName, setIsSavingName] = useState(false);
+
+  // State Ubah Password Admin
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
     AdminService.getAppSettings().then((data) => {
       if (data && data.adminWhatsapp) {
         setAdminWhatsapp(data.adminWhatsapp);
       }
     });
-  }, []);
+
+    if (user?.user_metadata?.full_name) {
+      setAdminFullName(user.user_metadata.full_name);
+    } else {
+      try {
+        const stored = localStorage.getItem('uda_auth_user');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.user_metadata?.full_name) {
+            setAdminFullName(parsed.user_metadata.full_name);
+          }
+        }
+      } catch {}
+    }
+  }, [user]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSaveAdminName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = adminFullName.trim();
+    if (!cleanName || cleanName.length < 2) {
+      showError('Nama Lengkap Tidak Valid', 'Nama lengkap minimal 2 karakter.');
+      return;
+    }
+
+    setIsSavingName(true);
+    try {
+      const res = await fetch('/api/admin/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: cleanName,
+          email: user?.email || 'admin@udaplanner.id',
+          userId: user?.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showError('Gagal Menyimpan Nama', data.error || 'Terjadi kesalahan sistem.');
+        return;
+      }
+
+      // Update auth user di localStorage dan event listener
+      try {
+        const stored = localStorage.getItem('uda_auth_user');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          parsed.user_metadata = {
+            ...(parsed.user_metadata || {}),
+            full_name: cleanName,
+          };
+          localStorage.setItem('uda_auth_user', JSON.stringify(parsed));
+        }
+        const storedProf = localStorage.getItem('uda_auth_profile');
+        if (storedProf) {
+          const parsedProf = JSON.parse(storedProf);
+          parsedProf.full_name = cleanName;
+          localStorage.setItem('uda_auth_profile', JSON.stringify(parsedProf));
+        }
+        window.dispatchEvent(new CustomEvent('uda_account_updated', { detail: { full_name: cleanName } }));
+      } catch (e) {}
+
+      showSuccess(
+        'Nama Lengkap Berhasil Disimpan!',
+        `Nama lengkap administrator telah berhasil diperbarui menjadi "${cleanName}".`
+      );
+      showToast('Nama lengkap berhasil diperbarui');
+    } catch (err: any) {
+      showError('Gagal Menyimpan Nama', err.message || 'Coba lagi beberapa saat.');
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
+  const handleSaveWhatsapp = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanNumber = adminWhatsapp.trim().replace(/[^0-9]/g, '');
 
@@ -46,7 +145,7 @@ export default function AdminPengaturanPage() {
       return;
     }
 
-    setIsSaving(true);
+    setIsSavingWhatsapp(true);
     try {
       await AdminService.updateAppSettings({
         adminWhatsapp: cleanNumber,
@@ -58,7 +157,78 @@ export default function AdminPengaturanPage() {
     } catch (err: any) {
       showError('Gagal Menyimpan Pengaturan', err.message || 'Coba lagi beberapa saat.');
     } finally {
-      setIsSaving(false);
+      setIsSavingWhatsapp(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (!currentPassword) {
+      setPasswordError('Silakan masukkan kata sandi Anda saat ini.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordError('Kata sandi baru minimal harus 6 karakter.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Konfirmasi kata sandi baru tidak sesuai dengan kata sandi baru.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const res = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user?.email || 'admin@udaplanner.id',
+          currentPassword,
+          newPassword,
+          confirmPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        const errorMsg = data.error || 'Gagal mengubah kata sandi.';
+        setPasswordError(errorMsg);
+        showError('Gagal Mengubah Kata Sandi', errorMsg);
+        return;
+      }
+
+      // Berhasil
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordSuccess('Kata sandi administrator berhasil diperbarui.');
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('uda_admin_custom_password', newPassword);
+          if (user?.email) {
+            localStorage.setItem(`uda_admin_password_${user.email.toLowerCase()}`, newPassword);
+          }
+        } catch (e) {}
+      }
+
+      showSuccess(
+        'Kata Sandi Berhasil Diperbarui!',
+        'Kata sandi akun Administrator Anda telah berhasil diubah. Silakan gunakan kata sandi baru ini saat masuk ke panel admin berikutnya.'
+      );
+      showToast('Kata sandi berhasil diperbarui');
+    } catch (err: any) {
+      const msg = err.message || 'Terjadi kesalahan sistem saat memperbarui kata sandi.';
+      setPasswordError(msg);
+      showError('Gagal Mengubah Kata Sandi', msg);
+    } finally {
+      setIsUpdatingPassword(false);
     }
   };
 
@@ -87,9 +257,9 @@ export default function AdminPengaturanPage() {
       )}
 
       <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Pengaturan Kontak Bantuan WhatsApp</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Pengaturan & Profil Admin</h1>
         <p style={{ color: '#64748b', fontSize: '0.88rem' }}>
-          Kelola nomor WhatsApp resmi Admin UdaPlanner yang digunakan untuk konsultasi paket, bantuan pengguna, dan konfirmasi akun terkunci.
+          Kelola nama lengkap administrator, kata sandi akun, dan kontak resmi bantuan WhatsApp pengguna.
         </p>
       </div>
 
@@ -153,9 +323,394 @@ export default function AdminPengaturanPage() {
         </Link>
       </div>
 
-      {/* Formulir Kontak WhatsApp Admin */}
+      {/* Card 1: Profil & Nama Lengkap Administrator */}
       <div className="uda-card" style={{ padding: '24px 22px' }}>
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <form onSubmit={handleSaveAdminName} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                backgroundColor: '#f8fafc',
+                border: '1.5px solid #0f172a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#0f172a',
+              }}
+            >
+              <User size={18} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                Profil & Nama Lengkap Admin
+              </h3>
+              <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0 }}>
+                Kelola identitas nama lengkap akun Administrator yang ditampilkan di panel admin dan dapat dilihat oleh sesama admin.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+            {/* Input Nama Lengkap */}
+            <div>
+              <label
+                htmlFor="input-admin-name"
+                style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: 6 }}
+              >
+                Nama Lengkap Administrator *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="input-admin-name"
+                  type="text"
+                  required
+                  value={adminFullName}
+                  onChange={(e) => setAdminFullName(e.target.value)}
+                  placeholder="Contoh: Administrator UdaPlanner"
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px 11px 40px',
+                    border: '2px solid #0f172a',
+                    borderRadius: 8,
+                    boxShadow: '2px 2px 0px #0f172a',
+                    outline: 'none',
+                    fontSize: '0.94rem',
+                    fontWeight: 700,
+                    backgroundColor: '#ffffff',
+                  }}
+                />
+                <User size={17} style={{ position: 'absolute', left: 14, top: 13, color: '#64748b' }} />
+              </div>
+              <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 5 }}>
+                Nama ini akan tersimpan ke database profil dan tampil di salam dashboard serta daftar detail admin.
+              </div>
+            </div>
+
+            {/* Email Admin (Read Only) */}
+            <div>
+              <label
+                htmlFor="input-admin-email"
+                style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: 6 }}
+              >
+                Alamat Email Administrator
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="input-admin-email"
+                  type="text"
+                  disabled
+                  value={user?.email || 'admin@udaplanner.id'}
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px 11px 40px',
+                    border: '1.5px solid #cbd5e1',
+                    borderRadius: 8,
+                    backgroundColor: '#f1f5f9',
+                    color: '#475569',
+                    fontSize: '0.94rem',
+                    fontWeight: 700,
+                    cursor: 'not-allowed',
+                  }}
+                />
+                <Shield size={17} style={{ position: 'absolute', left: 14, top: 13, color: '#64748b' }} />
+              </div>
+              <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 5 }}>
+                Akun terdaftar dengan hak akses Administrator sistem UdaPlanner.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ paddingTop: 4 }}>
+            <button
+              type="submit"
+              disabled={isSavingName}
+              className="btn-uda btn-uda-primary"
+              style={{
+                width: '100%',
+                maxWidth: 240,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                fontWeight: 800,
+                height: 44,
+              }}
+            >
+              {isSavingName ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              <span>{isSavingName ? 'Menyimpan...' : 'Simpan Nama Lengkap'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Card 2: Ubah Kata Sandi Admin */}
+      <div className="uda-card" style={{ padding: '24px 22px' }}>
+        <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                backgroundColor: '#eff6ff',
+                border: '1.5px solid #93c5fd',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#2563eb',
+              }}
+            >
+              <KeyRound size={18} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                Ubah Kata Sandi Admin
+              </h3>
+              <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0 }}>
+                Perbarui kata sandi login Administrator untuk menjaga keamanan akses panel admin UdaPlanner.
+              </p>
+            </div>
+          </div>
+
+          {passwordError && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '10px 14px',
+                backgroundColor: '#fef2f2',
+                border: '1.5px solid #fca5a5',
+                borderRadius: 8,
+                color: '#b91c1c',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+              }}
+            >
+              <AlertCircle size={18} style={{ flexShrink: 0 }} />
+              <span>{passwordError}</span>
+            </div>
+          )}
+
+          {passwordSuccess && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '10px 14px',
+                backgroundColor: '#f0fdf4',
+                border: '1.5px solid #86efac',
+                borderRadius: 8,
+                color: '#15803d',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+              }}
+            >
+              <CheckCircle2 size={18} style={{ flexShrink: 0 }} />
+              <span>{passwordSuccess}</span>
+            </div>
+          )}
+
+          {/* Kata Sandi Lama */}
+          <div>
+            <label
+              htmlFor="input-current-password"
+              style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: 6 }}
+            >
+              Kata Sandi Saat Ini *
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                id="input-current-password"
+                type={showCurrentPassword ? 'text' : 'password'}
+                required
+                value={currentPassword}
+                onChange={(e) => {
+                  setCurrentPassword(e.target.value);
+                  setPasswordError(null);
+                }}
+                placeholder="Masukkan kata sandi saat ini"
+                style={{
+                  width: '100%',
+                  padding: '11px 40px 11px 40px',
+                  border: '2px solid #0f172a',
+                  borderRadius: 8,
+                  boxShadow: '2px 2px 0px #0f172a',
+                  outline: 'none',
+                  fontSize: '0.94rem',
+                  fontWeight: 600,
+                  backgroundColor: '#ffffff',
+                }}
+              />
+              <Lock size={17} style={{ position: 'absolute', left: 14, top: 13, color: '#64748b' }} />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: 11,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                aria-label="Toggle password visibility"
+              >
+                {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 5 }}>
+              Default kata sandi akun admin bawaan sistem adalah <strong>admin123</strong> (jika belum pernah diubah sebelumnya).
+            </div>
+          </div>
+
+          {/* Grid Kata Sandi Baru & Konfirmasi */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+            {/* Kata Sandi Baru */}
+            <div>
+              <label
+                htmlFor="input-new-password"
+                style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: 6 }}
+              >
+                Kata Sandi Baru *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="input-new-password"
+                  type={showNewPassword ? 'text' : 'password'}
+                  required
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    setPasswordError(null);
+                  }}
+                  placeholder="Minimal 6 karakter"
+                  style={{
+                    width: '100%',
+                    padding: '11px 40px 11px 40px',
+                    border: '2px solid #0f172a',
+                    borderRadius: 8,
+                    boxShadow: '2px 2px 0px #0f172a',
+                    outline: 'none',
+                    fontSize: '0.94rem',
+                    fontWeight: 600,
+                    backgroundColor: '#ffffff',
+                  }}
+                />
+                <KeyRound size={17} style={{ position: 'absolute', left: 14, top: 13, color: '#64748b' }} />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: 12,
+                    top: 11,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    padding: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  aria-label="Toggle password visibility"
+                >
+                  {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Konfirmasi Kata Sandi Baru */}
+            <div>
+              <label
+                htmlFor="input-confirm-password"
+                style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: 6 }}
+              >
+                Konfirmasi Kata Sandi Baru *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="input-confirm-password"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    setPasswordError(null);
+                  }}
+                  placeholder="Ulangi kata sandi baru"
+                  style={{
+                    width: '100%',
+                    padding: '11px 40px 11px 40px',
+                    border: '2px solid #0f172a',
+                    borderRadius: 8,
+                    boxShadow: '2px 2px 0px #0f172a',
+                    outline: 'none',
+                    fontSize: '0.94rem',
+                    fontWeight: 600,
+                    backgroundColor: '#ffffff',
+                  }}
+                />
+                <ShieldCheck size={17} style={{ position: 'absolute', left: 14, top: 13, color: '#64748b' }} />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: 12,
+                    top: 11,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    padding: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  aria-label="Toggle password visibility"
+                >
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ paddingTop: 6 }}>
+            <button
+              type="submit"
+              disabled={isUpdatingPassword}
+              className="btn-uda btn-uda-primary"
+              style={{
+                width: '100%',
+                maxWidth: 240,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                fontWeight: 800,
+                height: 44,
+              }}
+            >
+              {isUpdatingPassword ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              <span>{isUpdatingPassword ? 'Memperbarui...' : 'Perbarui Kata Sandi'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Card 3: Formulir Kontak WhatsApp Admin */}
+      <div className="uda-card" style={{ padding: '24px 22px' }}>
+        <form onSubmit={handleSaveWhatsapp} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
             <div
               style={{
@@ -257,7 +812,7 @@ export default function AdminPengaturanPage() {
           <div style={{ paddingTop: 8 }}>
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSavingWhatsapp}
               className="btn-uda btn-uda-primary"
               style={{
                 width: '100%',
@@ -270,8 +825,8 @@ export default function AdminPengaturanPage() {
                 height: 44,
               }}
             >
-              {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              <span>{isSaving ? 'Menyimpan...' : 'Simpan Nomor WhatsApp'}</span>
+              {isSavingWhatsapp ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              <span>{isSavingWhatsapp ? 'Menyimpan...' : 'Simpan Nomor WhatsApp'}</span>
             </button>
           </div>
         </form>

@@ -3,6 +3,100 @@ import { DUMMY_NOTIFICATIONS, DummyNotification } from './dummy-data';
 import { playNotificationSound } from './audio-effects';
 
 const NOTIF_STORAGE_KEY = 'uda_custom_notifications';
+const DELETED_NOTIFS_STORAGE_KEY = 'uda_deleted_notification_ids';
+const DELETED_INVITES_STORAGE_KEY = 'uda_deleted_invite_ids';
+
+export function getDeletedNotifIds(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(DELETED_NOTIFS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getDeletedInviteIds(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(DELETED_INVITES_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function recordDeletedNotification(notif: DummyNotification | string) {
+  if (typeof window === 'undefined') return;
+  try {
+    let notifId = typeof notif === 'string' ? notif : notif.id;
+    let inviteId = typeof notif !== 'string' ? notif.invite_data?.invite_id : undefined;
+    let brandId = typeof notif !== 'string' ? notif.invite_data?.brand_id : undefined;
+    let targetEmail = typeof notif !== 'string' ? (notif.target_email || notif.invite_data?.target_email) : undefined;
+    let targetUserId = typeof notif !== 'string' ? (notif.target_user_id || notif.invite_data?.target_user_id) : undefined;
+
+    if (typeof notif === 'string') {
+      try {
+        const raw = localStorage.getItem(NOTIF_STORAGE_KEY);
+        if (raw) {
+          const list: DummyNotification[] = JSON.parse(raw);
+          const found = list.find((n) => n.id === notif);
+          if (found) {
+            inviteId = found.invite_data?.invite_id;
+            brandId = found.invite_data?.brand_id;
+            targetEmail = found.target_email || found.invite_data?.target_email;
+            targetUserId = found.target_user_id || found.invite_data?.target_user_id;
+          }
+        }
+      } catch {}
+    }
+
+    const notifIds = getDeletedNotifIds();
+    if (notifId && !notifIds.includes(notifId)) {
+      notifIds.push(notifId);
+      localStorage.setItem(DELETED_NOTIFS_STORAGE_KEY, JSON.stringify(notifIds));
+    }
+
+    if (inviteId) {
+      const invIds = getDeletedInviteIds();
+      if (!invIds.includes(inviteId)) {
+        invIds.push(inviteId);
+        localStorage.setItem(DELETED_INVITES_STORAGE_KEY, JSON.stringify(invIds));
+      }
+    }
+
+    try {
+      const rawInv = localStorage.getItem('uda_brand_invitations');
+      if (rawInv) {
+        const invList = JSON.parse(rawInv);
+        const updatedInv = invList.map((item: any) => {
+          if (
+            (inviteId && item.id === inviteId) ||
+            (brandId && targetEmail && item.brand_id === brandId && item.target_email?.toLowerCase() === targetEmail.toLowerCase())
+          ) {
+            return { ...item, status: 'cancelled' };
+          }
+          return item;
+        });
+        localStorage.setItem('uda_brand_invitations', JSON.stringify(updatedInv));
+      }
+    } catch {}
+
+    if (inviteId || (brandId && (targetEmail || targetUserId))) {
+      fetch('/api/invitations', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reject',
+          inviteId,
+          brandId,
+          userEmail: targetEmail,
+          userId: targetUserId,
+        }),
+      }).catch(() => {});
+    }
+  } catch {}
+}
 
 export function getStoredNotifications(userEmail?: string, userId?: string): DummyNotification[] {
   if (typeof window === 'undefined') return [];
@@ -10,8 +104,9 @@ export function getStoredNotifications(userEmail?: string, userId?: string): Dum
     const raw = localStorage.getItem(NOTIF_STORAGE_KEY);
     if (!raw) return [];
     const custom: DummyNotification[] = JSON.parse(raw);
+    const deletedIds = getDeletedNotifIds();
     const list = (Array.isArray(custom) ? custom : []).filter(
-      (n: any) => n && !['notif-1', 'notif-2', 'notif-3', 'notif-4', 'notif-5'].includes(n.id)
+      (n: any) => n && !['notif-1', 'notif-2', 'notif-3', 'notif-4', 'notif-5'].includes(n.id) && !deletedIds.includes(n.id)
     );
 
     // Resolve current user email & ID if not provided directly
@@ -238,6 +333,8 @@ export async function syncServerInvitations(userEmail?: string, userId?: string)
 
     let hasNew = false;
     const updatedList = [...rawAll];
+    const deletedNotifIds = getDeletedNotifIds();
+    const deletedInviteIds = getDeletedInviteIds();
 
     for (const inv of data.invitations) {
       const inviteTargetEmail = (inv.target_email || inv.email || '').trim().toLowerCase();
@@ -248,6 +345,22 @@ export async function syncServerInvitations(userEmail?: string, userId?: string)
         (cleanId && inviteTargetId === cleanId);
 
       if (!matchesUser) continue;
+
+      // Cek apakah undangan ini atau notifikasinya telah dihapus oleh pengguna
+      const notifId = `notif-inv-${inv.id || ''}`;
+      const isAlreadyDeleted =
+        deletedInviteIds.includes(inv.id) ||
+        (inv.token && deletedInviteIds.includes(inv.token)) ||
+        deletedNotifIds.includes(notifId);
+
+      if (isAlreadyDeleted) {
+        continue;
+      }
+
+      // Jangan tampilkan jika status undangan sudah bukan pending
+      if (inv.status && inv.status !== 'pending') {
+        continue;
+      }
 
       const existingIdx = updatedList.findIndex(
         (n) =>
@@ -271,7 +384,6 @@ export async function syncServerInvitations(userEmail?: string, userId?: string)
           hasNew = true;
         }
       } else if (inv.status === 'pending') {
-        const notifId = `notif-inv-${inv.id || Date.now()}`;
         const newNotif: DummyNotification = {
           id: notifId,
           type: 'team_invite',
@@ -351,7 +463,10 @@ export function clearNotificationsByDuration(
 
       if (!isForThisUser) return true; // Simpan notifikasi akun lain
 
-      if (duration === 'all') return false; // Hapus semua
+      if (duration === 'all') {
+        recordDeletedNotification(n);
+        return false; // Hapus semua
+      }
 
       // Cek umur notifikasi
       let notifTime = 0;
@@ -373,6 +488,7 @@ export function clearNotificationsByDuration(
       const diff = now - notifTime;
       // Jika notifikasi dibuat dalam rentang waktu yang dipilih, maka dihapus
       if (diff <= maxAgeMs) {
+        recordDeletedNotification(n);
         return false;
       }
 
@@ -403,9 +519,15 @@ export function clearAllNotifications(userEmail?: string, userId?: string): Dumm
       const inviteTargetEmail = (n.target_email || n.invite_data?.target_email)?.trim().toLowerCase();
       const inviteTargetId = (n.target_user_id || n.invite_data?.target_user_id)?.trim();
 
-      if (targetEmail && inviteTargetEmail === targetEmail) return false;
-      if (targetId && inviteTargetId === targetId) return false;
-      if (!inviteTargetEmail && !inviteTargetId) return false; // Notifikasi umum juga dibersihkan
+      const isMatch =
+        (targetEmail && inviteTargetEmail === targetEmail) ||
+        (targetId && inviteTargetId === targetId) ||
+        (!inviteTargetEmail && !inviteTargetId);
+
+      if (isMatch) {
+        recordDeletedNotification(n);
+        return false;
+      }
       return true;
     });
 
@@ -425,6 +547,13 @@ export function deleteSingleNotification(notifId: string): DummyNotification[] {
     let rawAll: DummyNotification[] = [];
     const raw = localStorage.getItem(NOTIF_STORAGE_KEY);
     if (raw) rawAll = JSON.parse(raw);
+
+    const target = rawAll.find((n) => n.id === notifId);
+    if (target) {
+      recordDeletedNotification(target);
+    } else {
+      recordDeletedNotification(notifId);
+    }
 
     const remaining = rawAll.filter((n) => n.id !== notifId);
     saveStoredNotifications(remaining);

@@ -351,26 +351,141 @@ export async function PUT(req: NextRequest) {
           : i
       );
       saveBackupInvites(updated);
-    } else if (action === 'reject') {
-      if (admin && (inviteId || token)) {
+    } else if (action === 'reject' || action === 'delete' || action === 'dismiss') {
+      const cleanTargetEmail = (userEmail || '').trim().toLowerCase();
+      if (admin) {
         try {
-          let q: any = admin.from('invitations' as any).update({ status: 'cancelled' });
+          let q: any = (admin.from('invitations' as any) as any).update({ status: 'cancelled' });
           if (inviteId) {
-            q = q.eq('id', inviteId);
+            q = q.or(`id.eq.${inviteId},token.eq.${inviteId}`);
           } else if (token) {
             q = q.eq('token', token);
+          } else if (brandId && cleanTargetEmail) {
+            q = q.eq('brand_id', brandId).ilike('email', cleanTargetEmail);
           }
           await q;
-        } catch {}
+
+          // Hapus juga notifikasi undangan dari tabel notifications jika ada
+          if (userId) {
+            await (admin.from('notifications' as any) as any)
+              .delete()
+              .eq('user_id', userId)
+              .eq('type', 'team_invite');
+          }
+        } catch (err) {
+          console.warn('Cancel invite error in db:', err);
+        }
       }
 
       const all = loadBackupInvites();
-      const updated = all.map((i) =>
-        (inviteId && i.id === inviteId) || (token && (i.token === token || i.id === token))
-          ? { ...i, status: 'cancelled' }
-          : i
-      );
+      const updated = all.map((i) => {
+        const matchId = inviteId && (i.id === inviteId || i.token === inviteId);
+        const matchToken = token && (i.token === token || i.id === token);
+        const matchBrandAndUser =
+          brandId &&
+          i.brand_id === brandId &&
+          cleanTargetEmail &&
+          ((i.target_email || i.email)?.toLowerCase() === cleanTargetEmail);
+        const matchBrandAndUserId =
+          brandId && i.brand_id === brandId && userId && (i.target_user_id === userId || i.user_id === userId);
+
+        if (matchId || matchToken || matchBrandAndUser || matchBrandAndUserId) {
+          return { ...i, status: 'cancelled' };
+        }
+        return i;
+      });
       saveBackupInvites(updated);
+    } else if (action === 'leave' || action === 'remove_member') {
+      const admin = createAdminClient();
+      if (admin && (userId || userEmail)) {
+        try {
+          // 1. Dapatkan userId pasti jika hanya userEmail yang dikirim
+          let resolvedUserId = userId;
+          if (!resolvedUserId && userEmail) {
+            const { data: pUser } = await (admin.from('profiles' as any) as any)
+              .select('id')
+              .ilike('email', userEmail.trim().toLowerCase())
+              .maybeSingle();
+            if (pUser?.id) resolvedUserId = pUser.id;
+          }
+
+          // 2. Hapus record dari brand_members di database Supabase
+          if (resolvedUserId) {
+            let q: any = (admin.from('brand_members' as any) as any).delete().eq('user_id', resolvedUserId);
+            if (brandId) {
+              q = q.eq('brand_id', brandId);
+            }
+            await q;
+
+            // 3. Cek apakah pengguna masih terdaftar di brand lain sebagai anggota tim (non-owner)
+            const { data: remainingTeams } = await (admin.from('brand_members' as any) as any)
+              .select('id, brand_id')
+              .eq('user_id', resolvedUserId)
+              .neq('role', 'owner')
+              .limit(1);
+
+            const hasOtherTeam = remainingTeams && remainingTeams.length > 0;
+
+            // 4. Cek apakah pengguna memiliki pembayaran paket Team yang sah & berbayar
+            const { data: approvedTeamPayments } = await (admin.from('payments' as any) as any)
+              .select('id')
+              .eq('user_id', resolvedUserId)
+              .eq('plan_code', 'team')
+              .eq('status', 'approved')
+              .limit(1);
+
+            const hasPaidTeam = approvedTeamPayments && approvedTeamPayments.length > 0;
+
+            // Jika TIDAK ADA keanggotaan tim lain & BUKAN pembeli paket Team -> KEMBALIKAN KE FREE!
+            if (!hasOtherTeam && !hasPaidTeam) {
+              await (admin.from('accounts' as any) as any)
+                .update({
+                  plan_code: 'free',
+                  plan_until: null,
+                  role: 'user',
+                  updated_at: new Date().toISOString(),
+                })
+                .or(`user_id.eq.${resolvedUserId},id.eq.${resolvedUserId}`);
+
+              try {
+                await admin.auth.admin.updateUserById(resolvedUserId, {
+                  user_metadata: { plan_code: 'free' },
+                });
+              } catch (authErr) {
+                console.warn('Update user_metadata to free error:', authErr);
+              }
+            }
+          }
+
+          // 5. Update status di tabel invitations Supabase menjadi 'left'
+          let invQ: any = (admin.from('invitations' as any) as any).update({ status: 'left' });
+          if (brandId) {
+            invQ = invQ.eq('brand_id', brandId);
+          }
+          if (userEmail) {
+            invQ = invQ.ilike('email', userEmail.trim().toLowerCase());
+          }
+          await invQ;
+        } catch (dbErr) {
+          console.warn('Server API leave team error:', dbErr);
+        }
+      }
+
+      // 6. Update backup file server .server_invitations.json
+      const all = loadBackupInvites();
+      const updated = all.map((i) => {
+        const matchBrand = brandId ? i.brand_id === brandId : true;
+        const matchUser =
+          (userId && (i.target_user_id === userId || i.user_id === userId)) ||
+          (userEmail && (i.target_email || i.email)?.toLowerCase() === userEmail.trim().toLowerCase());
+        if (matchBrand && matchUser) {
+          return { ...i, status: 'left' };
+        }
+        return i;
+      });
+      saveBackupInvites(updated);
+
+      return NextResponse.json({ success: true, newPlan: 'free' });
     }
 
     return NextResponse.json({ success: true });
