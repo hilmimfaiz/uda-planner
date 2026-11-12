@@ -30,13 +30,13 @@ const brandTourSteps: TourStep[] = [
   {
     targetId: 'tour-brand-header',
     title: 'Manajemen Akun Brand',
-    description: 'Kelola seluruh workspace brand media sosial Anda di sini. Atur pilar konten dan undang anggota tim untuk berkolaborasi.',
+    description: 'Kelola seluruh workspace brand media sosial Anda di sini dan undang anggota tim untuk berkolaborasi.',
     placement: 'bottom',
   },
   {
     targetId: 'tour-brand-grid',
     title: 'Koleksi Kartu Brand',
-    description: 'Setiap brand memiliki warna identitas, logo, daftar pilar konten, serta jumlah postingan aktif tersendiri.',
+    description: 'Setiap brand memiliki warna identitas, logo, serta jumlah postingan aktif tersendiri.',
     placement: 'top',
   },
   {

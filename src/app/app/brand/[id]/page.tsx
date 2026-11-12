@@ -45,12 +45,12 @@ import { GuidedTour, TourStep } from '@/components/guided-tour';
 const brandDetailTourSteps: TourStep[] = [
   {
     title: 'Pengaturan Detail Brand',
-    description: 'Di sini Anda dapat mengelola identitas profil brand, pilar konten, serta kolaborasi tim kerja.',
+    description: 'Di sini Anda dapat mengelola identitas profil brand serta kolaborasi tim kerja.',
     placement: 'bottom',
   },
   {
-    title: 'Pilar Konten & Anggota Tim',
-    description: 'Atur kategori pilar konten brand Anda dan undang kolaborator seperti Editor, Reviewer, atau Viewer.',
+    title: 'Anggota Tim & Pengaturan Brand',
+    description: 'Undang kolaborator seperti Editor, Reviewer, atau Viewer, serta kelola alur review postingan.',
     placement: 'bottom',
   },
 ];
@@ -106,7 +106,7 @@ export default function PengaturanBrandDetailPage() {
   );
   const brand = currentBrand;
 
-  const [activeTab, setActiveTab] = useState<'profil' | 'pilar' | 'anggota' | 'pengaturan'>('profil');
+  const [activeTab, setActiveTab] = useState<'profil' | 'anggota' | 'pengaturan'>('profil');
   const [pillars, setPillars] = useState(DUMMY_PILLARS.filter((p) => p.brand_id === brand.id));
   const [members, setMembers] = useState<DummyMember[]>(DUMMY_MEMBERS);
   const [requireApproval, setRequireApproval] = useState(brand.require_approval);
@@ -1058,11 +1058,10 @@ export default function PengaturanBrandDetailPage() {
         </div>
       </div>
 
-      {/* 4 Tabs Sesuai PRD Bab 8 (Scroll horizontal halus di HP & Tablet) */}
+      {/* Tabs Pengaturan Brand (Scroll horizontal halus di HP & Tablet) */}
       <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #e2e8f0', paddingBottom: 10, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
         {[
           { id: 'profil', label: 'Profil Brand' },
-          { id: 'pilar', label: 'Pilar Konten' },
           { id: 'anggota', label: 'Anggota & Undangan' },
           { id: 'pengaturan', label: 'Pengaturan & Review' },
         ].map((tab) => (
@@ -1376,76 +1375,7 @@ export default function PengaturanBrandDetailPage() {
         </div>
       )}
 
-      {/* TAB 2: PILAR KONTEN */}
-      {activeTab === 'pilar' && (
-        <div className="uda-card" style={{ maxWidth: 640 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Daftar Pilar Konten</h3>
-              <p style={{ fontSize: '0.82rem', color: '#64748b' }}>Kategori tema komunikasi untuk postingan brand</p>
-            </div>
-            {userRole !== 'viewer' && (
-              <button
-                className="btn-uda btn-uda-primary btn-uda-sm"
-                onClick={async () => {
-                  const created = await ContentPillarService.createPillar({
-                    brandId: brand.id,
-                    name: `Pilar Baru ${pillars.length + 1}`,
-                    color: '#6366F1',
-                  });
-                  setPillars((prev) => [...prev, created]);
-                  showToast('Pilar baru ditambahkan');
-                }}
-              >
-                + Tambah Pilar
-              </button>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {pillars.map((pil) => (
-              <div
-                key={pil.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: 12,
-                  borderRadius: 8,
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ width: 14, height: 14, borderRadius: '50%', backgroundColor: pil.color }} />
-                  <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{pil.name}</span>
-                </div>
-                {userRole !== 'viewer' && (
-                  <button
-                    className="btn-uda btn-uda-secondary btn-uda-sm"
-                    title="Hapus Pilar"
-                    onClick={() => {
-                      confirmDelete({
-                        title: 'Hapus Pilar Konten?',
-                        message: `Apakah Anda yakin ingin menghapus pilar "${pil.name}"?`,
-                        onConfirm: async () => {
-                          await ContentPillarService.deletePillar(pil.id);
-                          setPillars((prev) => prev.filter((p) => p.id !== pil.id));
-                          showSuccess('Pilar Dihapus', `Pilar "${pil.name}" telah dihapus.`);
-                        },
-                      });
-                    }}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: ANGGOTA & UNDANGAN */}
+      {/* TAB 2: ANGGOTA & UNDANGAN */}
       {activeTab === 'anggota' && (
         <div className="uda-card" style={{ maxWidth: 740 }}>
           {/* Jika bukan Paket Tim dan belum ada kolaborator, tampilkan notice kunci & panduan */}
@@ -1837,7 +1767,7 @@ export default function PengaturanBrandDetailPage() {
           <div style={{ marginTop: 20, padding: 14, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: '0.8rem', color: '#475569' }}>
             <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>Tugas & Fungsi Masing-Masing Peran:</div>
             <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
-              <li><strong>Owner</strong>: Mengelola profil brand, undang & hapus anggota, pilar konten, alur persetujuan, dan hapus brand. Owner tidak dapat diturunkan.</li>
+              <li><strong>Owner</strong>: Mengelola profil brand, undang & hapus anggota, alur persetujuan, dan hapus brand. Owner tidak dapat diturunkan.</li>
               <li><strong>Editor</strong>: Membuat dan mengedit postingan konten, serta mengajukan review jika Wajib Review aktif.</li>
               <li><strong>Reviewer</strong>: Memeriksa draft konten, menyetujui jadwal tayang, atau memberikan catatan revisi internal.</li>
               <li><strong>Viewer</strong>: Hanya dapat melihat kalender, papan kanban, dan pratinjau grid tanpa izin modifikasi (read-only).</li>
@@ -1846,7 +1776,7 @@ export default function PengaturanBrandDetailPage() {
         </div>
       )}
 
-      {/* TAB 4: PENGATURAN & REVIEW */}
+      {/* TAB 3: PENGATURAN & REVIEW */}
       {activeTab === 'pengaturan' && (
         <div className="uda-card" style={{ maxWidth: 580, display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div>
