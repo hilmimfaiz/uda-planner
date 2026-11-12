@@ -530,14 +530,23 @@ button, input, select, textarea {
   text-decoration: none;
 }
 
-.btn-uda:hover {
+.btn-uda:hover:not(:disabled) {
   transform: translate(-1px, -1px);
   box-shadow: 4px 4px 0px var(--border-color);
 }
 
-.btn-uda:active {
+.btn-uda:active:not(:disabled) {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0px var(--border-color);
+}
+
+.btn-uda:disabled,
+.btn-uda[disabled] {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: 2px 2px 0px var(--border-color) !important;
+  pointer-events: auto !important;
 }
 
 .btn-uda-primary {

@@ -1654,7 +1654,10 @@ END:VCALENDAR`;
                     <button
                       className="btn-uda btn-uda-secondary btn-uda-sm"
                       style={{ flex: 1 }}
+                      disabled={isNew}
+                      title={isNew ? 'Postingan harus dibuat terlebih dahulu sebelum mengajukan review' : 'Minta review'}
                       onClick={() => {
+                        if (isNew) return;
                         setPost({ ...post, status: 'review' });
                         addAppNotification({
                           type: 'review_request',
@@ -1669,9 +1672,16 @@ END:VCALENDAR`;
                     <button
                       className="btn-uda btn-uda-primary btn-uda-sm"
                       style={{ flex: 1 }}
-                      disabled={userRole === 'editor'}
-                      title={userRole === 'editor' ? 'Hanya Reviewer atau Owner yang dapat menyetujui postingan' : 'Setujui postingan'}
+                      disabled={isNew || userRole === 'editor'}
+                      title={
+                        isNew
+                          ? 'Postingan harus dibuat terlebih dahulu sebelum disetujui'
+                          : userRole === 'editor'
+                          ? 'Hanya Reviewer atau Owner yang dapat menyetujui postingan'
+                          : 'Setujui postingan'
+                      }
                       onClick={() => {
+                        if (isNew) return;
                         setPost({ ...post, status: 'siap' });
                         addAppNotification({
                           type: 'approved',
@@ -1686,9 +1696,18 @@ END:VCALENDAR`;
                     <button
                       className="btn-uda btn-uda-danger btn-uda-sm"
                       style={{ flex: 1 }}
-                      disabled={userRole === 'editor'}
-                      title={userRole === 'editor' ? 'Hanya Reviewer atau Owner yang dapat meminta revisi' : 'Minta revisi'}
-                      onClick={() => setShowRevisionModal(true)}
+                      disabled={isNew || userRole === 'editor'}
+                      title={
+                        isNew
+                          ? 'Postingan harus dibuat terlebih dahulu sebelum meminta revisi'
+                          : userRole === 'editor'
+                          ? 'Hanya Reviewer atau Owner yang dapat meminta revisi'
+                          : 'Minta revisi'
+                      }
+                      onClick={() => {
+                        if (isNew) return;
+                        setShowRevisionModal(true);
+                      }}
                     >
                       Minta Revisi
                     </button>
@@ -1697,10 +1716,26 @@ END:VCALENDAR`;
 
                 <button
                   className="btn-uda btn-uda-primary"
-                  style={{ width: '100%', marginTop: 4, justifyContent: 'center' }}
-                  disabled={userRole === 'editor' && brand.require_approval && post.status !== 'siap'}
-                  title={userRole === 'editor' && brand.require_approval && post.status !== 'siap' ? 'Postingan harus disetujui Reviewer/Owner terlebih dahulu' : 'Tandai postingan sudah tayang'}
+                  style={{
+                    width: '100%',
+                    marginTop: 4,
+                    justifyContent: 'center',
+                    opacity: isNew || (userRole === 'editor' && brand.require_approval && post.status !== 'siap') ? 0.55 : 1,
+                    cursor: isNew || (userRole === 'editor' && brand.require_approval && post.status !== 'siap') ? 'not-allowed' : 'pointer',
+                  }}
+                  disabled={isNew || (userRole === 'editor' && brand.require_approval && post.status !== 'siap')}
+                  title={
+                    isNew
+                      ? 'Postingan harus dibuat dan disimpan terlebih dahulu sebelum menandai sudah tayang'
+                      : userRole === 'editor' && brand.require_approval && post.status !== 'siap'
+                      ? 'Postingan harus disetujui Reviewer/Owner terlebih dahulu'
+                      : 'Tandai postingan sudah tayang'
+                  }
                   onClick={() => {
+                    if (isNew) {
+                      showToast('⚠️ Silakan buat dan simpan postingan terlebih dahulu.');
+                      return;
+                    }
                     setPost({ ...post, status: 'terposting', posted_at: new Date().toISOString() });
                     addAppNotification({
                       type: 'approved',
@@ -1713,6 +1748,12 @@ END:VCALENDAR`;
                   <CheckCircle2 size={16} />
                   <span>Tandai Sudah Posting</span>
                 </button>
+
+                {isNew && (
+                  <p style={{ fontSize: '0.78rem', color: '#64748b', textAlign: 'center', margin: '4px 0 0 0', lineHeight: 1.4 }}>
+                    💡 Tombol ini akan aktif setelah postingan berhasil dibuat &amp; disimpan.
+                  </p>
+                )}
               </div>
             )}
           </div>
