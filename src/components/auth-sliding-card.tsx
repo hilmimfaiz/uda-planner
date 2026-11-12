@@ -30,7 +30,7 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
   const redirectPath = searchParams?.get('redirect') || '/app';
   const isVerified = searchParams?.get('verified') === 'true';
 
-  const { user, isAdmin, signIn, signUp, signOut } = useAuth();
+  const { user, account, isAdmin, signIn, signUp, signOut } = useAuth();
 
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
 
@@ -92,6 +92,13 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
 
+      // Tangani jika akun dinonaktifkan / dibekukan oleh admin
+      if (urlParams.get('suspended') === 'true') {
+        window.history.replaceState({}, '', window.location.pathname);
+        setLoginError('Akun Anda telah dinonaktifkan (dibekukan) oleh Administrator. Silakan hubungi admin untuk mengaktifkan kembali akun Anda.');
+        return;
+      }
+
       // Tangani kasus user klik "Login dengan Google" tapi email Google belum pernah terdaftar
       if (urlParams.get('unregistered_google') === 'true') {
         const emailParam = urlParams.get('email') || '';
@@ -126,6 +133,19 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
         isAdmin ||
         userEmail === 'admin@udaplanner.id' ||
         userEmail.startsWith('admin@');
+
+      if (!userIsAdmin && (
+        account?.is_suspended === true ||
+        user.user_metadata?.is_suspended === true ||
+        (typeof window !== 'undefined' && (
+          localStorage.getItem('uda_suspended_' + userEmail) === 'true' ||
+          localStorage.getItem('uda_suspended_' + user.id) === 'true'
+        ))
+      )) {
+        signOut();
+        setLoginError('Akun Anda telah dinonaktifkan (dibekukan) oleh Administrator. Silakan hubungi admin untuk mengaktifkan kembali akun Anda.');
+        return;
+      }
 
       if (userIsAdmin) {
         window.location.href = '/admin';
@@ -514,7 +534,11 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
               />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800, marginBottom: 2 }}>
-                  {loginError.includes('belum terdaftar') ? 'Akun Belum Terdaftar' : 'Gagal Masuk'}
+                  {loginError.includes('dibekukan') || loginError.includes('dinonaktifkan')
+                    ? 'Akun Dinonaktifkan'
+                    : loginError.includes('belum terdaftar')
+                    ? 'Akun Belum Terdaftar'
+                    : 'Gagal Masuk'}
                 </div>
                 <div style={{ fontWeight: 600 }}>{loginError}</div>
                 {loginError.includes('belum terdaftar') && (

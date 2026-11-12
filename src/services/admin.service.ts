@@ -1017,7 +1017,7 @@ export class AdminService {
                   brandsCount: 0,
                   postsCount: 0,
                   storageMb: 0,
-                  isSuspended: false,
+                  isSuspended: (vu as any).isSuspended ?? false,
                   createdAt: vu.registeredAt || 'Terbaru',
                   isEmailVerified: vu.isEmailVerified,
                   registrationStatus: vu.registrationStatus,
@@ -1274,20 +1274,46 @@ export class AdminService {
     return true;
   }
 
-  static async toggleUserSuspend(userIdOrAccountId: string, isSuspended: boolean): Promise<boolean> {
-    const supabase = createClient();
-    if (supabase) {
+  static async toggleUserSuspend(userIdOrAccountId: string, isSuspended: boolean, email?: string): Promise<boolean> {
+    const cleanEmail = email ? email.trim().toLowerCase() : undefined;
+
+    // Sinkronisasi state lokal instan
+    if (typeof window !== 'undefined') {
       try {
-        await (supabase.from('accounts' as any) as any)
-          .update({ is_suspended: isSuspended })
-          .or(`user_id.eq.${userIdOrAccountId},id.eq.${userIdOrAccountId}`);
-      } catch (err) {
-        console.warn('AdminService.toggleUserSuspend db error:', err);
-      }
+        if (cleanEmail) {
+          if (isSuspended) {
+            localStorage.setItem('uda_suspended_' + cleanEmail, 'true');
+          } else {
+            localStorage.removeItem('uda_suspended_' + cleanEmail);
+          }
+        }
+        if (userIdOrAccountId) {
+          if (isSuspended) {
+            localStorage.setItem('uda_suspended_' + userIdOrAccountId, 'true');
+          } else {
+            localStorage.removeItem('uda_suspended_' + userIdOrAccountId);
+          }
+        }
+
+        window.dispatchEvent(
+          new CustomEvent('uda_user_suspended', {
+            detail: {
+              userId: userIdOrAccountId,
+              email: cleanEmail,
+              isSuspended,
+            },
+          })
+        );
+        window.dispatchEvent(new Event('storage'));
+      } catch {}
     }
 
     const updater = (u: AdminUserItem) => {
-      if (u.id === userIdOrAccountId || u.userId === userIdOrAccountId) {
+      if (
+        u.id === userIdOrAccountId ||
+        u.userId === userIdOrAccountId ||
+        (cleanEmail && u.email?.toLowerCase().trim() === cleanEmail)
+      ) {
         return { ...u, isSuspended };
       }
       return u;
@@ -1296,6 +1322,30 @@ export class AdminService {
     localUsers = localUsers.map(updater);
     const currentStored = getAdminStorage<AdminUserItem[]>('uda_admin_users', localUsers);
     setAdminStorage('uda_admin_users', currentStored.map(updater));
+
+    // Panggil API PATCH admin users untuk ban auth supabase & update database tabel accounts
+    const supabase = createClient();
+    await Promise.allSettled([
+      fetch(`/api/admin/users/${userIdOrAccountId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isSuspended,
+          email: cleanEmail,
+        }),
+      }),
+      (async () => {
+        if (!supabase) return;
+        try {
+          await (supabase.from('accounts' as any) as any)
+            .update({ is_suspended: isSuspended })
+            .or(`user_id.eq.${userIdOrAccountId},id.eq.${userIdOrAccountId}`);
+        } catch (err) {
+          console.warn('AdminService.toggleUserSuspend db error:', err);
+        }
+      })(),
+    ]);
+
     return true;
   }
 

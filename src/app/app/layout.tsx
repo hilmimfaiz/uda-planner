@@ -14,6 +14,7 @@ import {
   CreditCard,
   User,
   Shield,
+  ShieldAlert,
   Bell,
   Plus,
   ChevronDown,
@@ -327,6 +328,159 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [account?.plan_code, user?.id, user?.email]);
 
   const effectivePlan = isTeamMember ? 'team' : (account?.plan_code || 'free');
+
+  // Blokir akses dashboard bagi pengguna yang telah dibekukan oleh Admin
+  const isSuspended =
+    !isAdmin &&
+    (account?.is_suspended === true ||
+      user?.user_metadata?.is_suspended === true ||
+      (typeof window !== 'undefined' &&
+        user?.email &&
+        localStorage.getItem('uda_suspended_' + user.email.toLowerCase().trim()) === 'true') ||
+      (typeof window !== 'undefined' &&
+        user?.id &&
+        localStorage.getItem('uda_suspended_' + user.id) === 'true'));
+
+  if (!isLoading && user && isSuspended) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          backgroundColor: '#f8fafc',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          fontFamily: 'Plus Jakarta Sans, sans-serif',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 520,
+            width: '100%',
+            backgroundColor: '#ffffff',
+            borderRadius: 16,
+            border: '2px solid #0f172a',
+            boxShadow: '6px 6px 0px #0f172a',
+            padding: '36px 32px',
+            textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              backgroundColor: '#fee2e2',
+              border: '2px solid #0f172a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              color: '#dc2626',
+            }}
+          >
+            <ShieldAlert size={36} strokeWidth={2.2} />
+          </div>
+
+          <span
+            style={{
+              display: 'inline-block',
+              padding: '4px 12px',
+              borderRadius: 20,
+              backgroundColor: '#fef2f2',
+              color: '#dc2626',
+              fontSize: '0.8rem',
+              fontWeight: 800,
+              border: '1.5px solid #dc2626',
+              marginBottom: 12,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}
+          >
+            Akses Ditangguhkan
+          </span>
+
+          <h2
+            style={{
+              fontSize: '1.45rem',
+              fontWeight: 800,
+              color: '#0f172a',
+              marginBottom: 12,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            Akun Anda Telah Dibekukan
+          </h2>
+
+          <p
+            style={{
+              fontSize: '0.92rem',
+              color: '#475569',
+              lineHeight: 1.6,
+              marginBottom: 20,
+            }}
+          >
+            Akses ke dashboard UdaPlanner untuk akun{' '}
+            <strong style={{ color: '#0f172a' }}>{user?.email || profile?.email || 'Anda'}</strong>{' '}
+            saat ini telah dinonaktifkan (dibekukan) oleh Administrator. Anda tidak dapat mengakses dashboard atau mengelola konten hingga akun diaktifkan kembali.
+          </p>
+
+          <div
+            style={{
+              padding: '14px 16px',
+              backgroundColor: '#f1f5f9',
+              borderRadius: 10,
+              border: '1.5px solid #cbd5e1',
+              fontSize: '0.82rem',
+              color: '#334155',
+              textAlign: 'left',
+              marginBottom: 24,
+              lineHeight: 1.5,
+            }}
+          >
+            💡 <strong>Ingin mengaktifkan kembali akun?</strong>
+            <br />
+            Silakan hubungi Administrator UdaPlanner melalui email resmi{' '}
+            <a
+              href="mailto:admin@udaplanner.id"
+              style={{ color: '#0284c7', fontWeight: 700, textDecoration: 'underline' }}
+            >
+              admin@udaplanner.id
+            </a>{' '}
+            atau hubungi pengelola akun tim Anda untuk mengaktifkan kembali akun ini.
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button
+              onClick={() => {
+                signOut();
+              }}
+              style={{
+                width: '100%',
+                padding: '12px 18px',
+                backgroundColor: '#0f172a',
+                color: '#ffffff',
+                border: '2px solid #0f172a',
+                borderRadius: 10,
+                fontWeight: 700,
+                fontSize: '0.92rem',
+                cursor: 'pointer',
+                boxShadow: '3px 3px 0px #0f172a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              <LogOut size={16} />
+              <span>Keluar dari Akun</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoading && user && isAdmin) {
     return (

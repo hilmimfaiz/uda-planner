@@ -315,7 +315,7 @@ export default function AdminPenggunaPage() {
       danger: !currentStatus,
       confirmText: currentStatus ? 'Ya, Aktifkan' : 'Ya, Tangguhkan',
       onConfirm: async () => {
-        await AdminService.toggleUserSuspend(target?.userId || id, !currentStatus);
+        await AdminService.toggleUserSuspend(target?.userId || id, !currentStatus, target?.email);
         setUsers((prev) =>
           prev.map((u) => (u.id === id ? { ...u, isSuspended: !currentStatus } : u))
         );

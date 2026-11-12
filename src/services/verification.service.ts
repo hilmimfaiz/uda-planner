@@ -15,6 +15,7 @@ export interface VerifiableUser {
   registrationStatus: RegistrationStatus;
   role: 'user' | 'admin';
   planCode: string;
+  isSuspended?: boolean;
   notes?: string;
   authMethod?: 'google' | 'email';
   isGoogleUser?: boolean;

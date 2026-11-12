@@ -110,6 +110,7 @@ export async function GET() {
         registrationStatus,
         role: (acc?.role as 'user' | 'admin') || (emailLower === 'admin@udaplanner.id' ? 'admin' : 'user'),
         planCode: acc?.plan_code || 'free',
+        isSuspended: !!acc?.is_suspended || !!u.user_metadata?.is_suspended || !!(u as any).banned_until,
         authMethod: isGoogleUser ? 'google' : 'email',
         isGoogleUser: !!isGoogleUser,
         notes: isGoogleUser

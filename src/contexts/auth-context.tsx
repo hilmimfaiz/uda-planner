@@ -295,6 +295,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      const isSuspendedAccount =
+        !isEmailAdmin &&
+        (!!accRes.data?.is_suspended ||
+          currentUser.user_metadata?.is_suspended === true ||
+          (typeof window !== 'undefined' &&
+            (localStorage.getItem('uda_suspended_' + emailLower) === 'true' ||
+              localStorage.getItem('uda_suspended_' + currentUser.id) === 'true')));
+
       if (accRes.data) {
         // Jika di DB tercatat 'team' namun plan_until kosong dan tidak ada pembayaran 'team',
         // itu adalah efek bug brand_members owner lama -> abaikan dan anggap 'free'
@@ -449,7 +457,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           role: resolvedRole,
           plan_code: resolvedPlan,
           plan_until: resolvedUntil,
-          is_suspended: !!accRes.data.is_suspended,
+          is_suspended: isSuspendedAccount,
         };
       } else {
         let fallbackPlan = isExplicitlyFree
@@ -574,13 +582,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           role: (createdAcc.role as 'user' | 'admin') || resolvedRole,
           plan_code: createdAcc.plan_code || fallbackPlan,
           plan_until: createdAcc.plan_until || fallbackUntil,
-          is_suspended: !!createdAcc.is_suspended,
+          is_suspended: isSuspendedAccount,
         } : {
           id: currentUser.id,
           user_id: currentUser.id,
           role: resolvedRole,
           plan_code: fallbackPlan,
           plan_until: fallbackUntil,
+          is_suspended: isSuspendedAccount,
         };
       }
       setAccount(finalAccount);
@@ -717,14 +726,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {}
     };
 
+    const handleUserSuspendedSync = (e?: any) => {
+      try {
+        const detail = e?.detail;
+        if (!detail) return;
+        const authUser = user || (localStorage.getItem('uda_auth_user') ? JSON.parse(localStorage.getItem('uda_auth_user')!) : null);
+        const emailLower = (authUser?.email || '').toLowerCase().trim();
+        if (emailLower === 'admin@udaplanner.id') return;
+
+        const isTarget =
+          (detail.userId && authUser?.id === detail.userId) ||
+          (detail.email && emailLower === detail.email.toLowerCase().trim());
+
+        if (isTarget) {
+          setAccount((prev) => (prev ? { ...prev, is_suspended: !!detail.isSuspended } : null));
+        }
+      } catch {}
+    };
+
     window.addEventListener('storage', handleAccountSync);
     window.addEventListener('uda_account_updated', handleAccountSync);
+    window.addEventListener('uda_user_suspended', handleUserSuspendedSync);
 
     return () => {
       clearTimeout(safetyTimeout);
       subscription.unsubscribe();
       window.removeEventListener('storage', handleAccountSync);
       window.removeEventListener('uda_account_updated', handleAccountSync);
+      window.removeEventListener('uda_user_suspended', handleUserSuspendedSync);
     };
   }, []);
 
@@ -736,6 +765,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const cleanEmail = email.trim().toLowerCase();
       const isAdminEmail = cleanEmail === 'admin@udaplanner.id';
+
+      const SUSPENDED_ERROR_MSG =
+        'Akun Anda telah dinonaktifkan (dibekukan) oleh Administrator. Silakan hubungi admin untuk mengaktifkan kembali akun Anda.';
+
+      const checkAccountSuspended = async (targetEmail: string, targetUserId?: string): Promise<boolean> => {
+        if (targetEmail === 'admin@udaplanner.id') return false;
+
+        if (typeof window !== 'undefined') {
+          try {
+            if (localStorage.getItem('uda_suspended_' + targetEmail) === 'true') return true;
+            if (targetUserId && localStorage.getItem('uda_suspended_' + targetUserId) === 'true') return true;
+            const rawAdminUsers = localStorage.getItem('uda_admin_users');
+            if (rawAdminUsers) {
+              const adminUsers = JSON.parse(rawAdminUsers);
+              const found = adminUsers.find((u: any) =>
+                (u.email && u.email.toLowerCase().trim() === targetEmail) ||
+                (targetUserId && (u.id === targetUserId || u.userId === targetUserId))
+              );
+              if (found && found.isSuspended === true) return true;
+            }
+          } catch {}
+        }
+
+        if (supabase) {
+          try {
+            let query = (supabase.from('accounts' as any) as any).select('is_suspended');
+            if (targetUserId) {
+              query = query.or(`user_id.eq.${targetUserId},id.eq.${targetUserId}`);
+            } else {
+              query = query.ilike('email', targetEmail);
+            }
+            const { data: accCheck } = await query.limit(1).maybeSingle();
+            if (accCheck && accCheck.is_suspended === true) return true;
+          } catch {}
+        }
+
+        return false;
+      };
+
+      const clearSuspendedSession = async () => {
+        try {
+          await supabase.auth.signOut();
+        } catch {}
+        setUser(null);
+        setSession(null);
+        setProfile(null);
+        setAccount(null);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem('uda_auth_user');
+            localStorage.removeItem('uda_auth_profile');
+            localStorage.removeItem('uda_auth_account');
+            if (typeof document !== 'undefined') {
+              document.cookie = 'uda_auth_token=; path=/; max-age=0; SameSite=Lax';
+            }
+          } catch {}
+        }
+      };
+
+      if (!isAdminEmail && (await checkAccountSuspended(cleanEmail))) {
+        await clearSuspendedSession();
+        return { error: SUSPENDED_ERROR_MSG };
+      }
 
       // Validasi ketat khusus akun admin melalui endpoint verifikasi password server
       let adminLoginSuccess = false;
@@ -811,6 +903,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (error) {
+        if (
+          error.message.toLowerCase().includes('banned') ||
+          error.message.toLowerCase().includes('suspended')
+        ) {
+          await clearSuspendedSession();
+          return { error: SUSPENDED_ERROR_MSG };
+        }
         if (error.message.includes('Invalid login credentials') || error.code === 'invalid_credentials') {
           return { error: 'Email atau kata sandi salah. Pastikan akun sudah terdaftar di UdaPlanner.' };
         }
@@ -840,6 +939,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
 
             if (!retryRes.error && retryRes.data?.user) {
+              if (
+                !isAdminEmail &&
+                (retryRes.data.user.user_metadata?.is_suspended === true ||
+                  (await checkAccountSuspended(cleanEmail, retryRes.data.user.id)))
+              ) {
+                await clearSuspendedSession();
+                return { error: SUSPENDED_ERROR_MSG };
+              }
               setUser(retryRes.data.user);
               setSession(retryRes.data.session);
               try {
@@ -864,6 +971,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             const storedUsers = await VerificationService.getVerifiableUsers();
             const matched = storedUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+
+            if (!isAdminEmail && (await checkAccountSuspended(cleanEmail, matched?.userId || matched?.id))) {
+              await clearSuspendedSession();
+              return { error: SUSPENDED_ERROR_MSG };
+            }
 
             const manualUser: any = {
               id: matched?.userId || matched?.id || `usr-${Date.now()}`,
@@ -906,6 +1018,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: 'Gagal mengotentikasi pengguna.' };
       }
 
+      if (
+        !isAdminEmail &&
+        (data.user.user_metadata?.is_suspended === true ||
+          (await checkAccountSuspended(cleanEmail, data.user.id)))
+      ) {
+        await clearSuspendedSession();
+        return { error: SUSPENDED_ERROR_MSG };
+      }
+
       setUser(data.user);
       setSession(data.session);
       try {
@@ -913,6 +1034,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (e) {}
 
       const loaded = await loadUserData(data.user);
+
+      if (!isAdminEmail && loaded?.account?.is_suspended === true) {
+        await clearSuspendedSession();
+        return { error: SUSPENDED_ERROR_MSG };
+      }
 
       const isUserAdmin =
         loaded?.account?.role === 'admin' ||

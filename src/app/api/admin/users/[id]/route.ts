@@ -7,6 +7,9 @@ interface RouteParams {
   };
 }
 
+const isUuid = (val?: string | null) =>
+  !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
   try {
     const targetUserId = params.id;
@@ -38,9 +41,6 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
         { status: 403 }
       );
     }
-
-    const isUuid = (val?: string | null) =>
-      !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
     // 1. Coba hapus akun dari Supabase Auth jika Service Role Key tersedia
     const adminClient = createAdminClient();
@@ -147,6 +147,32 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const serverClient = createServerClient();
     const db = adminClient || serverClient;
 
+    if (adminClient && typeof isSuspended === 'boolean') {
+      try {
+        let authUserId = isUuid(targetUserId) ? targetUserId : null;
+        if (!authUserId) {
+          const { data: listData } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+          const matchUser = ((listData as any)?.users || []).find(
+            (u: any) =>
+              u.id === targetUserId ||
+              (email && u.email?.toLowerCase().trim() === email.toLowerCase().trim())
+          );
+          if (matchUser) {
+            authUserId = matchUser.id;
+          }
+        }
+
+        if (authUserId) {
+          await adminClient.auth.admin.updateUserById(authUserId, {
+            user_metadata: { is_suspended: isSuspended },
+            ban_duration: isSuspended ? '876000h' : 'none',
+          });
+        }
+      } catch (authErr: any) {
+        console.warn('Auth admin ban/suspend warning:', authErr.message);
+      }
+    }
+
     if (db) {
       const updatePayload: any = { updated_at: new Date().toISOString() };
       if (plan) updatePayload.plan_code = plan;
@@ -159,7 +185,11 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
           .or(`user_id.eq.${targetUserId},id.eq.${targetUserId}`);
 
         if (email) {
-          const { data: prof } = await db.from('profiles' as any).select('id').eq('email', email).maybeSingle();
+          await (db.from('accounts' as any) as any)
+            .update(updatePayload)
+            .ilike('email', email.trim());
+
+          const { data: prof } = await db.from('profiles' as any).select('id').ilike('email', email.trim()).maybeSingle();
           if (prof && (prof as any).id) {
             await (db.from('accounts' as any) as any)
               .update(updatePayload)
