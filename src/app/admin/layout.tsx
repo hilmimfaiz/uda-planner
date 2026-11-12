@@ -51,8 +51,21 @@ export default function AdminLayout({
   // Sinkronisasi Nama Lengkap Admin dari Profile / Auth / Event Realtime
   useEffect(() => {
     const resolveAdminName = () => {
+      // 1. Prioritaskan nama kustom admin yang tersimpan di localStorage
+      try {
+        const customAdminName = localStorage.getItem('uda_admin_full_name');
+        if (customAdminName && customAdminName.trim()) {
+          return customAdminName.trim();
+        }
+      } catch {}
+
+      // 2. Cek profile di auth context
       if (profile?.full_name?.trim()) return profile.full_name.trim();
+
+      // 3. Cek user metadata
       if (user?.user_metadata?.full_name?.trim()) return user.user_metadata.full_name.trim();
+
+      // 4. Cek cache profile & user di local storage
       try {
         const rawProf = localStorage.getItem('uda_auth_profile');
         if (rawProf) {
@@ -65,6 +78,7 @@ export default function AdminLayout({
           if (u?.user_metadata?.full_name?.trim()) return u.user_metadata.full_name.trim();
         }
       } catch {}
+
       if (user?.email) {
         if (user.email.toLowerCase() === 'admin@udaplanner.id' || user.email.toLowerCase() === 'admin@udaplanner.com') {
           return 'Administrator UdaPlanner';
@@ -77,20 +91,23 @@ export default function AdminLayout({
     setAdminFullName(resolveAdminName());
 
     const handleUpdate = (e?: any) => {
-      if (e?.detail?.full_name) {
-        setAdminFullName(e.detail.full_name);
+      const updatedName = e?.detail?.full_name || e?.detail?.name;
+      if (updatedName && typeof updatedName === 'string' && updatedName.trim()) {
+        setAdminFullName(updatedName.trim());
       } else {
         setAdminFullName(resolveAdminName());
       }
     };
 
     window.addEventListener('uda_account_updated', handleUpdate);
+    window.addEventListener('uda_profile_updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
     return () => {
       window.removeEventListener('uda_account_updated', handleUpdate);
+      window.removeEventListener('uda_profile_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
     };
-  }, [profile, user]);
+  }, [profile?.full_name, user?.user_metadata?.full_name]);
 
   // Format Ucapan Salam Waktu (Pagi / Siang / Sore / Malam)
   const currentHour = currentTime ? currentTime.getHours() : new Date().getHours();

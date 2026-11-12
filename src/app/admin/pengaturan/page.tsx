@@ -26,7 +26,7 @@ import { useAuth } from '@/contexts/auth-context';
 
 export default function AdminPengaturanPage() {
   const { showSuccess, showError } = useModal();
-  const { user } = useAuth();
+  const { user, profile, refreshUserData } = useAuth();
 
   // State Kontak WhatsApp
   const [adminWhatsapp, setAdminWhatsapp] = useState('6281234567890');
@@ -55,20 +55,25 @@ export default function AdminPengaturanPage() {
       }
     });
 
-    if (user?.user_metadata?.full_name) {
-      setAdminFullName(user.user_metadata.full_name);
-    } else {
-      try {
+    try {
+      const customName = localStorage.getItem('uda_admin_full_name');
+      if (customName && customName.trim()) {
+        setAdminFullName(customName.trim());
+      } else if (profile?.full_name?.trim()) {
+        setAdminFullName(profile.full_name.trim());
+      } else if (user?.user_metadata?.full_name?.trim()) {
+        setAdminFullName(user.user_metadata.full_name.trim());
+      } else {
         const stored = localStorage.getItem('uda_auth_user');
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (parsed?.user_metadata?.full_name) {
-            setAdminFullName(parsed.user_metadata.full_name);
+          if (parsed?.user_metadata?.full_name?.trim()) {
+            setAdminFullName(parsed.user_metadata.full_name.trim());
           }
         }
-      } catch {}
-    }
-  }, [user]);
+      }
+    } catch (e) {}
+  }, [user, profile]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -85,6 +90,46 @@ export default function AdminPengaturanPage() {
 
     setIsSavingName(true);
     try {
+      // 1. Simpan langsung ke localStorage agar sinkron seketika di seluruh halaman
+      try {
+        localStorage.setItem('uda_admin_full_name', cleanName);
+        const stored = localStorage.getItem('uda_auth_user');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          parsed.user_metadata = {
+            ...(parsed.user_metadata || {}),
+            full_name: cleanName,
+          };
+          localStorage.setItem('uda_auth_user', JSON.stringify(parsed));
+        }
+        const storedProf = localStorage.getItem('uda_auth_profile');
+        if (storedProf) {
+          const parsedProf = JSON.parse(storedProf);
+          parsedProf.full_name = cleanName;
+          localStorage.setItem('uda_auth_profile', JSON.stringify(parsedProf));
+        }
+
+        // Perbarui juga di daftar pengguna admin (uda_admin_users)
+        const rawUsers = localStorage.getItem('uda_admin_users');
+        if (rawUsers) {
+          const uList = JSON.parse(rawUsers);
+          const updatedUList = uList.map((u: any) => {
+            const em = (u.email || '').toLowerCase().trim();
+            if (em === 'admin@udaplanner.id' || em.startsWith('admin@') || u.role === 'admin' || u.role === 'Admin') {
+              return { ...u, name: cleanName };
+            }
+            return u;
+          });
+          localStorage.setItem('uda_admin_users', JSON.stringify(updatedUList));
+        }
+      } catch (e) {}
+
+      // 2. Dispatch custom event agar header admin dan auth context langsung sinkron seketika
+      window.dispatchEvent(new CustomEvent('uda_account_updated', { detail: { full_name: cleanName, name: cleanName } }));
+      window.dispatchEvent(new CustomEvent('uda_profile_updated', { detail: { full_name: cleanName, name: cleanName } }));
+      window.dispatchEvent(new Event('storage'));
+
+      // 3. Panggil API server untuk persistensi database Supabase
       const res = await fetch('/api/admin/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -101,25 +146,9 @@ export default function AdminPengaturanPage() {
         return;
       }
 
-      // Update auth user di localStorage dan event listener
-      try {
-        const stored = localStorage.getItem('uda_auth_user');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          parsed.user_metadata = {
-            ...(parsed.user_metadata || {}),
-            full_name: cleanName,
-          };
-          localStorage.setItem('uda_auth_user', JSON.stringify(parsed));
-        }
-        const storedProf = localStorage.getItem('uda_auth_profile');
-        if (storedProf) {
-          const parsedProf = JSON.parse(storedProf);
-          parsedProf.full_name = cleanName;
-          localStorage.setItem('uda_auth_profile', JSON.stringify(parsedProf));
-        }
-        window.dispatchEvent(new CustomEvent('uda_account_updated', { detail: { full_name: cleanName } }));
-      } catch (e) {}
+      if (refreshUserData) {
+        refreshUserData().catch(() => {});
+      }
 
       showSuccess(
         'Nama Lengkap Berhasil Disimpan!',

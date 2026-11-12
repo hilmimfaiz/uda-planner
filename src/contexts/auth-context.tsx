@@ -73,11 +73,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       emailLower === 'admin@udaplanner.id' ||
       currentUser.user_metadata?.role === 'admin';
 
+    let adminCustomName: string | null = null;
+    if (typeof window !== 'undefined') {
+      try {
+        adminCustomName = localStorage.getItem('uda_admin_full_name');
+      } catch (e) {}
+    }
+
     // Set fallback instan dari metadata jika profile/account belum terisi
     setProfile((prev) => prev || {
       id: currentUser.id,
       email: currentUser.email || '',
-      full_name: currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'Pengguna UdaPlanner',
+      full_name: isEmailAdmin
+        ? (adminCustomName || currentUser.user_metadata?.full_name || 'Administrator UdaPlanner')
+        : (currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'Pengguna UdaPlanner'),
       reminder_minutes: 15,
     });
     setAccount((prev) => prev || {
@@ -152,7 +161,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         finalProfile = {
           id: profRes.data.id,
           email: profRes.data.email || currentUser.email || '',
-          full_name: profRes.data.full_name || googleFullName || 'Pengguna UdaPlanner',
+          full_name: isEmailAdmin
+            ? (adminCustomName || profRes.data.full_name || googleFullName || 'Administrator UdaPlanner')
+            : (profRes.data.full_name || googleFullName || 'Pengguna UdaPlanner'),
           avatar_url: resolvedAvatar,
           phone: profRes.data.phone || localPhone || currentUser.phone || null,
           reminder_minutes: profRes.data.reminder_minutes ?? 15,
@@ -166,7 +177,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const newProfile = {
           id: currentUser.id,
           email: currentUser.email || '',
-          full_name: googleFullName || currentUser.email?.split('@')[0] || 'Pengguna UdaPlanner',
+          full_name: isEmailAdmin
+            ? (adminCustomName || googleFullName || 'Administrator UdaPlanner')
+            : (googleFullName || currentUser.email?.split('@')[0] || 'Pengguna UdaPlanner'),
           avatar_url: resolvedAvatar || null,
           phone: localPhone || currentUser.phone || null,
           reminder_minutes: 15,
@@ -744,8 +757,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {}
     };
 
+    const handleProfileNameSync = (e?: any) => {
+      try {
+        const newName = e?.detail?.full_name || e?.detail?.name;
+        if (newName && typeof newName === 'string' && newName.trim()) {
+          const clean = newName.trim();
+          setProfile((prev) => (prev ? { ...prev, full_name: clean } : null));
+          setUser((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              user_metadata: {
+                ...(prev.user_metadata || {}),
+                full_name: clean,
+              },
+            };
+          });
+        }
+      } catch (err) {}
+    };
+
     window.addEventListener('storage', handleAccountSync);
     window.addEventListener('uda_account_updated', handleAccountSync);
+    window.addEventListener('uda_account_updated', handleProfileNameSync);
+    window.addEventListener('uda_profile_updated', handleProfileNameSync);
     window.addEventListener('uda_user_suspended', handleUserSuspendedSync);
 
     return () => {
@@ -753,6 +788,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe();
       window.removeEventListener('storage', handleAccountSync);
       window.removeEventListener('uda_account_updated', handleAccountSync);
+      window.removeEventListener('uda_account_updated', handleProfileNameSync);
+      window.removeEventListener('uda_profile_updated', handleProfileNameSync);
       window.removeEventListener('uda_user_suspended', handleUserSuspendedSync);
     };
   }, []);

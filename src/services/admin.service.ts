@@ -932,10 +932,11 @@ export class AdminService {
             const finalPlan: 'free' | 'pro' | 'team' | 'admin' = isAdmin ? 'admin' : resolvedPlan;
             const finalPlanUntil: string | null = isAdmin ? null : formattedPlanUntil;
 
+            const customAdminName = typeof window !== 'undefined' ? localStorage.getItem('uda_admin_full_name') : null;
             return {
               id: a.id,
               userId: a.user_id,
-              name: prof.full_name || (isAdmin ? 'Administrator UdaPlanner' : 'Pengguna UdaPlanner'),
+              name: (isAdmin && customAdminName) ? customAdminName : (prof.full_name || (isAdmin ? 'Administrator UdaPlanner' : 'Pengguna UdaPlanner')),
               email: prof.email || 'user@udaplanner.id',
               avatarUrl: prof.avatar_url || localAvatar || null,
               phone: prof.phone || null,
@@ -1110,9 +1111,10 @@ export class AdminService {
           verified = true;
         }
 
+        const customAdminName = typeof window !== 'undefined' ? localStorage.getItem('uda_admin_full_name') : null;
         return {
           ...u,
-          name: isAdmin ? (u.name || 'Administrator UdaPlanner') : u.name,
+          name: isAdmin ? (customAdminName || u.name || 'Administrator UdaPlanner') : u.name,
           role: role as any,
           plan,
           planUntil,

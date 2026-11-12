@@ -39,19 +39,30 @@ export async function POST(req: NextRequest) {
             .eq('email', cleanEmail);
         }
 
-        // 2. Update di Supabase Auth user_metadata
+        // 2. Cari target ID autentikasi pengguna jika userId belum berupa UUID auth
         let targetId = userId;
-        if (!targetId && cleanEmail) {
-          const { data: usersData } = await adminClient.auth.admin.listUsers();
+        const isUuid = (val?: string | null) =>
+          !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+        if (!isUuid(targetId) && cleanEmail) {
+          const { data: usersData } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
           const match = ((usersData as any)?.users || []).find(
-            (u: any) => u.email?.toLowerCase() === cleanEmail
+            (u: any) => u.email?.toLowerCase().trim() === cleanEmail
           );
           if (match) {
             targetId = match.id;
           }
         }
 
-        if (targetId) {
+        if (targetId && isUuid(targetId)) {
+          await adminClient
+            .from('profiles')
+            .update({
+              full_name: cleanFullName,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', targetId);
+
           const { data: userData } = await adminClient.auth.admin.getUserById(targetId);
           await adminClient.auth.admin.updateUserById(targetId, {
             user_metadata: {
