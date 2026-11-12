@@ -96,22 +96,26 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const serverClient = createServerClient();
     const db = adminClient || serverClient;
 
-    if (adminClient && typeof isSuspended === 'boolean') {
+    let authUserId: string | null = null;
+    if (adminClient) {
       try {
-        let authUserId = isUuid(targetUserId) ? targetUserId : null;
-        if (!authUserId) {
-          const { data: listData } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
-          const matchUser = ((listData as any)?.users || []).find(
-            (u: any) =>
-              u.id === targetUserId ||
-              (email && u.email?.toLowerCase().trim() === email.toLowerCase().trim())
-          );
-          if (matchUser) {
-            authUserId = matchUser.id;
+        const { data: listData } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+        const users = (listData as any)?.users || [];
+        const matchUser = users.find(
+          (u: any) =>
+            (email && u.email?.toLowerCase().trim() === email.toLowerCase().trim()) ||
+            u.id === targetUserId
+        );
+        if (matchUser) {
+          authUserId = matchUser.id;
+        } else if (isUuid(targetUserId)) {
+          const { data: singleUser } = await adminClient.auth.admin.getUserById(targetUserId);
+          if (singleUser?.user) {
+            authUserId = singleUser.user.id;
           }
         }
 
-        if (authUserId) {
+        if (authUserId && typeof isSuspended === 'boolean') {
           await adminClient.auth.admin.updateUserById(authUserId, {
             user_metadata: { is_suspended: isSuspended },
             ban_duration: isSuspended ? '876000h' : 'none',
@@ -129,21 +133,25 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       if (typeof isSuspended === 'boolean') updatePayload.is_suspended = isSuspended;
 
       try {
-        await (db.from('accounts' as any) as any)
-          .update(updatePayload)
-          .or(`user_id.eq.${targetUserId},id.eq.${targetUserId}`);
+        const userIds = new Set<string>();
+        if (isUuid(targetUserId)) userIds.add(targetUserId);
+        if (authUserId) userIds.add(authUserId);
 
         if (email) {
+          const { data: prof } = await db
+            .from('profiles' as any)
+            .select('id')
+            .ilike('email', email.trim())
+            .maybeSingle();
+          if (prof && (prof as any).id) {
+            userIds.add((prof as any).id);
+          }
+        }
+
+        for (const uid of Array.from(userIds)) {
           await (db.from('accounts' as any) as any)
             .update(updatePayload)
-            .ilike('email', email.trim());
-
-          const { data: prof } = await db.from('profiles' as any).select('id').ilike('email', email.trim()).maybeSingle();
-          if (prof && (prof as any).id) {
-            await (db.from('accounts' as any) as any)
-              .update(updatePayload)
-              .or(`user_id.eq.${(prof as any).id},id.eq.${(prof as any).id}`);
-          }
+            .or(`user_id.eq.${uid},id.eq.${uid}`);
         }
       } catch (dbErr: any) {
         console.warn('API PATCH user warning:', dbErr.message);

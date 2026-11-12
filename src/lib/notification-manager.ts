@@ -211,30 +211,32 @@ export function getStoredNotifications(userEmail?: string, userId?: string): Dum
           if (!targetId && parsed.id) targetId = parsed.id.trim();
         }
       } catch {}
+      try {
+        const rawUser = localStorage.getItem('uda_auth_user');
+        if (rawUser) {
+          const parsedU = JSON.parse(rawUser);
+          if (!targetEmail && parsedU.email) targetEmail = parsedU.email.trim().toLowerCase();
+          if (!targetId && parsedU.id) targetId = parsedU.id.trim();
+        }
+      } catch {}
     }
 
-    // Filter: Undangan tim atau notifikasi terarah HANYA boleh tampil untuk user yang dituju!
+    // Filter ketat: Hanya tampilkan notifikasi yang benar-benar ditujukan untuk pengguna saat ini
     const filtered = list.filter((n: DummyNotification) => {
       const inviteTargetEmail = (n.target_email || n.invite_data?.target_email)?.trim().toLowerCase();
       const inviteTargetId = (n.target_user_id || n.invite_data?.target_user_id)?.trim();
 
-      const isTargeted = n.type === 'team_invite' || !!inviteTargetEmail || !!inviteTargetId;
-
-      if (isTargeted) {
-        if (!targetEmail && !targetId) {
-          // Jika belum ada user aktif yang terdeteksi, jangan tampilkan undangan privat
-          return false;
+      if (targetEmail || targetId) {
+        if (inviteTargetEmail || inviteTargetId) {
+          const emailMatches = !!(targetEmail && inviteTargetEmail && targetEmail === inviteTargetEmail);
+          const idMatches = !!(targetId && inviteTargetId && targetId === inviteTargetId);
+          return emailMatches || idMatches;
         }
-
-        const emailMatches = !!(targetEmail && inviteTargetEmail && targetEmail === inviteTargetEmail);
-        const idMatches = !!(targetId && inviteTargetId && targetId === inviteTargetId);
-
-        // Hanya tampil jika email atau user_id cocok dengan user yang dituju
-        return emailMatches || idMatches;
+        // Jangan pernah menampilkan notifikasi tanpa tag pemilik (orphan) ke pengguna baru
+        return false;
       }
 
-      // Notifikasi umum / broadcast sistem
-      return true;
+      return false;
     });
 
     // Perbarui label waktu (time_ago) secara real-time dan akurat
@@ -264,6 +266,29 @@ export function addAppNotification(payload: {
   target_user_id?: string;
   invite_data?: DummyNotification['invite_data'];
 }): DummyNotification {
+  let resolvedEmail = (payload.target_email || payload.invite_data?.target_email)?.trim().toLowerCase();
+  let resolvedUserId = (payload.target_user_id || payload.invite_data?.target_user_id)?.trim();
+
+  // Otomatis kaitkan notifikasi dengan pengguna yang sedang login saat ini
+  if (typeof window !== 'undefined' && (!resolvedEmail || !resolvedUserId)) {
+    try {
+      const rawProfile = localStorage.getItem('uda_auth_profile');
+      if (rawProfile) {
+        const parsed = JSON.parse(rawProfile);
+        if (!resolvedEmail && parsed.email) resolvedEmail = parsed.email.trim().toLowerCase();
+        if (!resolvedUserId && parsed.id) resolvedUserId = parsed.id.trim();
+      }
+      if (!resolvedEmail || !resolvedUserId) {
+        const rawUser = localStorage.getItem('uda_auth_user');
+        if (rawUser) {
+          const parsed = JSON.parse(rawUser);
+          if (!resolvedEmail && parsed.email) resolvedEmail = parsed.email.trim().toLowerCase();
+          if (!resolvedUserId && parsed.id) resolvedUserId = parsed.id.trim();
+        }
+      }
+    } catch {}
+  }
+
   const newNotif: DummyNotification = {
     id: `notif-${Date.now()}`,
     type: (payload.type || 'system') as any,
@@ -273,8 +298,8 @@ export function addAppNotification(payload: {
     is_read: false,
     time_ago: 'Baru saja',
     created_at: new Date().toISOString(),
-    target_email: payload.target_email || payload.invite_data?.target_email,
-    target_user_id: payload.target_user_id || payload.invite_data?.target_user_id,
+    target_email: resolvedEmail,
+    target_user_id: resolvedUserId,
     invite_data: payload.invite_data,
   };
 
@@ -288,13 +313,10 @@ export function addAppNotification(payload: {
   const updated = [newNotif, ...rawAll.filter((n) => n && n.id !== newNotif.id)];
   saveStoredNotifications(updated);
 
-  // Putar nada dering hanya jika ditujukan ke user saat ini atau notifikasi umum
+  // Putar nada dering hanya jika ditujukan ke user saat ini
   if (payload.playSound !== false) {
     let shouldPlaySound = true;
-    const targetEmail = (payload.target_email || payload.invite_data?.target_email)?.trim().toLowerCase();
-    const targetId = payload.target_user_id || payload.invite_data?.target_user_id;
-
-    if (targetEmail || targetId) {
+    if (resolvedEmail || resolvedUserId) {
       let myEmail = '';
       let myId = '';
       try {
@@ -306,7 +328,7 @@ export function addAppNotification(payload: {
         }
       } catch {}
 
-      const isMe = (myEmail && targetEmail && myEmail === targetEmail) || (myId && targetId && myId === targetId);
+      const isMe = (myEmail && resolvedEmail && myEmail === resolvedEmail) || (myId && resolvedUserId && myId === resolvedUserId);
       if (!isMe) {
         shouldPlaySound = false;
       }

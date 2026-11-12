@@ -31,6 +31,8 @@ export function purgeClientUserData(params: { userId?: string; email?: string })
           const nUserId = (n.target_user_id || n.invite_data?.target_user_id || n.user_id)?.trim();
           if (cleanEmail && nEmail === cleanEmail) return false;
           if (targetId && nUserId === targetId) return false;
+          // Hapus juga notifikasi orphan tanpa pemilik agar tidak mencemari akun baru
+          if (!nEmail && !nUserId) return false;
           return true;
         });
         localStorage.setItem('uda_custom_notifications', JSON.stringify(filtered));
@@ -243,19 +245,38 @@ export function purgeClientUserData(params: { userId?: string; email?: string })
     }
   } catch {}
 
-  // 9. Jika pengguna yang sedang aktif di browser ini adalah akun yang dihapus, bersihkan sesi auth lokal
+  // 9. Jika pengguna yang sedang aktif di browser ini adalah akun yang dihapus, bersihkan sesi auth lokal & tandai akun dihapus
   try {
     const rawAuth = localStorage.getItem('uda_auth_user');
+    let parsedAuth: any = null;
     if (rawAuth) {
-      const parsedAuth = JSON.parse(rawAuth);
-      if (
-        (cleanEmail && parsedAuth.email?.trim().toLowerCase() === cleanEmail) ||
-        (targetId && parsedAuth.id === targetId)
-      ) {
-        localStorage.removeItem('uda_auth_user');
-        localStorage.removeItem('uda_auth_profile');
-        localStorage.removeItem('uda_auth_account');
+      try { parsedAuth = JSON.parse(rawAuth); } catch {}
+    }
+    const rawProfile = localStorage.getItem('uda_auth_profile');
+    let parsedProf: any = null;
+    if (rawProfile) {
+      try { parsedProf = JSON.parse(rawProfile); } catch {}
+    }
+
+    const isMatch =
+      (cleanEmail && parsedAuth?.email?.trim().toLowerCase() === cleanEmail) ||
+      (targetId && parsedAuth?.id === targetId) ||
+      (cleanEmail && parsedProf?.email?.trim().toLowerCase() === cleanEmail) ||
+      (targetId && parsedProf?.id === targetId);
+
+    if (isMatch) {
+      localStorage.removeItem('uda_custom_notifications');
+      localStorage.removeItem('uda_deleted_notification_ids');
+      localStorage.removeItem('uda_deleted_invite_ids');
+      localStorage.removeItem('uda_auth_user');
+      localStorage.removeItem('uda_auth_profile');
+      localStorage.removeItem('uda_auth_account');
+      if (typeof document !== 'undefined') {
+        document.cookie = 'uda_auth_token=; path=/; max-age=0; SameSite=Lax';
+        document.cookie = 'uda_user_role=; path=/; max-age=0; SameSite=Lax';
       }
+      if (cleanEmail) localStorage.setItem('uda_account_deleted_' + cleanEmail, 'true');
+      if (targetId) localStorage.setItem('uda_account_deleted_' + targetId, 'true');
     }
   } catch {}
 

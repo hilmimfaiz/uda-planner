@@ -147,6 +147,15 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
         return;
       }
 
+      if (!userIsAdmin && typeof window !== 'undefined' && (
+        localStorage.getItem('uda_account_deleted_' + userEmail) === 'true' ||
+        localStorage.getItem('uda_account_deleted_' + user.id) === 'true'
+      )) {
+        signOut();
+        setLoginError('Akun Anda tidak tersedia atau telah dihapus dari sistem oleh Administrator.');
+        return;
+      }
+
       if (userIsAdmin) {
         window.location.href = '/admin';
       } else {

@@ -13,6 +13,8 @@ import {
   Building,
   CreditCard,
   User,
+  UserX,
+  LogIn,
   Shield,
   ShieldAlert,
   Bell,
@@ -46,7 +48,7 @@ import { PostService } from '@/services/post.service';
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, profile, account, isLoading, isAdmin, signOut } = useAuth();
+  const { user, profile, account, isLoading, isAdmin, signOut, isAccountDeleted } = useAuth();
 
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [notifications, setNotifications] = useState(DUMMY_NOTIFICATIONS);
@@ -336,6 +338,136 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [account?.plan_code, user?.id, user?.email]);
 
   const effectivePlan = isTeamMember ? 'team' : (account?.plan_code || 'free');
+
+  // Deteksi akun yang telah dihapus permanen oleh Admin
+  const isDeletedAccount =
+    !isAdmin &&
+    (isAccountDeleted ||
+      (typeof window !== 'undefined' &&
+        user?.email &&
+        localStorage.getItem('uda_account_deleted_' + user.email.toLowerCase().trim()) === 'true') ||
+      (typeof window !== 'undefined' &&
+        user?.id &&
+        localStorage.getItem('uda_account_deleted_' + user.id) === 'true'));
+
+  if (!isLoading && isDeletedAccount) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          backgroundColor: '#f8fafc',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          fontFamily: 'Plus Jakarta Sans, sans-serif',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 520,
+            width: '100%',
+            backgroundColor: '#ffffff',
+            borderRadius: 16,
+            border: '2px solid #0f172a',
+            boxShadow: '6px 6px 0px #0f172a',
+            padding: '36px 32px',
+            textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              backgroundColor: '#fee2e2',
+              border: '2px solid #0f172a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              color: '#dc2626',
+            }}
+          >
+            <UserX size={36} strokeWidth={2.2} />
+          </div>
+
+          <span
+            style={{
+              display: 'inline-block',
+              padding: '4px 12px',
+              borderRadius: 20,
+              backgroundColor: '#fef2f2',
+              color: '#dc2626',
+              fontSize: '0.8rem',
+              fontWeight: 800,
+              border: '1.5px solid #dc2626',
+              marginBottom: 12,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}
+          >
+            Akun Tidak Tersedia
+          </span>
+
+          <h2
+            style={{
+              fontSize: '1.45rem',
+              fontWeight: 800,
+              color: '#0f172a',
+              marginBottom: 12,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            Akun Tidak Tersedia
+          </h2>
+
+          <p
+            style={{
+              fontSize: '0.92rem',
+              color: '#475569',
+              lineHeight: 1.6,
+              marginBottom: 24,
+            }}
+          >
+            Akun Anda (<strong style={{ color: '#0f172a' }}>{user?.email || profile?.email || 'Pengguna'}</strong>) telah dihapus dari sistem oleh Administrator. Seluruh data dan hak akses akun ini sudah tidak tersedia lagi.
+          </p>
+
+          <button
+            onClick={() => signOut()}
+            style={{
+              width: '100%',
+              padding: '13px 20px',
+              backgroundColor: '#16a34a',
+              color: '#ffffff',
+              borderRadius: 12,
+              fontWeight: 700,
+              fontSize: '0.95rem',
+              border: '2px solid #0f172a',
+              boxShadow: '3px 3px 0px #0f172a',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translate(-2px, -2px)';
+              e.currentTarget.style.boxShadow = '5px 5px 0px #0f172a';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translate(0px, 0px)';
+              e.currentTarget.style.boxShadow = '3px 3px 0px #0f172a';
+            }}
+          >
+            <LogIn size={18} />
+            Beralih ke Halaman Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Blokir akses dashboard bagi pengguna yang telah dibekukan oleh Admin
   const isSuspended =

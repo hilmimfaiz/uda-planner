@@ -33,6 +33,7 @@ interface AuthContextType {
   account: UserAccount | null;
   isLoading: boolean;
   isAdmin: boolean;
+  isAccountDeleted: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null; isAdmin?: boolean; needsOnboarding?: boolean }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; requiresEmailConfirmation: boolean }>;
   signInWithGoogle: (targetPath?: string) => Promise<{ error: string | null }>;
@@ -49,6 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [account, setAccount] = useState<UserAccount | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAccountDeleted, setIsAccountDeleted] = useState(false);
 
   // Sync cache lokal hanya setelah komponen ter-mount di sisi client untuk mencegah Hydration Error (#418 & #423)
   useEffect(() => {
@@ -98,8 +100,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     try {
-      // Jalankan query profil, akun, dan pembayaran approved secara bersamaan (PARALLEL)
-      const [profRes, accRes, dbApprovedRes] = await Promise.all([
+      // Jalankan query status, profil, akun, dan pembayaran approved secara bersamaan (PARALLEL)
+      const [statusRes, profRes, accRes, dbApprovedRes] = await Promise.all([
+        fetch('/api/auth/check-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailLower, userId: currentUser.id }),
+        }).then((r) => r.json()).catch(() => null),
         (supabase.from('profiles' as any) as any)
           .select('*')
           .eq('id', currentUser.id)
@@ -116,6 +123,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .limit(1)
           .maybeSingle(),
       ]);
+
+      // Jika akun terindikasi telah dihapus oleh Administrator
+      if (!isEmailAdmin) {
+        const isLocallyMarkedDeleted =
+          typeof window !== 'undefined' &&
+          (localStorage.getItem('uda_account_deleted_' + emailLower) === 'true' ||
+            localStorage.getItem('uda_account_deleted_' + currentUser.id) === 'true');
+
+        if (statusRes?.isDeleted === true || (isLocallyMarkedDeleted && !profRes?.data)) {
+          setIsAccountDeleted(true);
+          setIsLoading(false);
+          return { profile: null, account: null };
+        }
+      }
 
       // 1. Proses Profil
       let finalProfile: UserProfile;
@@ -170,6 +191,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           reminder_minutes: profRes.data.reminder_minutes ?? 15,
         };
       } else {
+        if (!isEmailAdmin && statusRes?.isDeleted === true) {
+          setIsAccountDeleted(true);
+          setIsLoading(false);
+          return { profile: null, account: null };
+        }
+
         let localPhone: string | null = null;
         try {
           localPhone = localStorage.getItem('uda_custom_phone_' + currentUser.id);
@@ -311,7 +338,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const isSuspendedAccount =
         !isEmailAdmin &&
-        (!!accRes.data?.is_suspended ||
+        (statusRes?.isSuspended === true ||
+          !!accRes.data?.is_suspended ||
           currentUser.user_metadata?.is_suspended === true ||
           (typeof window !== 'undefined' &&
             (localStorage.getItem('uda_suspended_' + emailLower) === 'true' ||
@@ -580,6 +608,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        if (!isEmailAdmin && statusRes?.isDeleted === true) {
+          setIsAccountDeleted(true);
+          setIsLoading(false);
+          return { profile: null, account: null };
+        }
+
         const resolvedRole: 'user' | 'admin' = isEmailAdmin ? 'admin' : ((currentUser.user_metadata?.role as 'user' | 'admin') || 'user');
 
         const newAccount = {
@@ -826,18 +860,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch {}
         }
 
-        if (supabase) {
+        try {
+          const res = await fetch('/api/auth/check-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: targetEmail, userId: targetUserId }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.isSuspended === true) return true;
+          }
+        } catch {}
+
+        return false;
+      };
+
+      const checkAccountDeleted = async (targetEmail: string, targetUserId?: string): Promise<boolean> => {
+        if (targetEmail === 'admin@udaplanner.id') return false;
+
+        if (typeof window !== 'undefined') {
           try {
-            let query = (supabase.from('accounts' as any) as any).select('is_suspended');
-            if (targetUserId) {
-              query = query.or(`user_id.eq.${targetUserId},id.eq.${targetUserId}`);
-            } else {
-              query = query.ilike('email', targetEmail);
-            }
-            const { data: accCheck } = await query.limit(1).maybeSingle();
-            if (accCheck && accCheck.is_suspended === true) return true;
+            if (localStorage.getItem('uda_account_deleted_' + targetEmail) === 'true') return true;
+            if (targetUserId && localStorage.getItem('uda_account_deleted_' + targetUserId) === 'true') return true;
           } catch {}
         }
+
+        try {
+          const res = await fetch('/api/auth/check-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: targetEmail, userId: targetUserId }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.isDeleted === true) return true;
+          }
+        } catch {}
 
         return false;
       };
@@ -865,6 +923,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!isAdminEmail && (await checkAccountSuspended(cleanEmail))) {
         await clearSuspendedSession();
         return { error: SUSPENDED_ERROR_MSG };
+      }
+
+      if (!isAdminEmail && (await checkAccountDeleted(cleanEmail))) {
+        await clearSuspendedSession();
+        return { error: 'Akun Anda tidak tersedia atau telah dihapus dari sistem oleh Administrator.' };
       }
 
       // Validasi ketat khusus akun admin melalui endpoint verifikasi password server
@@ -1065,6 +1128,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: SUSPENDED_ERROR_MSG };
       }
 
+      if (
+        !isAdminEmail &&
+        (await checkAccountDeleted(cleanEmail, data.user.id))
+      ) {
+        await clearSuspendedSession();
+        return { error: 'Akun Anda tidak tersedia atau telah dihapus dari sistem oleh Administrator.' };
+      }
+
       setUser(data.user);
       setSession(data.session);
       try {
@@ -1073,7 +1144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const loaded = await loadUserData(data.user);
 
-      if (!isAdminEmail && loaded?.account?.is_suspended === true) {
+      if (!isAdminEmail && (loaded?.account?.is_suspended === true || (await checkAccountSuspended(cleanEmail, data.user.id)))) {
         await clearSuspendedSession();
         return { error: SUSPENDED_ERROR_MSG };
       }
@@ -1289,6 +1360,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setProfile(null);
     setAccount(null);
+    setIsAccountDeleted(false);
 
     if (typeof window !== 'undefined') {
       window.location.replace('/masuk?logout=true');
@@ -1348,6 +1420,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         account,
         isLoading,
         isAdmin,
+        isAccountDeleted,
         signIn,
         signUp,
         signInWithGoogle,
