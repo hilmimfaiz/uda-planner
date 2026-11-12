@@ -543,6 +543,10 @@ export default function PostEditorDetailPage() {
       return;
     }
 
+    const targetBrandId = (post.brand_id && brands.some((b) => b.id === post.brand_id))
+      ? post.brand_id
+      : (brands[0]?.id || post.brand_id || 'brand-1');
+
     const finalMediaUrls = isCarouselMode
       ? mediaList.slice(0, MAX_CAROUSEL_IMAGES)
       : mediaList.length > 0
@@ -550,6 +554,7 @@ export default function PostEditorDetailPage() {
       : [];
     const finalPayload: DummyPost = {
       ...post,
+      brand_id: targetBrandId,
       media_urls: finalMediaUrls,
       media_url: finalMediaUrls[0] || '',
     };
