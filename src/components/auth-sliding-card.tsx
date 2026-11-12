@@ -247,6 +247,25 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
     setIsRegLoading(true);
 
     try {
+      // 1. Cek secara cepat apakah email sudah terdaftar sebelum memproses
+      try {
+        const checkRes = await fetch('/api/auth/check-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: regEmail.trim().toLowerCase() }),
+        });
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (checkData.exists) {
+            setRegError(checkData.message || 'Email ini sudah terdaftar. Silakan gunakan menu Masuk.');
+            setIsRegLoading(false);
+            return;
+          }
+        }
+      } catch (checkErr) {
+        console.warn('Pre-check email error:', checkErr);
+      }
+
       const result = await signUp(regEmail, regPassword, regFullName);
 
       if (result.error) {
@@ -875,12 +894,43 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
                       style={{
                         fontWeight: 800,
                         marginBottom: 2,
-                        color: regError.includes('Google') || regError.includes('belum terdaftar') ? '#b45309' : '#991b1b',
+                        color: regError.includes('Google') || regError.includes('terdaftar') ? '#b45309' : '#991b1b',
                       }}
                     >
-                      {regError.includes('belum terdaftar') ? 'Pemberitahuan Akun Google' : 'Pendaftaran Belum Berhasil'}
+                      {regError.includes('belum terdaftar')
+                        ? 'Pemberitahuan Akun Google'
+                        : regError.includes('terdaftar')
+                        ? 'Akun Sudah Terdaftar'
+                        : 'Pendaftaran Belum Berhasil'}
                     </div>
                     <div style={{ fontWeight: 600 }}>{regError}</div>
+                    {regError.includes('terdaftar') && (
+                      <div style={{ marginTop: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLoginEmail(regEmail);
+                            switchTo('login');
+                          }}
+                          style={{
+                            backgroundColor: '#0f172a',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: 6,
+                            padding: '5px 12px',
+                            fontSize: '0.78rem',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                          }}
+                        >
+                          <span>Beralih ke Menu Masuk</span>
+                          <ArrowRight size={13} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

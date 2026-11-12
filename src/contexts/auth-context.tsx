@@ -983,6 +983,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const cleanName = fullName.trim() || 'Pengguna Baru';
 
     try {
+      // 1. Validasi awal: Periksa apakah email sudah terdaftar di database Supabase atau provider lain (Google OAuth)
+      try {
+        const checkRes = await fetch('/api/auth/check-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail }),
+        });
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (checkData.exists) {
+            return {
+              error: checkData.message || 'Email ini sudah terdaftar. Silakan gunakan menu Masuk.',
+              requiresEmailConfirmation: false,
+            };
+          }
+        }
+      } catch (checkErr) {
+        console.warn('Pre-check email error:', checkErr);
+      }
+
       const siteUrl = getSiteUrl();
       const emailRedirectTo = `${siteUrl}/masuk?verified=true`;
 
@@ -1001,7 +1021,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
-        if (error.message.includes('already registered') || error.code === 'user_already_exists') {
+        if (
+          error.message.includes('already registered') ||
+          error.message.includes('already exists') ||
+          error.code === 'user_already_exists'
+        ) {
           return { error: 'Email ini sudah terdaftar. Silakan gunakan menu Masuk.', requiresEmailConfirmation: false };
         }
         if (error.message.includes('rate limit') || (error as any).status === 429 || error.code === 'over_email_send_rate_limit') {
@@ -1010,6 +1034,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { error: error.message, requiresEmailConfirmation: false };
         }
       } else {
+        // PERIKSA IDENTITAS DARI SUPABASE AUTH:
+        // Ketika email sudah pernah terdaftar (misal via Google atau email sebelumnya),
+        // Supabase Auth mengembalikan data.user dengan identities = [] (array kosong).
+        // Ini adalah mekanisme proteksi Supabase yang menandakan akun sudah ada!
+        const identities = data?.user?.identities;
+        if (data?.user && (!identities || identities.length === 0)) {
+          return {
+            error:
+              'Email ini sudah terdaftar di sistem (terhubung dengan akun Google). Silakan masuk menggunakan tombol "Lanjutkan dengan Google" atau gunakan menu Masuk.',
+            requiresEmailConfirmation: false,
+          };
+        }
         authResultUser = data.user;
       }
 
