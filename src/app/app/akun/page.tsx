@@ -21,6 +21,10 @@ import {
   Settings,
   ChevronRight,
   X,
+  Lock,
+  Eye,
+  EyeOff,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { createClient } from '@/lib/supabase/client';
@@ -67,6 +71,18 @@ export default function AkunPenggunaPage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
+
+  // State Ubah Kata Sandi Akun Pengguna
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     // 1. Inisialisasi Nama & Waktu Pengingat
@@ -350,6 +366,73 @@ export default function AkunPenggunaPage() {
       showToast('Gagal menyimpan profil: ' + (err.message || ''));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Handler Ubah Kata Sandi Akun Pengguna
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (!currentPassword) {
+      setPasswordError('Silakan masukkan kata sandi Anda saat ini.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordError('Kata sandi baru minimal harus 6 karakter.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Konfirmasi kata sandi baru tidak cocok dengan kata sandi baru.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user?.id,
+          email: user?.email,
+          currentPassword,
+          newPassword,
+          confirmPassword,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        const errorMsg = data.error || 'Gagal mengubah kata sandi akun.';
+        setPasswordError(errorMsg);
+        playErrorSound();
+        return;
+      }
+
+      // Update client-side auth session jika aktif
+      if (supabase) {
+        try {
+          await supabase.auth.updateUser({ password: newPassword });
+        } catch {
+          // ignore
+        }
+      }
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordSuccess('Kata sandi akun Anda berhasil diperbarui!');
+      playSuccessSound();
+      showToast('Kata sandi berhasil diperbarui!');
+    } catch (err: any) {
+      const msg = err.message || 'Terjadi kesalahan sistem saat memperbarui kata sandi.';
+      setPasswordError(msg);
+      playErrorSound();
+    } finally {
+      setIsUpdatingPassword(false);
     }
   };
 
@@ -806,6 +889,258 @@ export default function AkunPenggunaPage() {
           </div>
         </div>
 
+        {/* Card: Keamanan & Ubah Kata Sandi Akun */}
+        <div className="uda-card" style={{ padding: '24px 22px' }}>
+          <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 14, borderBottom: '1px solid #f1f5f9' }}>
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 10,
+                  backgroundColor: '#f0fdf4',
+                  border: '1.5px solid #86efac',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#16a34a',
+                }}
+              >
+                <KeyRound size={20} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  Ubah Kata Sandi Akun
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0, marginTop: 2 }}>
+                  Perbarui kata sandi masuk akun UdaPlanner Anda untuk menjaga keamanan akun dan data konten Anda.
+                </p>
+              </div>
+            </div>
+
+            {passwordError && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '11px 14px',
+                  backgroundColor: '#fef2f2',
+                  border: '1.5px solid #fca5a5',
+                  borderRadius: 8,
+                  color: '#b91c1c',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                }}
+              >
+                <AlertCircle size={18} style={{ flexShrink: 0 }} />
+                <span>{passwordError}</span>
+              </div>
+            )}
+
+            {passwordSuccess && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '11px 14px',
+                  backgroundColor: '#f0fdf4',
+                  border: '1.5px solid #86efac',
+                  borderRadius: 8,
+                  color: '#15803d',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                }}
+              >
+                <CheckCircle2 size={18} style={{ flexShrink: 0 }} />
+                <span>{passwordSuccess}</span>
+              </div>
+            )}
+
+            {/* Kata Sandi Lama */}
+            <div>
+              <label
+                htmlFor="input-user-current-password"
+                style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 6 }}
+              >
+                Kata Sandi Saat Ini <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="input-user-current-password"
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  required
+                  value={currentPassword}
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value);
+                    setPasswordError(null);
+                  }}
+                  placeholder="Masukkan kata sandi akun saat ini"
+                  style={{
+                    width: '100%',
+                    padding: '10px 42px 10px 38px',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 8,
+                    outline: 'none',
+                    fontSize: '0.9rem',
+                    backgroundColor: '#ffffff',
+                  }}
+                />
+                <Lock size={16} style={{ position: 'absolute', left: 12, top: 12, color: '#94a3b8' }} />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: 12,
+                    top: 10,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    padding: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  aria-label="Tampilkan atau sembunyikan kata sandi saat ini"
+                >
+                  {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Grid Kata Sandi Baru & Konfirmasi */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 14 }}>
+              {/* Kata Sandi Baru */}
+              <div>
+                <label
+                  htmlFor="input-user-new-password"
+                  style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 6 }}
+                >
+                  Kata Sandi Baru <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="input-user-new-password"
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      setPasswordError(null);
+                    }}
+                    placeholder="Minimal 6 karakter"
+                    style={{
+                      width: '100%',
+                      padding: '10px 42px 10px 38px',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 8,
+                      outline: 'none',
+                      fontSize: '0.9rem',
+                      backgroundColor: '#ffffff',
+                    }}
+                  />
+                  <KeyRound size={16} style={{ position: 'absolute', left: 12, top: 12, color: '#94a3b8' }} />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: 12,
+                      top: 10,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#64748b',
+                      padding: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    aria-label="Tampilkan atau sembunyikan kata sandi baru"
+                  >
+                    {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Konfirmasi Kata Sandi Baru */}
+              <div>
+                <label
+                  htmlFor="input-user-confirm-password"
+                  style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 6 }}
+                >
+                  Konfirmasi Kata Sandi Baru <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="input-user-confirm-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      setPasswordError(null);
+                    }}
+                    placeholder="Ulangi kata sandi baru"
+                    style={{
+                      width: '100%',
+                      padding: '10px 42px 10px 38px',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 8,
+                      outline: 'none',
+                      fontSize: '0.9rem',
+                      backgroundColor: '#ffffff',
+                    }}
+                  />
+                  <KeyRound size={16} style={{ position: 'absolute', left: 12, top: 12, color: '#94a3b8' }} />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: 12,
+                      top: 10,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#64748b',
+                      padding: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    aria-label="Tampilkan atau sembunyikan konfirmasi kata sandi"
+                  >
+                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: 4 }}>
+              <button
+                type="submit"
+                disabled={isUpdatingPassword}
+                className="btn-uda btn-uda-primary"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 22px',
+                  fontWeight: 800,
+                  fontSize: '0.9rem',
+                }}
+              >
+                {isUpdatingPassword ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                <span>{isUpdatingPassword ? 'Memperbarui Kata Sandi...' : 'Perbarui Kata Sandi'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
         {/* Panel Admin Shortcut (jika admin) */}
         {isAdmin && (
           <div className="uda-card" style={{ borderLeft: '4px solid #16a34a' }}>
@@ -987,6 +1322,25 @@ export default function AkunPenggunaPage() {
                 <CreditCard size={18} />
               </div>
               <span>Langganan</span>
+            </div>
+            <ChevronRight size={18} color="#94a3b8" />
+          </button>
+
+          {/* 5. Ubah Kata Sandi */}
+          <button
+            type="button"
+            className="mobile-menu-item-row"
+            onClick={() => {
+              setPasswordError(null);
+              setPasswordSuccess(null);
+              setIsChangePasswordModalOpen(true);
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0fdf4', border: '1.5px solid #16a34a', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <KeyRound size={18} />
+              </div>
+              <span>Ubah Kata Sandi</span>
             </div>
             <ChevronRight size={18} color="#94a3b8" />
           </button>
@@ -1257,6 +1611,257 @@ export default function AkunPenggunaPage() {
                 Selesai
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Mobile Ubah Kata Sandi */}
+      {isChangePasswordModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 16,
+          }}
+        >
+          <div
+            className="uda-card"
+            style={{
+              maxWidth: 480,
+              width: '100%',
+              padding: '24px 20px',
+              borderRadius: 16,
+              background: '#ffffff',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 8,
+                    background: '#f0fdf4',
+                    border: '1.5px solid #86efac',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#16a34a',
+                  }}
+                >
+                  <KeyRound size={18} />
+                </div>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  Ubah Kata Sandi
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsChangePasswordModalOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={20} color="#64748b" />
+              </button>
+            </div>
+
+            <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {passwordError && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '10px 14px',
+                    backgroundColor: '#fef2f2',
+                    border: '1.5px solid #fca5a5',
+                    borderRadius: 8,
+                    color: '#b91c1c',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                  <span>{passwordError}</span>
+                </div>
+              )}
+
+              {passwordSuccess && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '10px 14px',
+                    backgroundColor: '#f0fdf4',
+                    border: '1.5px solid #86efac',
+                    borderRadius: 8,
+                    color: '#15803d',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+                  <span>{passwordSuccess}</span>
+                </div>
+              )}
+
+              <div>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 5 }}>
+                  Kata Sandi Saat Ini <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showCurrentPassword ? 'text' : 'password'}
+                    required
+                    value={currentPassword}
+                    onChange={(e) => {
+                      setCurrentPassword(e.target.value);
+                      setPasswordError(null);
+                    }}
+                    placeholder="Masukkan kata sandi saat ini"
+                    style={{
+                      width: '100%',
+                      padding: '10px 38px 10px 36px',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 8,
+                      outline: 'none',
+                      fontSize: '0.88rem',
+                    }}
+                  />
+                  <Lock size={15} style={{ position: 'absolute', left: 12, top: 12, color: '#94a3b8' }} />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: 10,
+                      top: 10,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#64748b',
+                      padding: 4,
+                    }}
+                  >
+                    {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 5 }}>
+                  Kata Sandi Baru <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      setPasswordError(null);
+                    }}
+                    placeholder="Minimal 6 karakter"
+                    style={{
+                      width: '100%',
+                      padding: '10px 38px 10px 36px',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 8,
+                      outline: 'none',
+                      fontSize: '0.88rem',
+                    }}
+                  />
+                  <KeyRound size={15} style={{ position: 'absolute', left: 12, top: 12, color: '#94a3b8' }} />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: 10,
+                      top: 10,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#64748b',
+                      padding: 4,
+                    }}
+                  >
+                    {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: 5 }}>
+                  Konfirmasi Kata Sandi Baru <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      setPasswordError(null);
+                    }}
+                    placeholder="Ulangi kata sandi baru"
+                    style={{
+                      width: '100%',
+                      padding: '10px 38px 10px 36px',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 8,
+                      outline: 'none',
+                      fontSize: '0.88rem',
+                    }}
+                  />
+                  <KeyRound size={15} style={{ position: 'absolute', left: 12, top: 12, color: '#94a3b8' }} />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: 10,
+                      top: 10,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#64748b',
+                      padding: 4,
+                    }}
+                  >
+                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="btn-uda btn-uda-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => setIsChangePasswordModalOpen(false)}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingPassword}
+                  className="btn-uda btn-uda-primary"
+                  style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                >
+                  {isUpdatingPassword ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  <span>{isUpdatingPassword ? 'Menyimpan...' : 'Simpan Sandi'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
