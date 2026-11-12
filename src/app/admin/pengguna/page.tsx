@@ -71,13 +71,45 @@ export default function AdminPenggunaPage() {
 
   const loadUsers = () => {
     setIsLoading(true);
+
+    // Bersihkan email admin duplikat / mock lama dari localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('uda_is_admin_admin@udaplanner.com');
+        localStorage.removeItem('uda_is_admin_admin@udacoding.id');
+        const rawAdminUsers = localStorage.getItem('uda_admin_users');
+        if (rawAdminUsers) {
+          const list = JSON.parse(rawAdminUsers);
+          if (Array.isArray(list)) {
+            const cleaned = list.filter((it: any) => {
+              const em = (it.email || '').toLowerCase().trim();
+              return em !== 'admin@udaplanner.com' && em !== 'admin@udacoding.id';
+            });
+            localStorage.setItem('uda_admin_users', JSON.stringify(cleaned));
+          }
+        }
+        const rawVerifiable = localStorage.getItem('uda_verifiable_users');
+        if (rawVerifiable) {
+          const list = JSON.parse(rawVerifiable);
+          if (Array.isArray(list)) {
+            const cleaned = list.filter((it: any) => {
+              const em = (it.email || '').toLowerCase().trim();
+              return em !== 'admin@udaplanner.com' && em !== 'admin@udacoding.id';
+            });
+            localStorage.setItem('uda_verifiable_users', JSON.stringify(cleaned));
+          }
+        }
+      } catch (e) {}
+    }
+
     AdminService.getAdminUsers()
       .then((data) => {
         if (data) {
           const seen = new Set<string>();
           const unique = data.filter((u) => {
             const em = (u.email || '').toLowerCase().trim();
-            if (!em || seen.has(em)) return false;
+            if (!em || em === 'admin@udaplanner.com' || em === 'admin@udacoding.id') return false;
+            if (seen.has(em)) return false;
             seen.add(em);
             return true;
           });
@@ -337,20 +369,30 @@ export default function AdminPenggunaPage() {
   const isAdminUser = (u: AdminUserItem) => {
     const email = (u.email || '').toLowerCase().trim();
     const role = (u.role || '').toLowerCase().trim();
+
+    // Pastikan email duplikat atau tiruan tidak pernah dianggap sebagai administrator
+    if (email === 'admin@udaplanner.com' || email === 'admin@udacoding.id') {
+      return false;
+    }
+
     return (
       role === 'admin' ||
       u.plan === 'admin' ||
       email === 'admin@udaplanner.id' ||
-      email === 'admin@udaplanner.com' ||
-      email === 'admin@udacoding.id' ||
-      email.startsWith('admin@') ||
       (typeof window !== 'undefined' && localStorage.getItem(`uda_is_admin_${email}`) === 'true') ||
       (typeof window !== 'undefined' && localStorage.getItem(`uda_is_admin_${u.id}`) === 'true') ||
       (typeof window !== 'undefined' && localStorage.getItem(`uda_is_admin_${u.userId}`) === 'true')
     );
   };
 
-  const adminUsersList = users.filter((u) => isAdminUser(u));
+  const seenAdminEmails = new Set<string>();
+  const adminUsersList = users.filter((u) => {
+    if (!isAdminUser(u)) return false;
+    const em = (u.email || '').toLowerCase().trim();
+    if (seenAdminEmails.has(em)) return false;
+    seenAdminEmails.add(em);
+    return true;
+  });
   const regularUsersList = users.filter((u) => !isAdminUser(u));
 
   // Daftar pengguna yang aktif sesuai tab yang dipilih

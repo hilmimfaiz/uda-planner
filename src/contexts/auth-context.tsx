@@ -71,8 +71,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const emailLower = (currentUser.email || '').toLowerCase().trim();
     const isEmailAdmin =
       emailLower === 'admin@udaplanner.id' ||
-      emailLower === 'admin@udaplanner.com' ||
-      emailLower.startsWith('admin@') ||
       currentUser.user_metadata?.role === 'admin';
 
     // Set fallback instan dari metadata jika profile/account belum terisi
@@ -737,10 +735,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const cleanEmail = email.trim().toLowerCase();
-      const isAdminEmail =
-        cleanEmail === 'admin@udaplanner.id' ||
-        cleanEmail === 'admin@udaplanner.com' ||
-        cleanEmail === 'admin@udacoding.id';
+      const isAdminEmail = cleanEmail === 'admin@udaplanner.id';
 
       // Validasi ketat khusus akun admin melalui endpoint verifikasi password server
       let adminLoginSuccess = false;
@@ -922,9 +917,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const isUserAdmin =
         loaded?.account?.role === 'admin' ||
         data.user.user_metadata?.role === 'admin' ||
-        data.user.email?.toLowerCase() === 'admin@udaplanner.id' ||
-        data.user.email?.toLowerCase() === 'admin@udaplanner.com' ||
-        data.user.email?.toLowerCase().startsWith('admin@');
+        data.user.email?.toLowerCase() === 'admin@udaplanner.id';
 
       if (isUserAdmin) {
         try {

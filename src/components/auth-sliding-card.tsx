@@ -125,8 +125,6 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
       const userIsAdmin =
         isAdmin ||
         userEmail === 'admin@udaplanner.id' ||
-        userEmail === 'admin@udaplanner.com' ||
-        userEmail === 'admin@udacoding.id' ||
         userEmail.startsWith('admin@');
 
       if (userIsAdmin) {
@@ -192,8 +190,6 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
       const isTargetAdmin =
         !!result.isAdmin ||
         cleanInputEmail === 'admin@udaplanner.id' ||
-        cleanInputEmail === 'admin@udaplanner.com' ||
-        cleanInputEmail === 'admin@udacoding.id' ||
         cleanInputEmail.startsWith('admin@');
 
       setIsAdminLogin(isTargetAdmin);

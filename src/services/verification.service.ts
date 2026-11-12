@@ -351,6 +351,7 @@ export class VerificationService {
           const dbEmails = new Set(dbUsers.map((u) => (u.email || '').toLowerCase().trim()).filter(Boolean));
           const cleanLocal = local.filter((u) => {
             const em = (u.email || '').toLowerCase().trim();
+            if (em === 'admin@udaplanner.com' || em === 'admin@udacoding.id') return false;
             if (dbIds.has(u.userId) || dbIds.has(u.id)) return false;
             if (em && dbEmails.has(em)) return false;
             return true;

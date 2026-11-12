@@ -85,8 +85,6 @@ export async function DELETE(req: NextRequest) {
     const cleanEmail = (targetEmail || '').trim().toLowerCase();
     const isAdminEmail =
       cleanEmail === 'admin@udaplanner.id' ||
-      cleanEmail === 'admin@udaplanner.com' ||
-      cleanEmail === 'admin@udacoding.id' ||
       cleanEmail.startsWith('admin@');
 
     if (isAdminEmail) {

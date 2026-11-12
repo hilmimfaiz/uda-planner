@@ -958,6 +958,8 @@ export class AdminService {
             (typeof u.id === 'string' && u.id.startsWith('usr-')) ||
             (typeof u.userId === 'string' && u.userId.startsWith('usr-')) ||
             [
+              'admin@udaplanner.com',
+              'admin@udacoding.id',
               'budi@gmail.com',
               'dewi.agency@kreatif.com',
               'ahmad.fauzi@digitalhub.id',
@@ -966,7 +968,7 @@ export class AdminService {
               'spam@botmail.com',
               'rizki@udacoding.id',
               'sarah@udaplanner.id',
-            ].includes((u.email || '').toLowerCase());
+            ].includes((u.email || '').toLowerCase().trim());
 
           const dbIds = new Set(dbUsers.map((u) => u.id));
           const dbUserIds = new Set(dbUsers.map((u) => u.userId).filter(Boolean));
@@ -974,6 +976,7 @@ export class AdminService {
 
           const cleanStored = stored.filter((st) => {
             const stEmail = (st.email || '').toLowerCase().trim();
+            if (stEmail === 'admin@udaplanner.com' || stEmail === 'admin@udacoding.id') return false;
             if (isDummyUser(st)) return false;
             if (dbIds.has(st.id)) return false;
             if (st.userId && dbUserIds.has(st.userId)) return false;
@@ -1046,6 +1049,8 @@ export class AdminService {
       (typeof u.id === 'string' && u.id.startsWith('usr-')) ||
       (typeof u.userId === 'string' && u.userId.startsWith('usr-')) ||
       [
+        'admin@udaplanner.com',
+        'admin@udacoding.id',
         'budi@gmail.com',
         'dewi.agency@kreatif.com',
         'ahmad.fauzi@digitalhub.id',
@@ -1054,9 +1059,13 @@ export class AdminService {
         'spam@botmail.com',
         'rizki@udacoding.id',
         'sarah@udaplanner.id',
-      ].includes((u.email || '').toLowerCase());
+      ].includes((u.email || '').toLowerCase().trim());
 
-    const cleanStored = stored.filter((st) => !isDummyUser(st));
+    const cleanStored = stored.filter((st) => {
+      const stEmail = (st.email || '').toLowerCase().trim();
+      if (stEmail === 'admin@udaplanner.com' || stEmail === 'admin@udacoding.id') return false;
+      return !isDummyUser(st);
+    });
     if (cleanStored.length > 0) {
       setAdminStorage('uda_admin_users', cleanStored);
       const mapped = cleanStored.map((u) => {

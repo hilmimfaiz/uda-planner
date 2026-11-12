@@ -8,10 +8,7 @@ export async function POST(req: Request) {
     const cleanEmail = (body.email || '').trim().toLowerCase();
     const inputPassword = body.password || '';
 
-    const isAdminEmail =
-      cleanEmail === 'admin@udaplanner.id' ||
-      cleanEmail === 'admin@udaplanner.com' ||
-      cleanEmail === 'admin@udacoding.id';
+    const isAdminEmail = cleanEmail === 'admin@udaplanner.id';
 
     if (!isAdminEmail) {
       return NextResponse.json(
