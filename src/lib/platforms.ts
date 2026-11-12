@@ -70,10 +70,7 @@ export const CONTENT_TYPES = [
   { id: 'feed', name: 'Foto (Feed)' },
   { id: 'carousel', name: 'Carousel' },
   { id: 'reels', name: 'Reels' },
-  { id: 'story', name: 'Story' },
   { id: 'video', name: 'Video' },
-  { id: 'teks', name: 'Teks' },
-  { id: 'live', name: 'Live' },
 ];
 
 export const POST_STATUSES = {

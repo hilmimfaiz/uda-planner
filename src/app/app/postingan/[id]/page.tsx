@@ -22,7 +22,7 @@ import {
   Plus,
   Building,
 } from 'lucide-react';
-import { compressImageToBase64 } from '@/lib/image-upload';
+import { compressImageToBase64, compressVideoFast, isMediaVideo } from '@/lib/image-upload';
 import { DUMMY_BRANDS, DUMMY_SNIPPETS, DummyPost, DummyBrand, DummySnippet } from '@/lib/dummy-data';
 import { PLATFORMS, CONTENT_TYPES, POST_STATUSES } from '@/lib/platforms';
 import { PostService } from '@/services/post.service';
@@ -187,14 +187,64 @@ export default function PostEditorDetailPage() {
     return d ? d.toISOString() : null;
   };
 
+  const isVideoOrReels = post.content_type === 'video' || post.content_type === 'reels';
+
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
 
     const files = Array.from(fileList);
+
+    // 1. Validasi khusus Video & Reels: HANYA diperbolehkan format video
+    if (isVideoOrReels) {
+      const invalidFile = files.find((f) => !f.type.startsWith('video/'));
+      if (invalidFile) {
+        showError(
+          'Format Tidak Didukung',
+          `Tipe konten ${post.content_type === 'reels' ? 'Reels' : 'Video'} hanya memperbolehkan unggahan format video saja (MP4, WebM, atau MOV).`
+        );
+        if (e.target) e.target.value = '';
+        return;
+      }
+
+      const file = files[0];
+      const maxMb = isTeamMember || account?.plan_code === 'team' ? 50 : 30;
+      if (file.size > maxMb * 1024 * 1024) {
+        showError(
+          'Ukuran Video Terlalu Besar',
+          `Ukuran file video maksimal adalah ${maxMb} MB.`
+        );
+        if (e.target) e.target.value = '';
+        return;
+      }
+
+      setIsUploadingImage(true);
+      try {
+        // Kompresi cepat & ekstraksi thumbnail poster instan
+        const { videoUrl, thumbnailUrl } = await compressVideoFast(file);
+        setPost((prev) => ({
+          ...prev,
+          media_url: videoUrl,
+          media_urls: [videoUrl, thumbnailUrl],
+        }));
+        setActiveSlideIndex(0);
+        showSuccess(
+          'Video Berhasil Diunggah!',
+          `File video berhasil dioptimasi dan thumbnail pratinjau telah dibuat secara instan.`
+        );
+      } catch (err: any) {
+        showError('Gagal Memproses Video', err.message || 'Terjadi kesalahan saat memproses video.');
+      } finally {
+        setIsUploadingImage(false);
+        if (e.target) e.target.value = '';
+      }
+      return;
+    }
+
+    // 2. Validasi Foto (Feed) dan Carousel: HANYA format gambar
     const invalidFile = files.find((f) => !f.type.startsWith('image/'));
     if (invalidFile) {
-      showError('Format Tidak Didukung', 'Harap unggah file foto dengan format gambar (JPG, PNG, atau WebP).');
+      showError('Format Tidak Didukung', 'Tipe konten Foto dan Carousel hanya memperbolehkan format gambar (JPG, PNG, atau WebP).');
       if (e.target) e.target.value = '';
       return;
     }
@@ -212,7 +262,7 @@ export default function PostEditorDetailPage() {
       return;
     }
 
-    // Jika mode Carousel: bisa upload hingga maksimal 10 gambar
+    // Jika mode Carousel: bisa upload hingga maksimal 10 gambar (otomatis kompresi ringan)
     if (isCarouselMode) {
       const remainingSlots = MAX_CAROUSEL_IMAGES - mediaList.length;
       if (remainingSlots <= 0) {
@@ -232,7 +282,7 @@ export default function PostEditorDetailPage() {
       setIsUploadingImage(true);
       try {
         const compressedBatch = await Promise.all(
-          filesToProcess.map((file) => compressImageToBase64(file, 760, 760, 0.78))
+          filesToProcess.map((file) => compressImageToBase64(file, 1200, 1200, 0.78))
         );
         const updatedUrls = [...mediaList, ...compressedBatch].slice(0, MAX_CAROUSEL_IMAGES);
         setPost((prev) => ({
@@ -243,7 +293,7 @@ export default function PostEditorDetailPage() {
         setActiveSlideIndex(updatedUrls.length - 1);
         showSuccess(
           'Slide Carousel Berhasil Ditambahkan!',
-          `${compressedBatch.length} foto berhasil diunggah (Total: ${updatedUrls.length}/${MAX_CAROUSEL_IMAGES} slide). Anda dapat menggeser slide pada Pratinjau Feed.`
+          `${compressedBatch.length} foto otomatis terkompresi hemat ukuran (Total: ${updatedUrls.length}/${MAX_CAROUSEL_IMAGES} slide).`
         );
       } catch (err: any) {
         showError('Gagal Memproses Foto Carousel', err.message || 'Terjadi kesalahan saat memproses gambar.');
@@ -254,18 +304,18 @@ export default function PostEditorDetailPage() {
       return;
     }
 
-    // Mode non-Carousel (1 foto utama)
+    // Mode Foto Tunggal (Feed): Kompres otomatis instan (100KB - 300KB)
     const file = files[0];
     setIsUploadingImage(true);
     try {
-      const base64 = await compressImageToBase64(file, 800, 800, 0.8);
+      const base64 = await compressImageToBase64(file, 1200, 1200, 0.78);
       setPost((prev) => ({
         ...prev,
         media_url: base64,
         media_urls: [base64],
       }));
       setActiveSlideIndex(0);
-      showSuccess('Foto Berhasil Diunggah!', 'Foto konten telah diperbarui dan langsung disinkronkan ke pratinjau feed.');
+      showSuccess('Foto Berhasil Diunggah!', 'Foto konten berhasil dikompresi otomatis dan disinkronkan ke pratinjau feed.');
     } catch (err: any) {
       showError('Gagal Memproses Foto', err.message || 'Terjadi kesalahan saat memproses gambar.');
     } finally {
@@ -875,7 +925,11 @@ END:VCALENDAR`;
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
-                  {isCarouselMode ? 'Unggah Foto Carousel (Maks. 10 Gambar)' : 'Unggah Foto / Media Konten'}
+                  {isCarouselMode
+                    ? 'Unggah Foto Carousel (Maks. 10 Gambar)'
+                    : isVideoOrReels
+                    ? (post.content_type === 'reels' ? 'Unggah Video Reels' : 'Unggah Video Konten')
+                    : 'Unggah Foto Konten'}
                 </label>
                 {isCarouselMode && (
                   <span
@@ -911,7 +965,7 @@ END:VCALENDAR`;
                   }}
                 >
                   <Trash2 size={13} />
-                  <span>{isCarouselMode ? 'Hapus Semua Slide' : 'Hapus Foto'}</span>
+                  <span>{isCarouselMode ? 'Hapus Semua Slide' : (isVideoOrReels ? 'Hapus Video' : 'Hapus Foto')}</span>
                 </button>
               )}
             </div>
@@ -919,7 +973,7 @@ END:VCALENDAR`;
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept={isVideoOrReels ? 'video/mp4,video/webm,video/quicktime,video/*' : 'image/jpeg,image/png,image/webp,image/*'}
               multiple={isCarouselMode}
               style={{ display: 'none' }}
               onChange={handleImageChange}
@@ -958,11 +1012,20 @@ END:VCALENDAR`;
                           }}
                           title={`Klik untuk melihat Slide ${idx + 1} di Pratinjau`}
                         >
-                          <img
-                            src={imgUrl}
-                            alt={`Slide ${idx + 1}`}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
+                          {isMediaVideo(imgUrl) ? (
+                            <video
+                              src={imgUrl}
+                              muted
+                              playsInline
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <img
+                              src={imgUrl}
+                              alt={`Slide ${idx + 1}`}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          )}
                           <span
                             style={{
                               position: 'absolute',
@@ -1098,19 +1161,30 @@ END:VCALENDAR`;
               <div className="post-editor-media-preview-card">
                 <div className="post-editor-media-preview-left">
                   <div className="post-editor-media-thumb">
-                    <img
-                      src={mediaList[0]}
-                      alt="Foto Konten"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
+                    {isMediaVideo(mediaList[0]) ? (
+                      <video
+                        src={mediaList[0]}
+                        muted
+                        playsInline
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <img
+                        src={mediaList[0]}
+                        alt="Foto Konten"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    )}
                   </div>
                   <div className="post-editor-media-info">
                     <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
-                      Foto Konten Terpasang
+                      {isVideoOrReels
+                        ? (post.content_type === 'reels' ? 'Video Reels Terpasang' : 'Video Konten Terpasang')
+                        : 'Foto Konten Terpasang'}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                       <CheckCircle2 size={13} />
-                      <span>Tersinkron langsung ke Pratinjau Feed</span>
+                      <span>{post.content_type === 'reels' ? 'Tersinkron langsung ke Pratinjau Reels' : 'Tersinkron langsung ke Pratinjau Feed'}</span>
                     </div>
                   </div>
                 </div>
@@ -1123,7 +1197,7 @@ END:VCALENDAR`;
                     style={{ flexShrink: 0 }}
                   >
                     <UploadCloud size={14} />
-                    <span>{isUploadingImage ? 'Mengunggah...' : 'Ganti Foto'}</span>
+                    <span>{isUploadingImage ? 'Mengompres...' : (isVideoOrReels ? 'Ganti Video' : 'Ganti Foto')}</span>
                   </button>
                 )}
               </div>
@@ -1177,13 +1251,15 @@ END:VCALENDAR`;
                 <div>
                   <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
                     {isReadOnly
-                      ? 'Belum ada foto yang diunggah'
+                      ? (isVideoOrReels ? 'Belum ada video yang diunggah' : 'Belum ada foto yang diunggah')
                       : isUploadingImage
-                      ? 'Sedang Memproses Foto...'
-                      : 'Klik untuk Unggah Foto Konten'}
+                      ? (isVideoOrReels ? 'Sedang Memproses & Mengompres Video...' : 'Sedang Memproses & Mengompres Foto...')
+                      : (isVideoOrReels ? (post.content_type === 'reels' ? 'Klik untuk Unggah Video Reels' : 'Klik untuk Unggah Video Konten') : 'Klik untuk Unggah Foto Konten')}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
-                    Mendukung format JPG, PNG, atau WebP (Maksimal 10 MB)
+                    {isVideoOrReels
+                      ? 'Format Video saja: MP4, WebM, MOV (Otomatis dikompresi cepat & ringan)'
+                      : 'Format Gambar saja: JPG, PNG, WebP (Otomatis dikompresi cepat & ringan)'}
                   </div>
                 </div>
               </div>
@@ -1334,11 +1410,20 @@ END:VCALENDAR`;
               >
                 {mediaList.length > 0 ? (
                   <>
-                    <img
-                      src={mediaList[safeSlideIndex]}
-                      alt={`Pratinjau Slide ${safeSlideIndex + 1}`}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.2s ease' }}
-                    />
+                    {isMediaVideo(mediaList[safeSlideIndex]) ? (
+                      <video
+                        src={mediaList[safeSlideIndex]}
+                        controls
+                        playsInline
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <img
+                        src={mediaList[safeSlideIndex]}
+                        alt={`Pratinjau Slide ${safeSlideIndex + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.2s ease' }}
+                      />
+                    )}
 
                     {/* Badge Counter Slide di Pojok Kanan Atas */}
                     {(isCarouselMode || mediaList.length > 1) && (

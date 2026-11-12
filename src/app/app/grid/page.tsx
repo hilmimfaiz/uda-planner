@@ -13,9 +13,13 @@ import {
   ChevronRight,
   Loader2,
   Plus,
+  Video,
+  Film,
+  Play,
 } from "lucide-react";
 import { DUMMY_BRANDS, DummyPost, DummyBrand } from "@/lib/dummy-data";
 import { POST_STATUSES } from "@/lib/platforms";
+import { isMediaVideo } from "@/lib/image-upload";
 import { GuidedTour, TourStep } from "@/components/guided-tour";
 import { PostService } from "@/services/post.service";
 import { BrandService } from "@/services/brand.service";
@@ -59,6 +63,7 @@ export default function GridInstagramPage() {
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:5">("1:1");
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
   const [slideIndices, setSlideIndices] = useState<Record<string, number>>({});
+  const [gridTab, setGridTab] = useState<'feed' | 'reels'>('feed');
 
   React.useEffect(() => {
     let isMounted = true;
@@ -207,7 +212,10 @@ export default function GridInstagramPage() {
         p.platforms.length === 0)
   );
 
-  // Helper komponen tiap kotak Grid Instagram (mendukung slide Carousel langsung di dalam Grid)
+  const feedPosts = igPosts.filter((p) => p.content_type !== "reels");
+  const reelsPosts = igPosts.filter((p) => p.content_type === "reels");
+
+  // Helper komponen tiap kotak Grid Instagram (mendukung slide Carousel langsung di dalam Grid dan video)
   const renderGridTile = (post: DummyPost) => {
     const statusMeta = POST_STATUSES[post.status] || POST_STATUSES.draft;
     const mediaList: string[] =
@@ -222,6 +230,7 @@ export default function GridInstagramPage() {
       : 0;
     const activeImage = mediaList[currentIdx] || "";
     const isCarouselPost = post.content_type === "carousel" || mediaList.length > 1;
+    const isVideoItem = isMediaVideo(activeImage) || post.content_type === "video";
 
     return (
       <div
@@ -236,16 +245,29 @@ export default function GridInstagramPage() {
         }}
       >
         {activeImage ? (
-          <img
-            src={activeImage}
-            alt={post.title}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              transition: "transform 0.2s ease",
-            }}
-          />
+          isVideoItem ? (
+            <video
+              src={activeImage}
+              muted
+              playsInline
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+          ) : (
+            <img
+              src={activeImage}
+              alt={post.title}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                transition: "transform 0.2s ease",
+              }}
+            />
+          )
         ) : (
           <div
             style={{
@@ -261,7 +283,11 @@ export default function GridInstagramPage() {
               background: "#0f172a",
             }}
           >
-            <ImageIcon size={20} style={{ color: "#94a3b8", marginBottom: 4 }} />
+            {post.content_type === "video" ? (
+              <Video size={20} style={{ color: "#38bdf8", marginBottom: 4 }} />
+            ) : (
+              <ImageIcon size={20} style={{ color: "#94a3b8", marginBottom: 4 }} />
+            )}
             <span
               style={{
                 fontSize: "0.68rem",
@@ -276,6 +302,30 @@ export default function GridInstagramPage() {
             >
               {post.title}
             </span>
+          </div>
+        )}
+
+        {/* Badge Video di Pojok Kanan Atas */}
+        {post.content_type === "video" && !isCarouselPost && (
+          <div
+            style={{
+              position: "absolute",
+              top: 6,
+              right: 6,
+              color: "white",
+              background: "rgba(15, 23, 42, 0.78)",
+              padding: "3px 7px",
+              borderRadius: 6,
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: "0.64rem",
+              fontWeight: 800,
+              backdropFilter: "blur(4px)",
+            }}
+          >
+            <Video size={12} />
+            <span>Video</span>
           </div>
         )}
 
@@ -437,6 +487,173 @@ export default function GridInstagramPage() {
             <span>{statusMeta.label}</span>
           </div>
         )}
+      </div>
+    );
+  };
+
+  // Helper komponen khusus bagian Reels (Format 9:16 Vertikal Khas Instagram Reels)
+  const renderReelsTile = (post: DummyPost) => {
+    const statusMeta = POST_STATUSES[post.status] || POST_STATUSES.draft;
+    const mediaList: string[] =
+      Array.isArray(post.media_urls) && post.media_urls.length > 0
+        ? post.media_urls.filter((u) => typeof u === "string" && u.trim().length > 0)
+        : post.media_url && post.media_url.trim().length > 0
+        ? [post.media_url.trim()]
+        : [];
+    const mediaSrc = mediaList[0] || "";
+
+    return (
+      <div
+        key={post.id}
+        onClick={() => router.push(`/app/postingan/${post.id}`)}
+        style={{
+          position: "relative",
+          aspectRatio: "9 / 16",
+          cursor: "pointer",
+          overflow: "hidden",
+          borderRadius: 8,
+          background: "#020617",
+          border: "1px solid rgba(255, 255, 255, 0.08)",
+        }}
+      >
+        {mediaSrc ? (
+          isMediaVideo(mediaSrc) ? (
+            <video
+              src={mediaSrc}
+              muted
+              playsInline
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+          ) : (
+            <img
+              src={mediaSrc}
+              alt={post.title}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+          )
+        ) : (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 12,
+              textAlign: "center",
+              color: "#94a3b8",
+              background: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
+            }}
+          >
+            <Film size={26} style={{ color: "#38bdf8", marginBottom: 6 }} />
+            <span
+              style={{
+                fontSize: "0.72rem",
+                fontWeight: 700,
+                color: "#f8fafc",
+                lineHeight: 1.4,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "-webkit-box",
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: "vertical",
+              }}
+            >
+              {post.title}
+            </span>
+          </div>
+        )}
+
+        {/* Gradient shadow overlay di bagian bawah */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.88) 100%)",
+            pointerEvents: "none",
+          }}
+        />
+
+        {/* Badge Reels Pojok Kanan Atas */}
+        <div
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            color: "#ffffff",
+            background: "rgba(15, 23, 42, 0.78)",
+            padding: "3px 8px",
+            borderRadius: 6,
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: "0.64rem",
+            fontWeight: 800,
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <Film size={12} />
+          <span>Reels</span>
+        </div>
+
+        {/* Info Judul & Status di Bagian Bawah Tile Reels */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 8,
+            left: 8,
+            right: 8,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            color: "#ffffff",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "0.74rem",
+              fontWeight: 700,
+              lineHeight: 1.3,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+            }}
+          >
+            {post.title}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.66rem", opacity: 0.9 }}>
+              <Play size={10} fill="white" />
+              <span>Pratinjau</span>
+            </span>
+            {post.status !== "terposting" && (
+              <span
+                style={{
+                  fontSize: "0.58rem",
+                  fontWeight: 800,
+                  padding: "1px 6px",
+                  borderRadius: 4,
+                  background: "rgba(15, 23, 42, 0.85)",
+                  color: statusMeta.color,
+                }}
+              >
+                {statusMeta.label}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
     );
   };
@@ -784,7 +1001,7 @@ export default function GridInstagramPage() {
           <div
             className="uda-card"
             style={{
-              marginBottom: 16,
+              marginBottom: 12,
               padding: "16px 20px",
               display: "flex",
               alignItems: "center",
@@ -809,103 +1026,245 @@ export default function GridInstagramPage() {
               <div
                 style={{ fontSize: "0.82rem", color: "#64748b", marginTop: 2 }}
               >
-                {activeBrand.name} • {igPosts.length} Postingan Direncanakan
+                {activeBrand.name} • {feedPosts.length} Feed & Video • {reelsPosts.length} Reels
               </div>
             </div>
           </div>
 
-          {/* Jika Belum Ada Postingan yang Dibuat untuk Brand Ini */}
-          {igPosts.length === 0 ? (
-            <div
-              id="tour-grid-feed"
-              className="uda-card"
+          {/* Tab Navigasi Instagram: Feed & Video Utama vs Bagian Khusus Reels */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 12,
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: 12,
+              padding: "6px 12px",
+              marginBottom: 16,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setGridTab("feed")}
               style={{
-                padding: "48px 24px",
-                textAlign: "center",
-                display: "flex",
-                flexDirection: "column",
+                display: "inline-flex",
                 alignItems: "center",
-                gap: 16,
-                backgroundColor: "#ffffff",
-                border: "2px dashed #cbd5e1",
-                boxShadow: "none",
-                borderRadius: 14,
+                gap: 8,
+                padding: "8px 18px",
+                borderRadius: 8,
+                border: "none",
+                background: gridTab === "feed" ? "#16a34a" : "transparent",
+                color: gridTab === "feed" ? "#ffffff" : "#475569",
+                fontWeight: 800,
+                fontSize: "0.85rem",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
               }}
             >
+              <GridIcon size={16} />
+              <span>Feed & Video ({feedPosts.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setGridTab("reels")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 18px",
+                borderRadius: 8,
+                border: "none",
+                background: gridTab === "reels" ? "#16a34a" : "transparent",
+                color: gridTab === "reels" ? "#ffffff" : "#475569",
+                fontWeight: 800,
+                fontSize: "0.85rem",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <Film size={16} />
+              <span>Khusus Reels ({reelsPosts.length})</span>
+            </button>
+          </div>
+
+          {/* KONTEN TAB FEED & VIDEO UTAMA */}
+          {gridTab === "feed" && (
+            feedPosts.length === 0 ? (
               <div
+                id="tour-grid-feed"
+                className="uda-card"
                 style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: "50%",
-                  background: "#f8fafc",
-                  border: "2px solid #e2e8f0",
+                  padding: "48px 24px",
+                  textAlign: "center",
                   display: "flex",
+                  flexDirection: "column",
                   alignItems: "center",
-                  justifyContent: "center",
-                  color: "#64748b",
-                }}
-              >
-                <ImageIcon size={30} />
-              </div>
-
-              <div>
-                <h3 style={{ fontSize: "1.18rem", fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
-                  Belum Ada Postingan yang Dibuat
-                </h3>
-                <p style={{ color: "#64748b", fontSize: "0.88rem", maxWidth: 460, margin: "0 auto", lineHeight: 1.6 }}>
-                  Brand <strong>@{activeBrand.handle}</strong> belum memiliki postingan terencana untuk pratinjau feed Instagram. Buat postingan feed atau carousel pertama Anda sekarang untuk melihat visual susunan grid 3 kolom.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => router.push(`/app/postingan/baru?brandId=${activeBrand.id}`)}
-                className="btn-uda btn-uda-primary"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "10px 22px",
-                  fontWeight: 800,
-                  fontSize: "0.9rem",
-                  marginTop: 4,
-                }}
-              >
-                <Plus size={18} />
-                <span>Buat Postingan Baru</span>
-              </button>
-            </div>
-          ) : (
-            /* 3-Column Instagram Feed */
-            <div style={{ position: "relative" }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: 4,
+                  gap: 16,
+                  backgroundColor: "#ffffff",
+                  border: "2px dashed #cbd5e1",
+                  boxShadow: "none",
                   borderRadius: 14,
-                  overflow: "hidden",
-                  background: "#0f172a",
-                  padding: 4,
                 }}
               >
-                {/* Baris 3 Grid Pertama */}
                 <div
-                  id="tour-grid-feed"
                   style={{
-                    gridColumn: "1 / -1",
+                    width: 64,
+                    height: 64,
+                    borderRadius: "50%",
+                    background: "#f8fafc",
+                    border: "2px solid #e2e8f0",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#64748b",
+                  }}
+                >
+                  <ImageIcon size={30} />
+                </div>
+
+                <div>
+                  <h3 style={{ fontSize: "1.18rem", fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
+                    Belum Ada Postingan Feed atau Video
+                  </h3>
+                  <p style={{ color: "#64748b", fontSize: "0.88rem", maxWidth: 460, margin: "0 auto", lineHeight: 1.6 }}>
+                    Brand <strong>@{activeBrand.handle}</strong> belum memiliki postingan Foto, Carousel, atau Video yang direncanakan. Buat postingan feed atau video pertama Anda sekarang.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => router.push(`/app/postingan/baru?brandId=${activeBrand.id}`)}
+                  className="btn-uda btn-uda-primary"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 22px",
+                    fontWeight: 800,
+                    fontSize: "0.9rem",
+                    marginTop: 4,
+                  }}
+                >
+                  <Plus size={18} />
+                  <span>Buat Postingan Baru</span>
+                </button>
+              </div>
+            ) : (
+              /* 3-Column Instagram Feed */
+              <div style={{ position: "relative" }}>
+                <div
+                  style={{
                     display: "grid",
                     gridTemplateColumns: "repeat(3, 1fr)",
                     gap: 4,
+                    borderRadius: 14,
+                    overflow: "hidden",
+                    background: "#0f172a",
+                    padding: 4,
                   }}
                 >
-                  {igPosts.slice(0, 3).map((post) => renderGridTile(post))}
+                  {/* Baris 3 Grid Pertama */}
+                  <div
+                    id="tour-grid-feed"
+                    style={{
+                      gridColumn: "1 / -1",
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, 1fr)",
+                      gap: 4,
+                    }}
+                  >
+                    {feedPosts.slice(0, 3).map((post) => renderGridTile(post))}
+                  </div>
+
+                  {/* Sisa Grid Postingan Berikutnya */}
+                  {feedPosts.slice(3).map((post) => renderGridTile(post))}
+                </div>
+              </div>
+            )
+          )}
+
+          {/* KONTEN TAB KHUSUS REELS */}
+          {gridTab === "reels" && (
+            reelsPosts.length === 0 ? (
+              <div
+                className="uda-card"
+                style={{
+                  padding: "48px 24px",
+                  textAlign: "center",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 16,
+                  backgroundColor: "#ffffff",
+                  border: "2px dashed #cbd5e1",
+                  boxShadow: "none",
+                  borderRadius: 14,
+                }}
+              >
+                <div
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: "50%",
+                    background: "#f0fdf4",
+                    border: "2px solid #86efac",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#16a34a",
+                  }}
+                >
+                  <Film size={30} />
                 </div>
 
-                {/* Sisa Grid Postingan Berikutnya */}
-                {igPosts.slice(3).map((post) => renderGridTile(post))}
+                <div>
+                  <h3 style={{ fontSize: "1.18rem", fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
+                    Belum Ada Postingan Khusus Reels
+                  </h3>
+                  <p style={{ color: "#64748b", fontSize: "0.88rem", maxWidth: 460, margin: "0 auto", lineHeight: 1.6 }}>
+                    Brand <strong>@{activeBrand.handle}</strong> belum memiliki video Reels vertikal. Buat konten Reels dengan rasio 9:16 untuk memaksimalkan jangkauan audiens Anda.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => router.push(`/app/postingan/baru?brandId=${activeBrand.id}`)}
+                  className="btn-uda btn-uda-primary"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 22px",
+                    fontWeight: 800,
+                    fontSize: "0.9rem",
+                    marginTop: 4,
+                  }}
+                >
+                  <Plus size={18} />
+                  <span>Buat Konten Reels</span>
+                </button>
               </div>
-            </div>
+            ) : (
+              /* 3-Column Instagram Reels Grid (9:16 Rasio Khas Reels) */
+              <div style={{ position: "relative" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: 6,
+                    borderRadius: 14,
+                    overflow: "hidden",
+                    background: "#020617",
+                    padding: 6,
+                  }}
+                >
+                  {reelsPosts.map((post) => renderReelsTile(post))}
+                </div>
+              </div>
+            )
           )}
         </div>
       )}
