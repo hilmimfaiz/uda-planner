@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createServerClient } from '@/lib/supabase/server';
+import { performFullUserDeletion } from '@/lib/server-user-delete';
 
 interface RouteParams {
   params: {
@@ -42,7 +43,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // 1. Coba hapus akun dari Supabase Auth jika Service Role Key tersedia
+    // Periksa apakah pengguna memiliki role admin di Supabase Auth
     const adminClient = createAdminClient();
     if (adminClient) {
       try {
@@ -57,69 +58,17 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
             { status: 403 }
           );
         }
-
-        if (isUuid(targetUserId)) {
-          const { error: authErr } = await adminClient.auth.admin.deleteUser(targetUserId);
-          if (authErr) {
-            console.warn('adminClient.auth.admin.deleteUser warning:', authErr.message);
-          }
-        }
-
-        if (targetEmail) {
-          if (matchUser && matchUser.id !== targetUserId) {
-            await adminClient.auth.admin.deleteUser(matchUser.id);
-          }
-        }
       } catch (authEx: any) {
-        console.warn('adminClient deleteUser exception:', authEx.message);
+        console.warn('adminClient verify admin status exception:', authEx.message);
       }
     }
 
-    // 2. Hapus data dari database menggunakan RPC dan query langsung
-    const serverClient = createServerClient();
-    if (serverClient) {
-      try {
-        // Coba jalankan RPC komprehensif admin_delete_user_complete
-        await (serverClient as any).rpc('admin_delete_user_complete', {
-          target_email: targetEmail || undefined,
-          target_id: targetUserId || undefined,
-        });
-      } catch (rpcCompleteErr) {
-        // Fallback ke RPC admin_delete_user lama jika targetUserId adalah UUID
-        if (isUuid(targetUserId)) {
-          try {
-            await (serverClient as any).rpc('admin_delete_user', { target_user_id: targetUserId });
-          } catch (rpcErr) {}
-        }
-      }
-
-      try {
-        await Promise.allSettled([
-          serverClient.from('posts' as any).delete().eq('created_by', targetUserId),
-          serverClient.from('snippets' as any).delete().eq('created_by', targetUserId),
-          serverClient.from('brand_members' as any).delete().eq('user_id', targetUserId),
-          serverClient.from('brands' as any).delete().eq('owner_id', targetUserId),
-          serverClient.from('payments' as any).delete().eq('user_id', targetUserId),
-          serverClient.from('verification_logs' as any).delete().eq('user_id', targetUserId),
-          serverClient.from('accounts' as any).delete().or(`user_id.eq.${targetUserId},id.eq.${targetUserId}`),
-          serverClient.from('profiles' as any).delete().eq('id', targetUserId),
-        ]);
-
-        if (targetEmail) {
-          await Promise.allSettled([
-            serverClient.from('invitations' as any).delete().eq('email', targetEmail),
-            serverClient.from('profiles' as any).delete().eq('email', targetEmail),
-            serverClient.from('accounts' as any).delete().eq('email', targetEmail),
-          ]);
-        }
-      } catch (dbErr: any) {
-        console.warn('Database deletion warning:', dbErr.message);
-      }
-    }
+    // Jalankan penghapusan menyeluruh (DB tables, posts, assets, brands, notifications, payments, auth.users, backup json)
+    await performFullUserDeletion(targetUserId, targetEmail);
 
     return NextResponse.json({
       success: true,
-      message: 'Pengguna berhasil dihapus secara permanen dari sistem.',
+      message: 'Pengguna dan seluruh datanya berhasil dihapus secara bersih dan permanen dari sistem.',
       userId: targetUserId,
     });
   } catch (error: any) {

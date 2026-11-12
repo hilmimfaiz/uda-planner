@@ -3,6 +3,7 @@ import { DUMMY_PLANS } from '@/lib/dummy-data';
 import { resolvePaymentDuration } from './plan.service';
 import { formatWibDate } from '@/lib/date-utils';
 import { VerificationService } from './verification.service';
+import { purgeClientUserData } from '@/lib/user-purge';
 
 export interface AdminPaymentItem {
   id: string;
@@ -1262,62 +1263,67 @@ export class AdminService {
   }
 
   static async deleteUserPermanently(userIdOrAccountId: string, email?: string): Promise<{ success: boolean; message: string }> {
+    const cleanEmail = email ? email.trim().toLowerCase() : '';
+
+    // 1. Panggil API route server untuk penghapusan database menyeluruh
     try {
       await fetch(`/api/admin/users/${userIdOrAccountId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: cleanEmail }),
       });
     } catch (apiErr) {
       console.warn('API route deleteUserPermanently error:', apiErr);
     }
 
+    // 2. Direct client fallback deletion ke Supabase jika memungkinkan
     const supabase = createClient();
     if (supabase) {
       try {
         await Promise.allSettled([
           supabase.from('posts' as any).delete().eq('created_by', userIdOrAccountId),
           supabase.from('snippets' as any).delete().eq('created_by', userIdOrAccountId),
+          supabase.from('notifications' as any).delete().eq('user_id', userIdOrAccountId),
           supabase.from('brand_members' as any).delete().eq('user_id', userIdOrAccountId),
           supabase.from('brands' as any).delete().eq('owner_id', userIdOrAccountId),
           supabase.from('payments' as any).delete().eq('user_id', userIdOrAccountId),
           supabase.from('accounts' as any).delete().or(`user_id.eq.${userIdOrAccountId},id.eq.${userIdOrAccountId}`),
           supabase.from('profiles' as any).delete().eq('id', userIdOrAccountId),
         ]);
-        if (email) {
-          await supabase.from('profiles' as any).delete().eq('email', email);
+        if (cleanEmail) {
+          await Promise.allSettled([
+            supabase.from('invitations' as any).delete().ilike('email', cleanEmail),
+            supabase.from('profiles' as any).delete().ilike('email', cleanEmail),
+            supabase.from('accounts' as any).delete().ilike('email', cleanEmail),
+          ]);
         }
       } catch (dbErr) {
         console.warn('Direct db delete fallback error:', dbErr);
       }
     }
 
-    localUsers = localUsers.filter((u) => u.id !== userIdOrAccountId && u.userId !== userIdOrAccountId);
+    // 3. Bersihkan memori lokal dan storage uda_admin_users
+    localUsers = localUsers.filter(
+      (u) =>
+        u.id !== userIdOrAccountId &&
+        u.userId !== userIdOrAccountId &&
+        !(cleanEmail && u.email?.toLowerCase().trim() === cleanEmail)
+    );
     const currentStored = getAdminStorage<AdminUserItem[]>('uda_admin_users', localUsers);
-    const filteredStored = currentStored.filter((u) => u.id !== userIdOrAccountId && u.userId !== userIdOrAccountId);
+    const filteredStored = currentStored.filter(
+      (u) =>
+        u.id !== userIdOrAccountId &&
+        u.userId !== userIdOrAccountId &&
+        !(cleanEmail && u.email?.toLowerCase().trim() === cleanEmail)
+    );
     setAdminStorage('uda_admin_users', filteredStored);
 
-    if (typeof window !== 'undefined') {
-      try {
-        const storedVer = localStorage.getItem('uda_verifiable_users');
-        if (storedVer) {
-          const list = JSON.parse(storedVer);
-          if (Array.isArray(list)) {
-            const filtered = list.filter((u: any) => u.id !== userIdOrAccountId && u.userId !== userIdOrAccountId && u.email !== email);
-            localStorage.setItem('uda_verifiable_users', JSON.stringify(filtered));
-          }
-        }
-
-        localStorage.removeItem('uda_custom_avatar_' + userIdOrAccountId);
-        localStorage.removeItem('uda_profile_setup_done_' + userIdOrAccountId);
-        localStorage.removeItem('uda_has_logged_in_before_' + userIdOrAccountId);
-        localStorage.removeItem('uda_disable_auto_tour_' + userIdOrAccountId);
-      } catch {}
-    }
+    // 4. Bersihkan seluruh penyimpanan client (notifikasi, brand, pembayaran, paket, avatar, riwayat)
+    purgeClientUserData({ userId: userIdOrAccountId, email: cleanEmail });
 
     return {
       success: true,
-      message: 'Pengguna berhasil dihapus secara permanen. Email kini dapat didaftarkan kembali sebagai akun baru.',
+      message: 'Pengguna berhasil dihapus secara bersih dan permanen. Email kini dapat didaftarkan kembali sebagai akun baru.',
     };
   }
 

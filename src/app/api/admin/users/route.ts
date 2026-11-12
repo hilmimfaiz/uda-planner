@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createServerClient } from '@/lib/supabase/server';
+import { performFullUserDeletion } from '@/lib/server-user-delete';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -85,6 +86,8 @@ export async function DELETE(req: NextRequest) {
     const cleanEmail = (targetEmail || '').trim().toLowerCase();
     const isAdminEmail =
       cleanEmail === 'admin@udaplanner.id' ||
+      cleanEmail === 'admin@udaplanner.com' ||
+      cleanEmail === 'admin@udacoding.id' ||
       cleanEmail.startsWith('admin@');
 
     if (isAdminEmail) {
@@ -94,14 +97,9 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const isUuid = (val?: string | null) =>
-      !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
-
-    // 1. Hapus dari Supabase Auth
     const adminClient = createAdminClient();
     if (adminClient) {
       try {
-        // Cek apakah target pengguna merupakan admin
         const { data: listData } = await adminClient.auth.admin.listUsers();
         const matchUser = ((listData as any)?.users || []).find(
           (u: any) => u.id === targetUserId || (cleanEmail && u.email?.toLowerCase() === cleanEmail)
@@ -112,63 +110,17 @@ export async function DELETE(req: NextRequest) {
             { status: 403 }
           );
         }
-
-        if (isUuid(targetUserId)) {
-          await adminClient.auth.admin.deleteUser(targetUserId);
-        }
-        if (targetEmail) {
-          if (matchUser && matchUser.id !== targetUserId) {
-            await adminClient.auth.admin.deleteUser(matchUser.id);
-          }
-        }
       } catch (authEx: any) {
         console.warn('adminClient deleteUser warning:', authEx.message);
       }
     }
 
-    // 2. Hapus data dari tabel publik
-    const serverClient = createServerClient();
-    if (serverClient) {
-      try {
-        await (serverClient as any).rpc('admin_delete_user_complete', {
-          target_email: targetEmail || undefined,
-          target_id: targetUserId || undefined,
-        });
-      } catch {
-        if (isUuid(targetUserId)) {
-          try {
-            await (serverClient as any).rpc('admin_delete_user', { target_user_id: targetUserId });
-          } catch {}
-        }
-      }
-
-      try {
-        await Promise.allSettled([
-          serverClient.from('posts' as any).delete().eq('created_by', targetUserId),
-          serverClient.from('snippets' as any).delete().eq('created_by', targetUserId),
-          serverClient.from('brand_members' as any).delete().eq('user_id', targetUserId),
-          serverClient.from('brands' as any).delete().eq('owner_id', targetUserId),
-          serverClient.from('payments' as any).delete().eq('user_id', targetUserId),
-          serverClient.from('verification_logs' as any).delete().eq('user_id', targetUserId),
-          serverClient.from('accounts' as any).delete().or(`user_id.eq.${targetUserId},id.eq.${targetUserId}`),
-          serverClient.from('profiles' as any).delete().eq('id', targetUserId),
-        ]);
-
-        if (targetEmail) {
-          await Promise.allSettled([
-            serverClient.from('invitations' as any).delete().eq('email', targetEmail),
-            serverClient.from('profiles' as any).delete().eq('email', targetEmail),
-            serverClient.from('accounts' as any).delete().eq('email', targetEmail),
-          ]);
-        }
-      } catch (dbErr: any) {
-        console.warn('Database deletion warning:', dbErr.message);
-      }
-    }
+    // Jalankan penghapusan menyeluruh (DB tables, posts, assets, brands, notifications, payments, auth.users, backup json)
+    await performFullUserDeletion(targetUserId, targetEmail);
 
     return NextResponse.json({
       success: true,
-      message: 'Pengguna berhasil dihapus secara permanen.',
+      message: 'Pengguna dan seluruh datanya berhasil dihapus secara bersih dan permanen.',
       userId: targetUserId,
     });
   } catch (error: any) {

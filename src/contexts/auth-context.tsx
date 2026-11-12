@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { getSiteUrl } from '@/lib/site-url';
 import { VerificationService } from '@/services/verification.service';
+import { purgeClientUserData } from '@/lib/user-purge';
 
 export interface UserProfile {
   id: string;
@@ -1138,6 +1139,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = fullName.trim() || 'Pengguna Baru';
 
+    // Bersihkan seluruh residu lokal (notifikasi, brand, pembayaran) jika email ini pernah dihapus sebelumnya
+    purgeClientUserData({ email: cleanEmail });
+
     try {
       // 1. Validasi awal: Periksa apakah email sudah terdaftar di database Supabase atau provider lain (Google OAuth)
       try {
@@ -1206,6 +1210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const generatedUserId = authResultUser?.id || `usr-${Date.now()}`;
+      purgeClientUserData({ email: cleanEmail, userId: generatedUserId });
       await VerificationService.recordNewRegistration({
         userId: generatedUserId,
         email: cleanEmail,
