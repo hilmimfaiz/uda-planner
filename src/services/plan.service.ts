@@ -129,11 +129,30 @@ const DEFAULT_PLANS: DynamicPlan[] = DUMMY_PLANS.map((p, idx) => ({
   ],
 }));
 
+const cleanDurations = (durations?: PlanDurationItem[]): PlanDurationItem[] => {
+  if (!Array.isArray(durations)) return [];
+  return durations.filter(
+    (d) =>
+      d &&
+      d.name?.toLowerCase().trim() !== 'paket uji 1 bulan' &&
+      !d.name?.toLowerCase().trim().includes('paket uji')
+  );
+};
+
 const getStorage = (): DynamicPlan[] => {
   if (typeof window === 'undefined') return DEFAULT_PLANS;
   try {
     const raw = localStorage.getItem(STORAGE_PLANS_KEY);
-    return raw ? JSON.parse(raw) : DEFAULT_PLANS;
+    if (raw) {
+      const parsed: DynamicPlan[] = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((p) => ({
+          ...p,
+          durations: cleanDurations(p.durations),
+        }));
+      }
+    }
+    return DEFAULT_PLANS;
   } catch {
     return DEFAULT_PLANS;
   }
@@ -142,7 +161,11 @@ const getStorage = (): DynamicPlan[] => {
 const setStorage = (data: DynamicPlan[]) => {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_PLANS_KEY, JSON.stringify(data));
+    const cleaned = data.map((p) => ({
+      ...p,
+      durations: cleanDurations(p.durations),
+    }));
+    localStorage.setItem(STORAGE_PLANS_KEY, JSON.stringify(cleaned));
   } catch {}
 };
 
@@ -185,8 +208,12 @@ export class PlanService {
         if (res.ok) {
           const json = await res.json();
           if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-            setStorage(json.data);
-            return json.data;
+            const cleaned = json.data.map((p: any) => ({
+              ...p,
+              durations: cleanDurations(p.durations),
+            }));
+            setStorage(cleaned);
+            return cleaned;
           }
         }
       } catch (apiErr) {

@@ -20,6 +20,12 @@ export async function GET() {
 
         if (!durRes.error && durRes.data) {
           durRes.data.forEach((d: any) => {
+            if (
+              d.name?.toLowerCase().trim() === 'paket uji 1 bulan' ||
+              d.name?.toLowerCase().trim().includes('paket uji')
+            ) {
+              return;
+            }
             const list = durationsMap.get(d.plan_code) || [];
             list.push({
               id: d.id,
