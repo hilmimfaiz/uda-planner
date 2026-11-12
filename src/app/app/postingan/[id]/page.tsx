@@ -21,6 +21,8 @@ import {
   Layers,
   Plus,
   Building,
+  Video as VideoIcon,
+  Film,
 } from 'lucide-react';
 import { compressImageToBase64, compressVideoFast, isMediaVideo, toPlayableVideoUrl } from '@/lib/image-upload';
 import { DUMMY_BRANDS, DUMMY_SNIPPETS, DummyPost, DummyBrand, DummySnippet } from '@/lib/dummy-data';
@@ -80,10 +82,26 @@ export default function PostEditorDetailPage() {
   const [snippetTab, setSnippetTab] = useState<'all' | 'caption' | 'hashtag'>('all');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState<{
+    isUploading: boolean;
+    fileName: string;
+    loadedBytes: number;
+    totalBytes: number;
+    percent: number;
+    statusText: string;
+  } | null>(null);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [directBlobUrl, setDirectBlobUrl] = useState<string>('');
   const [videoPoster, setVideoPoster] = useState<string>('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes <= 0) return '0 KB';
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
 
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>('owner');
   const [isAccessDenied, setIsAccessDenied] = useState(false);
@@ -237,13 +255,70 @@ export default function PostEditorDetailPage() {
       }
 
       setIsUploadingImage(true);
+      const totalBytes = file.size;
+
+      setVideoUploadProgress({
+        isUploading: true,
+        fileName: file.name,
+        loadedBytes: 0,
+        totalBytes,
+        percent: 0,
+        statusText: 'Mempersiapkan unggahan video...',
+      });
+
+      let currentLoaded = 0;
+      let targetLoaded = Math.min(totalBytes, Math.max(1024, Math.round(totalBytes * 0.12)));
+      let targetPercent = 12;
+
+      // Animasi bar berjalan yang halus dan responsif
+      const progressTimer = setInterval(() => {
+        if (targetLoaded > currentLoaded) {
+          const diff = targetLoaded - currentLoaded;
+          const step = Math.max(Math.round(totalBytes * 0.05), Math.round(diff * 0.3));
+          currentLoaded = Math.min(targetLoaded, currentLoaded + step);
+          const computedPct = Math.min(96, Math.max(targetPercent, Math.round((currentLoaded / totalBytes) * 100)));
+          setVideoUploadProgress((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  loadedBytes: currentLoaded,
+                  percent: computedPct,
+                  statusText:
+                    computedPct < 45
+                      ? 'Mengunggah file video...'
+                      : computedPct < 85
+                      ? 'Mengompresi video ke ukuran rendah & hemat...'
+                      : 'Menyelesaikan pemrosesan video...',
+                }
+              : null
+          );
+        }
+      }, 45);
+
       try {
         // Buat streaming Blob URL langsung dari file agar browser langsung memutar video secara native & lancar
         const nativeBlobUrl = URL.createObjectURL(file);
         setDirectBlobUrl(nativeBlobUrl);
 
-        // Kompresi cepat & ekstraksi thumbnail poster instan
-        const { videoUrl, thumbnailUrl } = await compressVideoFast(file);
+        // Kompresi cepat & ekstraksi thumbnail poster instan dengan progress update
+        const { videoUrl, thumbnailUrl } = await compressVideoFast(file, (loaded, total, percent) => {
+          targetLoaded = Math.max(targetLoaded, loaded);
+          targetPercent = Math.max(targetPercent, percent);
+        });
+
+        clearInterval(progressTimer);
+        setVideoUploadProgress({
+          isUploading: true,
+          fileName: file.name,
+          loadedBytes: totalBytes,
+          totalBytes,
+          percent: 100,
+          statusText: 'Selesai! Video siap diputar.',
+        });
+
+        // Jeda singkat 350ms agar pengguna melihat bar 100% dan ukuran penuh
+        await new Promise((r) => setTimeout(r, 350));
+
         setVideoPoster(thumbnailUrl);
 
         setPost((prev) => ({
@@ -254,11 +329,14 @@ export default function PostEditorDetailPage() {
         setActiveSlideIndex(0);
         showSuccess(
           'Video Berhasil Diunggah!',
-          `File video siap diputar pada pratinjau feed.`
+          `File video (${formatBytes(totalBytes)}) siap diputar pada pratinjau feed.`
         );
       } catch (err: any) {
+        clearInterval(progressTimer);
         showError('Gagal Memproses Video', err.message || 'Terjadi kesalahan saat memproses video.');
       } finally {
+        clearInterval(progressTimer);
+        setVideoUploadProgress(null);
         setIsUploadingImage(false);
         if (e.target) e.target.value = '';
       }
@@ -1187,6 +1265,129 @@ END:VCALENDAR`;
                     </div>
                   </div>
                 )}
+              </div>
+            ) : videoUploadProgress?.isUploading ? (
+              <div
+                style={{
+                  border: '2px solid #0f172a',
+                  borderRadius: 12,
+                  padding: '20px 18px',
+                  backgroundColor: '#ffffff',
+                  boxShadow: '4px 4px 0px #0f172a',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12,
+                }}
+              >
+                {/* Header: Nama File & Badge Tipe Konten */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 10,
+                        background: '#f0fdf4',
+                        border: '2px solid #16a34a',
+                        color: '#16a34a',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {post.content_type === 'reels' ? <Film size={20} /> : <VideoIcon size={20} />}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: '0.88rem',
+                          fontWeight: 800,
+                          color: '#0f172a',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          maxWidth: 240,
+                        }}
+                        title={videoUploadProgress.fileName}
+                      >
+                        {videoUploadProgress.fileName}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 1 }}>
+                        {post.content_type === 'reels' ? 'Video Reels (Instagram)' : 'Video Konten (Feed)'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <span
+                    style={{
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      padding: '4px 9px',
+                      borderRadius: 6,
+                      background: videoUploadProgress.percent >= 100 ? '#dcfce7' : '#f0fdf4',
+                      color: '#16a34a',
+                      border: '1.5px solid #16a34a',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {videoUploadProgress.percent >= 100 ? 'Selesai' : 'Sedang Mengunggah...'}
+                  </span>
+                </div>
+
+                {/* Progress Bar Berjalan dengan Animasi Garis */}
+                <div
+                  style={{
+                    width: '100%',
+                    height: 18,
+                    backgroundColor: '#e2e8f0',
+                    borderRadius: 999,
+                    border: '2px solid #0f172a',
+                    overflow: 'hidden',
+                    position: 'relative',
+                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.06)',
+                  }}
+                >
+                  <div
+                    className="uda-video-progress-bar"
+                    style={{
+                      width: `${videoUploadProgress.percent}%`,
+                      height: '100%',
+                      backgroundColor: '#16a34a',
+                      backgroundImage:
+                        'linear-gradient(45deg, rgba(255,255,255,0.25) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0.25) 75%, transparent 75%, transparent)',
+                      backgroundSize: '24px 24px',
+                      transition: 'width 0.12s ease-out',
+                      borderRadius: 999,
+                    }}
+                  />
+                </div>
+
+                {/* Detail Ukuran KB/MB dan Persentase Berjalan */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '0.80rem',
+                    fontWeight: 700,
+                    color: '#334155',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Loader2 size={14} className="animate-spin" style={{ color: '#16a34a' }} />
+                    <span>
+                      <strong style={{ color: '#0f172a' }}>{formatBytes(videoUploadProgress.loadedBytes)}</strong> / {formatBytes(videoUploadProgress.totalBytes)}
+                    </span>
+                  </div>
+                  <div style={{ color: '#16a34a', fontWeight: 800, fontSize: '0.85rem' }}>
+                    {videoUploadProgress.percent}%
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '0.74rem', color: '#64748b', textAlign: 'center' }}>
+                  {videoUploadProgress.statusText}
+                </div>
               </div>
             ) : mediaList.length > 0 ? (
               <div className="post-editor-media-preview-card">

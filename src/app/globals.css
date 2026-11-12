@@ -549,6 +549,19 @@ button, input, select, textarea {
   pointer-events: auto !important;
 }
 
+@keyframes uda-progress-bar-stripes {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 24px 0;
+  }
+}
+
+.uda-video-progress-bar {
+  animation: uda-progress-bar-stripes 0.8s linear infinite;
+}
+
 .btn-uda-primary {
   background-color: var(--primary) !important;
   color: #ffffff !important;

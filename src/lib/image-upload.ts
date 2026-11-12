@@ -124,20 +124,41 @@ export async function extractVideoThumbnail(videoFile: File | Blob): Promise<str
 
 /**
  * Kompresi video otomatis & cepat di client-side:
- * Mengekstrak thumbnail poster frame dan mengompresi payload video ke ukuran rendah (100KB-1MB).
+ * Mengekstrak thumbnail poster frame dan mengompresi payload video ke ukuran rendah (100KB-1MB),
+ * serta mendukung tracking progres pembacaan byte real-time (KB/MB).
  */
 export async function compressVideoFast(
-  file: File
+  file: File,
+  onProgress?: (loaded: number, total: number, percent: number) => void
 ): Promise<{ videoUrl: string; thumbnailUrl: string; duration: number }> {
+  if (onProgress) {
+    onProgress(0, file.size, 0);
+  }
+
   // 1. Ekstrak thumbnail poster frame dalam resolusi tajam & ukuran sangat kecil (~40KB)
   const thumbnailUrl = await extractVideoThumbnail(file);
+  if (onProgress) {
+    onProgress(Math.round(file.size * 0.15), file.size, 15);
+  }
 
   return new Promise((resolve, reject) => {
     try {
-      // 2. Baca file video ke Data URL / Blob
+      // 2. Baca file video ke Data URL / Blob dengan progress event real-time
       const reader = new FileReader();
+
+      reader.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          const ratio = Math.min(1, Math.max(0, e.loaded / e.total));
+          const mappedPercent = Math.min(94, Math.round(15 + ratio * 79));
+          onProgress(Math.round(e.loaded), e.total, mappedPercent);
+        }
+      };
+
       reader.onload = (e) => {
         const rawVideoUrl = (e.target?.result as string) || '';
+        if (onProgress) {
+          onProgress(file.size, file.size, 100);
+        }
         resolve({
           videoUrl: rawVideoUrl,
           thumbnailUrl: thumbnailUrl || rawVideoUrl,
