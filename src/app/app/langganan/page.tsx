@@ -90,6 +90,9 @@ export default function LanggananPage() {
   const [showLeaveTeamModal, setShowLeaveTeamModal] = useState(false);
   const [isLeavingTeam, setIsLeavingTeam] = useState(false);
 
+  // Modal Konfirmasi Beralih dari Pro ke Tim (Paket Sebelumnya Hangus)
+  const [showUpgradeToTeamModal, setShowUpgradeToTeamModal] = useState(false);
+
   // Status Berhenti Langganan (Downgrade ke Free)
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelingSubscription, setIsCancelingSubscription] = useState(false);
@@ -105,6 +108,50 @@ export default function LanggananPage() {
 
   const effectivePlanCode = isUserExplicitlyFree ? 'free' : (account?.plan_code || 'free');
   const effectivePlanUntil = isUserExplicitlyFree ? null : (account?.plan_until || null);
+
+  const handleSelectPlan = (targetPlanCode: string, targetDurationIdx?: number) => {
+    if (teamMembership && targetPlanCode !== 'free') {
+      setShowLeaveTeamModal(true);
+      return;
+    }
+
+    // Jika pengguna saat ini berlangganan PRO dan ingin beralih ke paket TIM:
+    // Tampilkan pop up modal konfirmasi bahwa paket Pro sebelumnya akan hangus
+    if (effectivePlanCode === 'pro' && targetPlanCode === 'team') {
+      if (targetDurationIdx !== undefined) {
+        setSelectedDurationIndex((prev) => ({
+          ...prev,
+          team: targetDurationIdx,
+        }));
+      }
+      setShowUpgradeToTeamModal(true);
+      return;
+    }
+
+    setSelectedPlanCode(targetPlanCode);
+    if (targetDurationIdx !== undefined) {
+      setSelectedDurationIndex((prev) => ({
+        ...prev,
+        [targetPlanCode]: targetDurationIdx,
+      }));
+    }
+  };
+
+  const handleConfirmUpgradeToTeam = () => {
+    setSelectedPlanCode('team');
+    setShowUpgradeToTeamModal(false);
+    playSuccessSound();
+    showSuccess(
+      'Beralih ke Paket TIM',
+      'Paket TIM berhasil dipilih. Perhatian: Sisa masa aktif Paket Pro Anda sebelumnya akan hangus dan digantikan oleh masa aktif Paket TIM.'
+    );
+    setTimeout(() => {
+      const el = document.getElementById('tour-langganan-payment');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 200);
+  };
 
   // Form Pembayaran
   const [senderName, setSenderName] = useState('');
@@ -1071,13 +1118,7 @@ export default function LanggananPage() {
             return (
               <div
                 key={plan.code}
-                onClick={() => {
-                  if (teamMembership && plan.code !== 'free') {
-                    setShowLeaveTeamModal(true);
-                    return;
-                  }
-                  setSelectedPlanCode(plan.code);
-                }}
+                onClick={() => handleSelectPlan(plan.code)}
                 className="uda-card"
                 style={{
                   display: 'flex',
@@ -1128,13 +1169,7 @@ export default function LanggananPage() {
                           <button
                             key={dur.id}
                             type="button"
-                            onClick={() => {
-                              setSelectedPlanCode(plan.code);
-                              setSelectedDurationIndex((prev) => ({
-                                ...prev,
-                                [plan.code]: dIdx,
-                              }));
-                            }}
+                            onClick={() => handleSelectPlan(plan.code, dIdx)}
                             style={{
                               padding: '4px 10px',
                               borderRadius: 8,
@@ -1192,13 +1227,7 @@ export default function LanggananPage() {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    if (teamMembership && plan.code !== 'free') {
-                      setShowLeaveTeamModal(true);
-                      return;
-                    }
-                    setSelectedPlanCode(plan.code);
-                  }}
+                  onClick={() => handleSelectPlan(plan.code)}
                   className={`btn-uda ${isSelected ? 'btn-uda-primary' : 'btn-uda-secondary'}`}
                   style={{ width: '100%', marginTop: 20, height: 40, fontSize: '0.88rem', fontWeight: 800 }}
                 >
@@ -1219,6 +1248,28 @@ export default function LanggananPage() {
         <div id="tour-langganan-payment" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', gap: 24 }}>
           {/* Kolom Kiri: Detail Rekening Bank & Nominal Transfer */}
           <div className="uda-card" style={{ padding: 26, borderRadius: 20 }}>
+            {effectivePlanCode === 'pro' && selectedPlanCode === 'team' && (
+              <div
+                style={{
+                  background: '#fff1f2',
+                  border: '1.5px solid #fecdd3',
+                  borderRadius: 12,
+                  padding: '12px 16px',
+                  fontSize: '0.84rem',
+                  color: '#9f1239',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  marginBottom: 18,
+                  lineHeight: 1.5,
+                }}
+              >
+                <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+                <span>
+                  <strong>Perhatian Beralih ke Paket TIM:</strong> Anda beralih dari <strong>Paket Pro</strong>. Setelah pembayaran diverifikasi oleh Admin, masa aktif Paket Pro sebelumnya akan otomatis <strong>hangus</strong> dan masa aktif akun Anda dihitung penuh dari Paket TIM.
+                </span>
+              </div>
+            )}
             <h2 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>
               2. Rekening Tujuan Transfer
             </h2>
@@ -1840,6 +1891,133 @@ export default function LanggananPage() {
                 }}
               >
                 <span>Lanjut ke Dashboard</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI BERALIH DARI PRO KE TIM (PAKET SEBELUMNYA HANGUS) */}
+      {showUpgradeToTeamModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.72)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: 16,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowUpgradeToTeamModal(false);
+          }}
+        >
+          <div
+            className="uda-card"
+            style={{
+              maxWidth: 500,
+              width: '100%',
+              padding: 26,
+              borderRadius: 20,
+              border: '3px solid #0f172a',
+              boxShadow: '6px 6px 0px #0f172a',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              backgroundColor: '#ffffff',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div
+                style={{
+                  width: 50,
+                  height: 50,
+                  borderRadius: 14,
+                  background: '#fef3c7',
+                  border: '2px solid #f59e0b',
+                  color: '#b45309',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Sparkles size={26} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', margin: '0 0 3px' }}>
+                  Beralih ke Paket TIM?
+                </h3>
+                <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
+                  Paket aktif Anda saat ini: <strong style={{ color: '#16a34a' }}>PRO</strong>
+                  {effectivePlanUntil && (
+                    <span> (berlaku s.d {new Date(effectivePlanUntil).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })})</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#fff1f2',
+                border: '1.5px solid #fecdd3',
+                borderRadius: 12,
+                padding: '14px 16px',
+                fontSize: '0.84rem',
+                color: '#9f1239',
+                lineHeight: 1.55,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontWeight: 800, marginBottom: 4 }}>
+                <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>Ketentuan Pergantian Paket:</span>
+              </div>
+              <p style={{ margin: 0, paddingLeft: 26 }}>
+                Ketika Anda beralih ke <strong>Paket TIM</strong>, maka <strong>paket Pro sebelumnya beserta sisa masa aktifnya akan hangus</strong> dan langsung digantikan sepenuhnya oleh masa aktif Paket TIM yang baru.
+              </p>
+            </div>
+
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: 12,
+                padding: '12px 14px',
+                fontSize: '0.82rem',
+                color: '#334155',
+              }}
+            >
+              <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
+                Benefit Paket TIM yang Akan Anda Dapatkan:
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
+                <li>Kuota brand bertambah hingga <strong>20 Akun Brand</strong> (sebelumnya hanya 5).</li>
+                <li>Membuka fitur kolaborasi hingga <strong>10 Anggota Tim</strong> (Editor, Reviewer, Viewer).</li>
+                <li>Kapasitas penyimpanan meningkat hingga <strong>20 GB</strong>.</li>
+                <li>Fitur alur persetujuan (approval) & review konten antar tim aktif penuh.</li>
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button
+                type="button"
+                className="btn-uda btn-uda-secondary"
+                style={{ flex: 1, height: 42 }}
+                onClick={() => setShowUpgradeToTeamModal(false)}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                className="btn-uda btn-uda-primary"
+                style={{ flex: 1.4, height: 42, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 800 }}
+                onClick={handleConfirmUpgradeToTeam}
+              >
+                <span>Ya, Beralih ke Paket TIM</span>
                 <ArrowRight size={16} />
               </button>
             </div>
