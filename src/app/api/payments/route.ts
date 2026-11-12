@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
     const db = adminClient || serverClient;
 
     let dbPayments: any[] = [];
+    let dbSuccess = false;
     if (db) {
       try {
         const [payRes, profRes] = await Promise.all([
@@ -82,9 +83,10 @@ export async function GET(req: NextRequest) {
           db.from('profiles' as any).select('id, full_name, email'),
         ]);
 
-        if (!payRes.error && payRes.data) {
+        if (!payRes.error) {
+          dbSuccess = true;
           const profMap = new Map((profRes.data || []).map((pr: any) => [pr.id, pr]));
-          dbPayments = payRes.data.map((p: any) => {
+          dbPayments = (payRes.data || []).map((p: any) => {
             const prof: any = profMap.get(p.user_id) || {};
             const planCode = (p.plan_code || 'pro').toLowerCase();
             const resolved = resolvePaymentDuration(p.duration_days, p.duration_label, p.amount, planCode);
@@ -112,27 +114,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const backupList = loadBackupPayments();
-    const dbIds = new Set(dbPayments.map((p) => p.id));
-
-    // Jika ada pembayaran di backup yang sudah di-approve/reject, sinkronkan statusnya
-    const backupMap = new Map(backupList.map((bp: any) => [bp.id, bp]));
-    const mergedDbPayments = dbPayments.map((dbItem) => {
-      const bp = backupMap.get(dbItem.id);
-      if (bp && bp.status !== 'pending' && dbItem.status === 'pending') {
-        return {
-          ...dbItem,
-          status: bp.status,
-          reason: bp.reason || dbItem.reason,
-        };
-      }
-      return dbItem;
-    });
-
-    const combined = [
-      ...mergedDbPayments,
-      ...backupList.filter((bp: any) => !dbIds.has(bp.id)),
-    ].filter((p: any) => !isDummyPayment(p));
+    // Jika database Supabase aktif & query sukses, jadikan DB sebagai Single Source of Truth
+    let combined: any[] = [];
+    if (dbSuccess) {
+      combined = dbPayments.filter((p: any) => !isDummyPayment(p));
+      saveBackupPayments(combined);
+    } else {
+      const backupList = loadBackupPayments();
+      combined = backupList.filter((p: any) => !isDummyPayment(p));
+    }
 
     if (!all) {
       const filtered = combined.filter((p: any) => {

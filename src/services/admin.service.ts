@@ -259,11 +259,11 @@ export class AdminService {
   }
 
   static async getPayments(): Promise<AdminPaymentItem[]> {
-    const stored = this.getCachedPayments();
     const supabase = createClient();
     let dbPayments: AdminPaymentItem[] = [];
+    let dbSuccess = false;
 
-    // 1. Query langsung dari database Supabase (cepat ~50ms, tanpa overhead serverless API)
+    // 1. Query langsung dari database Supabase (Single Source of Truth)
     if (supabase) {
       try {
         const [payRes, profRes] = await Promise.all([
@@ -271,9 +271,10 @@ export class AdminService {
           supabase.from('profiles' as any).select('id, full_name, email'),
         ]);
 
-        if (!payRes.error && payRes.data && payRes.data.length > 0) {
+        if (!payRes.error) {
+          dbSuccess = true;
           const profMap = new Map((profRes.data || []).map((pr: any) => [pr.id, pr]));
-          dbPayments = payRes.data
+          dbPayments = (payRes.data || [])
             .filter((p: any) => !this.isDummyPayment(p))
             .map((p: any) => {
               const prof: any = profMap.get(p.user_id) || {};
@@ -287,7 +288,7 @@ export class AdminService {
                 plan,
                 durationDays: resolved.days,
                 durationLabel: resolved.label,
-                amount: p.amount || 49000,
+                amount: p.amount || 0,
                 bank: `${p.sender_bank || 'Transfer'} — A/N ${p.sender_name || prof.full_name || 'Pelanggan'}`,
                 proof: p.proof_path || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
                 status: p.status || 'pending',
@@ -295,21 +296,24 @@ export class AdminService {
                 reason: p.admin_note,
               };
             });
+          
+          // Simpan data pembayaran real ke cache localStorage & return langsung
+          setAdminStorage('uda_admin_payments', dbPayments);
+          return dbPayments;
         }
       } catch (err) {
         console.warn('AdminService.getPayments db fallback:', err);
       }
     }
 
-    // 2. Hanya fetch ke API server jika database kosong / offline
-    let apiPayments: AdminPaymentItem[] = [];
-    if (dbPayments.length === 0 && typeof window !== 'undefined') {
+    // 2. Fetch ke API server jika Supabase client browser offline / gagal
+    if (!dbSuccess && typeof window !== 'undefined') {
       try {
         const res = await fetch('/api/payments?all=true');
         if (res.ok) {
           const json = await res.json();
           if (json.success && Array.isArray(json.data)) {
-            apiPayments = json.data
+            const apiPayments: AdminPaymentItem[] = json.data
               .filter((p: any) => !this.isDummyPayment(p))
               .map((p: any) => {
                 const plan = ((p.plan || p.plan_code || 'pro').toLowerCase() as 'free' | 'pro' | 'team');
@@ -321,6 +325,8 @@ export class AdminService {
                   durationLabel: resDur.label,
                 };
               });
+            setAdminStorage('uda_admin_payments', apiPayments);
+            return apiPayments;
           }
         }
       } catch (apiErr) {
@@ -328,28 +334,9 @@ export class AdminService {
       }
     }
 
-    const mergedMap = new Map<string, AdminPaymentItem>();
-    dbPayments.forEach((p) => mergedMap.set(p.id, p));
-    apiPayments.forEach((p) => {
-      const existing = mergedMap.get(p.id);
-      if (!existing) {
-        mergedMap.set(p.id, p);
-      } else if (existing.status === 'pending' && p.status !== 'pending') {
-        mergedMap.set(p.id, { ...existing, status: p.status, reason: p.reason || existing.reason });
-      }
-    });
-    stored.forEach((st) => {
-      const existing = mergedMap.get(st.id);
-      if (!existing) {
-        mergedMap.set(st.id, st);
-      } else if (existing.status === 'pending' && st.status !== 'pending') {
-        mergedMap.set(st.id, { ...existing, status: st.status, reason: st.reason || existing.reason });
-      }
-    });
-
-    const combined = Array.from(mergedMap.values()).filter((p) => !this.isDummyPayment(p));
-    setAdminStorage('uda_admin_payments', combined);
-    return combined;
+    // 3. Fallback hanya jika jaringan offline total
+    const cached = this.getCachedPayments();
+    return cached;
   }
 
   static async approvePayment(
@@ -792,96 +779,27 @@ export class AdminService {
 
             const finalVerified = isVerified;
 
-            // Selesaikan status Paket Aktif secara akurat sesuai paket langganan yang dipilih & disetujui
+            // Selesaikan status Paket Aktif secara akurat sesuai database Supabase
             let resolvedPlan: 'free' | 'pro' | 'team' | 'admin' = 'free';
             let resolvedPlanUntil: string | null = null;
 
-            // Mulai dari database jika memiliki plan berbayar dengan masa berlaku yang sah
-            if (a.plan_code && a.plan_code !== 'free') {
-              // Abaikan nilai 'team' tanpa plan_until yang berasal dari bug lama
-              if (!(a.plan_code === 'team' && !a.plan_until)) {
-                resolvedPlan = a.plan_code.toLowerCase() as any;
-                resolvedPlanUntil = a.plan_until || null;
-              }
+            if (a.plan_code && ['free', 'pro', 'team', 'admin'].includes(a.plan_code.toLowerCase())) {
+              resolvedPlan = a.plan_code.toLowerCase() as any;
+              resolvedPlanUntil = a.plan_until || null;
             }
 
             if (typeof window !== 'undefined') {
               try {
-                // 1. Cek fast flags
-                const flagPlan =
-                  localStorage.getItem(`uda_user_plan_${cleanEmail}`) ||
-                  localStorage.getItem(`uda_user_plan_${targetId}`) ||
-                  localStorage.getItem(`uda_user_plan_${a.id}`);
-                const flagUntil =
-                  localStorage.getItem(`uda_user_plan_until_${cleanEmail}`) ||
-                  localStorage.getItem(`uda_user_plan_until_${targetId}`) ||
-                  localStorage.getItem(`uda_user_plan_until_${a.id}`);
-
-                if (flagPlan === 'pro' || flagPlan === 'team' || flagPlan === 'free') {
-                  resolvedPlan = flagPlan as any;
-                  resolvedPlanUntil = flagUntil || resolvedPlanUntil;
-                }
-
-                // 2. Cek apakah ini akun yang sedang aktif di session browser ini
-                const rawAuthAcc = localStorage.getItem('uda_auth_account');
-                const rawAuthUser = localStorage.getItem('uda_auth_user');
-                if (rawAuthAcc) {
-                  const authAcc = JSON.parse(rawAuthAcc);
-                  const authUser = rawAuthUser ? JSON.parse(rawAuthUser) : null;
-                  const isCurrentAuthUser =
-                    (authUser && (authUser.id === targetId || authUser.id === a.id || authUser.email?.toLowerCase() === cleanEmail)) ||
-                    (authAcc.email && authAcc.email.toLowerCase() === cleanEmail);
-
-                  if (isCurrentAuthUser && authAcc.plan_code && authAcc.plan_code !== 'free') {
-                    resolvedPlan = authAcc.plan_code.toLowerCase();
-                    resolvedPlanUntil = authAcc.plan_until || resolvedPlanUntil;
-                  }
-                }
-
-                // 3. Cek daftar pembayaran yang disetujui (uda_admin_payments)
+                // Cek pembatalan langganan eksplisit
                 const isExplicitlyCancelled =
                   localStorage.getItem('uda_subscription_cancelled_' + targetId) === 'true' ||
                   (cleanEmail && localStorage.getItem('uda_subscription_cancelled_' + cleanEmail) === 'true') ||
                   localStorage.getItem('uda_user_plan_' + targetId) === 'free' ||
                   (cleanEmail && localStorage.getItem('uda_user_plan_' + cleanEmail) === 'free');
 
-                if (isExplicitlyCancelled || (a.plan_code === 'free' && !a.plan_until)) {
+                if (isExplicitlyCancelled) {
                   resolvedPlan = 'free';
                   resolvedPlanUntil = null;
-                } else {
-                  const rawPayments = localStorage.getItem('uda_admin_payments');
-                  if (rawPayments) {
-                    const payList = JSON.parse(rawPayments);
-                    const myApproved = payList.filter(
-                      (p: any) =>
-                        (p.userId === targetId || p.userId === a.id || (p.email && p.email.toLowerCase() === cleanEmail)) &&
-                        p.status === 'approved'
-                    );
-                    if (myApproved.length > 0) {
-                      const latest = myApproved[0];
-                      const latestPlan = (latest.plan || latest.plan_code || '').toLowerCase();
-                      if (latestPlan === 'pro' || latestPlan === 'team') {
-                        resolvedPlan = latestPlan as 'pro' | 'team';
-                        if (!resolvedPlanUntil) {
-                          const days = latest.durationDays || 30;
-                          resolvedPlanUntil = new Date(Date.now() + days * 86400000).toISOString();
-                        }
-                      }
-                    }
-                  }
-                }
-
-                // 4. Cek event upgrade terakhir (jika baru saja di-approve / diubah admin)
-                const rawLastUpgrade = localStorage.getItem('uda_last_upgraded_user');
-                if (rawLastUpgrade) {
-                  const lastUp = JSON.parse(rawLastUpgrade);
-                  if (
-                    (lastUp.userId === targetId || lastUp.userId === a.id || (lastUp.email && lastUp.email.toLowerCase() === cleanEmail)) &&
-                    lastUp.planCode
-                  ) {
-                    resolvedPlan = lastUp.planCode.toLowerCase();
-                    resolvedPlanUntil = lastUp.planUntil || resolvedPlanUntil;
-                  }
                 }
               } catch {}
             }
@@ -1029,15 +947,7 @@ export class AdminService {
             }
           }
 
-          for (const st of cleanStored) {
-            const em = (st.email || '').toLowerCase().trim();
-            if (em) {
-              if (seenEmails.has(em)) continue;
-              seenEmails.add(em);
-            }
-            combined.push(st);
-          }
-
+          // Database Supabase adalah Single Source of Truth
           setAdminStorage('uda_admin_users', combined);
           return combined;
         }

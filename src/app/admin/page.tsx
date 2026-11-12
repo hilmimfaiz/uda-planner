@@ -58,9 +58,33 @@ export default function AdminDashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [approvingPayment, setApprovingPayment] = useState<any | null>(null);
+  const [statsData, setStatsData] = useState<{
+    totalUsersCount: number;
+    freeUsersCount: number;
+    proUsersCount: number;
+    teamUsersCount: number;
+    pendingPaymentsCount: number;
+    unverifiedEmailCount: number;
+    totalApprovedRevenue: number;
+    approvedTransactionsCount: number;
+  } | null>(null);
 
   const fetchDashboardStats = React.useCallback(async () => {
     try {
+      // 1. Ambil agregat sinkron langsung dari database Supabase
+      const statsRes = await fetch('/api/admin/stats').catch(() => null);
+      if (statsRes && statsRes.ok) {
+        const statsJson = await statsRes.json();
+        if (statsJson.success && statsJson.data) {
+          setStatsData(statsJson.data);
+          if (Array.isArray(statsJson.data.allPayments)) {
+            setAllPayments(statsJson.data.allPayments);
+            setPendingPayments(statsJson.data.pendingPayments || []);
+          }
+        }
+      }
+
+      // 2. Sinkronkan juga daftar user & payment detail
       const [paymentsData, usersData] = await Promise.all([
         AdminService.getPayments(),
         AdminService.getAdminUsers(),
@@ -81,6 +105,26 @@ export default function AdminDashboardPage() {
   }, []);
 
   React.useEffect(() => {
+    // Bersihkan cache dummy jika terdeteksi data usang tidak sinkron
+    if (typeof window !== 'undefined') {
+      try {
+        const rawPays = localStorage.getItem('uda_admin_payments');
+        if (rawPays) {
+          const list = JSON.parse(rawPays);
+          if (Array.isArray(list) && (list.length > 5 || list.some((p: any) => p.id === 'pay-1'))) {
+            localStorage.removeItem('uda_admin_payments');
+          }
+        }
+        const rawUsers = localStorage.getItem('uda_admin_users');
+        if (rawUsers) {
+          const list = JSON.parse(rawUsers);
+          if (Array.isArray(list) && list.length > 9) {
+            localStorage.removeItem('uda_admin_users');
+          }
+        }
+      } catch {}
+    }
+
     // 1. Muat dari cache lokal secara instan tanpa jeda
     const cachedPays = AdminService.getCachedPayments();
     const cachedUsers = AdminService.getCachedAdminUsers();
@@ -222,14 +266,18 @@ export default function AdminDashboardPage() {
     showToast(`❌ Pembayaran ditolak. Alasan: ${reasonText}`);
   };
 
-  // Perhitungan Statistik Real-time & Sinkron
-  const totalUsersCount = adminUsers.length || 0;
-  const proUsersCount = adminUsers.filter((u) => u.plan === 'pro' && !u.isSuspended).length;
-  const teamUsersCount = adminUsers.filter((u) => u.plan === 'team' && !u.isSuspended).length;
-  const freeUsersCount = adminUsers.filter((u) => u.plan === 'free').length;
-  const totalApprovedRevenue = allPayments
+  // Perhitungan Statistik Real-time & Sinkron dengan Database Supabase
+  const totalUsersCount = statsData ? statsData.totalUsersCount : (adminUsers.length || 0);
+  const proUsersCount = statsData ? statsData.proUsersCount : adminUsers.filter((u) => u.plan === 'pro' && !u.isSuspended).length;
+  const teamUsersCount = statsData ? statsData.teamUsersCount : adminUsers.filter((u) => u.plan === 'team' && !u.isSuspended).length;
+  const freeUsersCount = statsData ? statsData.freeUsersCount : adminUsers.filter((u) => u.plan === 'free').length;
+  const pendingCount = statsData ? statsData.pendingPaymentsCount : pendingPayments.length;
+  const unverifiedCount = statsData ? statsData.unverifiedEmailCount : Math.max(0, adminUsers.filter((u) => !u.isEmailVerified).length);
+  const totalApprovedRevenue = statsData ? statsData.totalApprovedRevenue : allPayments
     .filter((p) => p.status === 'approved')
     .reduce((sum, p) => sum + (p.amount || 0), 0);
+  const approvedTransactionsCount = statsData ? statsData.approvedTransactionsCount : allPayments.filter((p) => p.status === 'approved').length;
+
   const formattedRevenue = new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
@@ -315,7 +363,7 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>MENUNGGU VERIFIKASI</div>
           <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
-            {pendingPayments.length}
+            {pendingCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginTop: 4 }}>Klik untuk cek transfer →</div>
         </div>
@@ -327,7 +375,7 @@ export default function AdminDashboardPage() {
         >
           <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>EMAIL BELUM DIVERIFIKASI</div>
           <div className="admin-metrics-number" style={{ fontSize: '1.7rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
-            {Math.max(0, adminUsers.filter((u) => !u.isEmailVerified).length)}
+            {unverifiedCount}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginTop: 4 }}>Verifikasi akun manual →</div>
         </div>
@@ -343,7 +391,7 @@ export default function AdminDashboardPage() {
             {formattedRevenue}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginTop: 4 }}>
-            {`Dari ${allPayments.filter((p) => p.status === 'approved').length} transaksi berhasil`}
+            {`Dari ${approvedTransactionsCount} transaksi berhasil`}
           </div>
         </div>
       </div>
