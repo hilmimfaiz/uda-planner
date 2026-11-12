@@ -98,6 +98,96 @@ export function recordDeletedNotification(notif: DummyNotification | string) {
   } catch {}
 }
 
+/**
+ * Format waktu notifikasi secara dinamis:
+ * - Baru masuk (< 1 menit): "Baru saja"
+ * - Hitungan menit (< 1 jam): "1 menit yang lalu", "5 menit yang lalu", dst.
+ * - Hitungan jam (< 24 jam): "1 jam yang lalu", "2 jam yang lalu", dst.
+ * - Lebih dari 24 jam / hari lain: contoh "12:01 01/11/26" (HH:mm DD/MM/YY)
+ */
+export function formatNotificationTime(
+  created_at?: string,
+  id?: string,
+  fallback?: string
+): string {
+  let timeMs = 0;
+  if (created_at) {
+    const parsed = new Date(created_at).getTime();
+    if (!isNaN(parsed) && parsed > 0) timeMs = parsed;
+  }
+  if (!timeMs && id) {
+    const match = id.match(/\d+/);
+    if (match) {
+      const parsedNum = parseInt(match[0], 10);
+      if (parsedNum > 1000000000000) {
+        timeMs = parsedNum;
+      }
+    }
+  }
+
+  if (!timeMs) {
+    return fallback || 'Baru saja';
+  }
+
+  const date = new Date(timeMs);
+  const now = Date.now();
+  const diffMs = Math.max(0, now - timeMs);
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+
+  // Komponen jam dan tanggal (contoh: 12:01 01/11/26)
+  const hoursStr = String(date.getHours()).padStart(2, '0');
+  const minsStr = String(date.getMinutes()).padStart(2, '0');
+  const dayStr = String(date.getDate()).padStart(2, '0');
+  const monthStr = String(date.getMonth() + 1).padStart(2, '0');
+  const yearShort = String(date.getFullYear()).slice(-2);
+  const fullDateTime = `${hoursStr}:${minsStr} ${dayStr}/${monthStr}/${yearShort}`;
+
+  // 1. Kurang dari 1 menit: Baru saja
+  if (diffMins < 1) {
+    return 'Baru saja';
+  }
+
+  // 2. 1 menit sampai 59 menit: misal "1 menit yang lalu", "15 menit yang lalu"
+  if (diffMins < 60) {
+    return `${diffMins} menit yang lalu`;
+  }
+
+  // 3. 1 jam sampai 23 jam: misal "1 jam yang lalu", "5 jam yang lalu"
+  if (diffHours < 24) {
+    return `${diffHours} jam yang lalu`;
+  }
+
+  // 4. Lebih dari 24 jam: format waktu & tanggal contoh 12:01 01/11/26
+  return fullDateTime;
+}
+
+export function formatFullDateTime(created_at?: string, id?: string): string {
+  let timeMs = 0;
+  if (created_at) {
+    const parsed = new Date(created_at).getTime();
+    if (!isNaN(parsed) && parsed > 0) timeMs = parsed;
+  }
+  if (!timeMs && id) {
+    const match = id.match(/\d+/);
+    if (match) {
+      const parsedNum = parseInt(match[0], 10);
+      if (parsedNum > 1000000000000) {
+        timeMs = parsedNum;
+      }
+    }
+  }
+  if (!timeMs) return '';
+  const date = new Date(timeMs);
+  const hoursStr = String(date.getHours()).padStart(2, '0');
+  const minsStr = String(date.getMinutes()).padStart(2, '0');
+  const dayStr = String(date.getDate()).padStart(2, '0');
+  const monthStr = String(date.getMonth() + 1).padStart(2, '0');
+  const yearShort = String(date.getFullYear()).slice(-2);
+  return `${hoursStr}:${minsStr} ${dayStr}/${monthStr}/${yearShort}`;
+}
+
 export function getStoredNotifications(userEmail?: string, userId?: string): DummyNotification[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -124,7 +214,7 @@ export function getStoredNotifications(userEmail?: string, userId?: string): Dum
     }
 
     // Filter: Undangan tim atau notifikasi terarah HANYA boleh tampil untuk user yang dituju!
-    return list.filter((n: DummyNotification) => {
+    const filtered = list.filter((n: DummyNotification) => {
       const inviteTargetEmail = (n.target_email || n.invite_data?.target_email)?.trim().toLowerCase();
       const inviteTargetId = (n.target_user_id || n.invite_data?.target_user_id)?.trim();
 
@@ -146,6 +236,12 @@ export function getStoredNotifications(userEmail?: string, userId?: string): Dum
       // Notifikasi umum / broadcast sistem
       return true;
     });
+
+    // Perbarui label waktu (time_ago) secara real-time dan akurat
+    return filtered.map((n) => ({
+      ...n,
+      time_ago: formatNotificationTime(n.created_at, n.id, n.time_ago),
+    }));
   } catch {
     return [];
   }

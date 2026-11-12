@@ -33,7 +33,14 @@ import {
 } from 'lucide-react';
 import { DUMMY_NOTIFICATIONS } from '@/lib/dummy-data';
 import { useAuth } from '@/contexts/auth-context';
-import { getStoredNotifications, markAllNotificationsAsRead, addAppNotification, syncServerInvitations } from '@/lib/notification-manager';
+import {
+  getStoredNotifications,
+  markAllNotificationsAsRead,
+  addAppNotification,
+  syncServerInvitations,
+  formatNotificationTime,
+  formatFullDateTime,
+} from '@/lib/notification-manager';
 import { PostService } from '@/services/post.service';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -80,6 +87,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
     const interval = setInterval(() => {
+      refreshNotifs();
       if (user?.email || user?.id) {
         syncServerInvitations(user?.email || undefined, user?.id || undefined).then(refreshNotifs);
       }
@@ -729,7 +737,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         }}
                       >
                         <div style={{ fontWeight: n.is_read ? 500 : 700, color: '#0f172a' }}>{n.message}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4 }}>{n.time_ago}</div>
+                        <div
+                          title={formatFullDateTime(n.created_at, n.id)}
+                          style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4, fontWeight: 500 }}
+                        >
+                          {formatNotificationTime(n.created_at, n.id, n.time_ago)}
+                        </div>
                       </div>
                     ))}
                   </div>

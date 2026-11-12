@@ -33,6 +33,8 @@ import {
   clearAllNotifications,
   clearNotificationsByDuration,
   deleteSingleNotification,
+  formatNotificationTime,
+  formatFullDateTime,
 } from '@/lib/notification-manager';
 import { GuidedTour, TourStep } from '@/components/guided-tour';
 import { useAuth } from '@/contexts/auth-context';
@@ -121,12 +123,16 @@ export default function NotifikasiPage() {
       syncServerInvitations(user?.email || undefined, user?.id || undefined).then(refresh);
     }
 
+    // Interval pembaruan dinamis tiap 30 detik agar menit dan jam terus bergerak
+    const liveTimer = setInterval(refresh, 30000);
+
     window.addEventListener('uda_notification_added', refresh);
     window.addEventListener('uda_notifications_read', refresh);
     window.addEventListener('uda_notifications_cleared', refresh);
     window.addEventListener('storage', refresh);
 
     return () => {
+      clearInterval(liveTimer);
       window.removeEventListener('uda_notification_added', refresh);
       window.removeEventListener('uda_notifications_read', refresh);
       window.removeEventListener('uda_notifications_cleared', refresh);
@@ -504,8 +510,11 @@ export default function NotifikasiPage() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b', whiteSpace: 'nowrap' }}>
-                        {n.time_ago}
+                      <span
+                        title={formatFullDateTime(n.created_at, n.id)}
+                        style={{ fontSize: '0.72rem', color: '#64748b', whiteSpace: 'nowrap', fontWeight: 600 }}
+                      >
+                        {formatNotificationTime(n.created_at, n.id, n.time_ago)}
                       </span>
                       <button
                         type="button"
@@ -685,8 +694,11 @@ export default function NotifikasiPage() {
                       {n.title || meta.defaultTitle}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
-                        {n.time_ago}
+                      <div
+                        title={formatFullDateTime(n.created_at, n.id)}
+                        style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}
+                      >
+                        {formatNotificationTime(n.created_at, n.id, n.time_ago)}
                       </div>
                       <button
                         type="button"
