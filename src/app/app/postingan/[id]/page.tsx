@@ -22,7 +22,7 @@ import {
   Plus,
   Building,
 } from 'lucide-react';
-import { compressImageToBase64, compressVideoFast, isMediaVideo } from '@/lib/image-upload';
+import { compressImageToBase64, compressVideoFast, isMediaVideo, toPlayableVideoUrl } from '@/lib/image-upload';
 import { DUMMY_BRANDS, DUMMY_SNIPPETS, DummyPost, DummyBrand, DummySnippet } from '@/lib/dummy-data';
 import { PLATFORMS, CONTENT_TYPES, POST_STATUSES } from '@/lib/platforms';
 import { PostService } from '@/services/post.service';
@@ -81,6 +81,8 @@ export default function PostEditorDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [directBlobUrl, setDirectBlobUrl] = useState<string>('');
+  const [videoPoster, setVideoPoster] = useState<string>('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>('owner');
@@ -89,20 +91,38 @@ export default function PostEditorDetailPage() {
   const [isLoadingBrands, setIsLoadingBrands] = useState(true);
 
   const isReadOnly = userRole === 'viewer';
+  const isVideoOrReels = post.content_type === 'video' || post.content_type === 'reels';
+  const isCarouselMode = post.content_type === 'carousel';
 
-  // Daftar gambar konten (mendukung single image maupun multi-image Carousel hingga 10 gambar)
+  // Daftar media konten (mendukung single image, multi-image Carousel hingga 10 gambar, dan single video)
   const mediaList: string[] = React.useMemo(() => {
+    let raw: string[] = [];
     if (Array.isArray(post.media_urls) && post.media_urls.length > 0) {
-      return post.media_urls.filter((u) => typeof u === 'string' && u.trim().length > 0);
+      raw = post.media_urls.filter((u) => typeof u === 'string' && u.trim().length > 0);
+    } else if (post.media_url && post.media_url.trim().length > 0) {
+      raw = [post.media_url.trim()];
     }
-    if (post.media_url && post.media_url.trim().length > 0) {
-      return [post.media_url.trim()];
+
+    // Jika tipe konten Video atau Reels, pastikan mediaList HANYA berisi 1 file video (bukan thumbnail ganda)
+    if (isVideoOrReels) {
+      if (raw.length === 0) return [];
+      const videoItem = raw.find((u) => isMediaVideo(u, post.content_type)) || raw[0];
+      return [videoItem];
     }
-    return [];
-  }, [post.media_urls, post.media_url]);
+
+    return raw;
+  }, [post.media_urls, post.media_url, isVideoOrReels, post.content_type]);
 
   const safeSlideIndex = mediaList.length > 0 ? Math.min(activeSlideIndex, mediaList.length - 1) : 0;
-  const isCarouselMode = post.content_type === 'carousel';
+  const currentMedia = mediaList[safeSlideIndex] || '';
+  const isCurrentVideo = isVideoOrReels || isMediaVideo(currentMedia, post.content_type);
+
+  // Sumber URL video yang dapat diputar secara native (Streaming Blob URL)
+  const playableVideoSrc = React.useMemo(() => {
+    if (!isCurrentVideo) return '';
+    if (directBlobUrl) return directBlobUrl;
+    return toPlayableVideoUrl(currentMedia);
+  }, [isCurrentVideo, directBlobUrl, currentMedia]);
 
   // Deteksi apakah pengguna merupakan anggota undangan tim
   const isTeamMember = React.useMemo(() => {
@@ -187,8 +207,6 @@ export default function PostEditorDetailPage() {
     return d ? d.toISOString() : null;
   };
 
-  const isVideoOrReels = post.content_type === 'video' || post.content_type === 'reels';
-
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
@@ -220,17 +238,23 @@ export default function PostEditorDetailPage() {
 
       setIsUploadingImage(true);
       try {
+        // Buat streaming Blob URL langsung dari file agar browser langsung memutar video secara native & lancar
+        const nativeBlobUrl = URL.createObjectURL(file);
+        setDirectBlobUrl(nativeBlobUrl);
+
         // Kompresi cepat & ekstraksi thumbnail poster instan
         const { videoUrl, thumbnailUrl } = await compressVideoFast(file);
+        setVideoPoster(thumbnailUrl);
+
         setPost((prev) => ({
           ...prev,
           media_url: videoUrl,
-          media_urls: [videoUrl, thumbnailUrl],
+          media_urls: [videoUrl],
         }));
         setActiveSlideIndex(0);
         showSuccess(
           'Video Berhasil Diunggah!',
-          `File video berhasil dioptimasi dan thumbnail pratinjau telah dibuat secara instan.`
+          `File video siap diputar pada pratinjau feed.`
         );
       } catch (err: any) {
         showError('Gagal Memproses Video', err.message || 'Terjadi kesalahan saat memproses video.');
@@ -325,6 +349,13 @@ export default function PostEditorDetailPage() {
   };
 
   const handleRemoveImage = () => {
+    if (directBlobUrl) {
+      try {
+        URL.revokeObjectURL(directBlobUrl);
+      } catch {}
+      setDirectBlobUrl('');
+    }
+    setVideoPoster('');
     setPost((prev) => ({ ...prev, media_url: '', media_urls: [] }));
     setActiveSlideIndex(0);
   };
@@ -1161,11 +1192,13 @@ END:VCALENDAR`;
               <div className="post-editor-media-preview-card">
                 <div className="post-editor-media-preview-left">
                   <div className="post-editor-media-thumb">
-                    {isMediaVideo(mediaList[0]) ? (
+                    {isMediaVideo(mediaList[0], post.content_type) ? (
                       <video
-                        src={mediaList[0]}
+                        src={playableVideoSrc || mediaList[0]}
+                        poster={videoPoster || undefined}
                         muted
                         playsInline
+                        preload="metadata"
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                     ) : (
@@ -1348,7 +1381,7 @@ END:VCALENDAR`;
               <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
                 Pratinjau Feed Media Sosial
               </h3>
-              {(isCarouselMode || mediaList.length > 1) && mediaList.length > 0 && (
+              {isCarouselMode && !isVideoOrReels && mediaList.length > 1 && (
                 <span
                   style={{
                     fontSize: '0.74rem',
@@ -1376,7 +1409,11 @@ END:VCALENDAR`;
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>@{brand.handle}</div>
                     <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
-                      {isCarouselMode ? 'Postingan Carousel' : 'Postingan Terjadwal'}
+                      {isCarouselMode
+                        ? 'Postingan Carousel'
+                        : isVideoOrReels
+                        ? (post.content_type === 'reels' ? 'Postingan Reels' : 'Postingan Video')
+                        : 'Postingan Terjadwal'}
                     </div>
                   </div>
                 </div>
@@ -1400,33 +1437,45 @@ END:VCALENDAR`;
                 )}
               </div>
 
-              {/* Gambar Feed Tersinkron + Navigasi Geser Slide Carousel */}
+              {/* Gambar / Video Feed Tersinkron + Navigasi Geser Slide Carousel */}
               <div
                 className="post-editor-feed-img-wrap"
                 style={{
                   position: 'relative',
-                  aspectRatio: post.content_type === 'reels' || post.content_type === 'story' ? '9 / 16' : '1 / 1',
+                  aspectRatio: post.content_type === 'reels' ? '9 / 16' : '1 / 1',
+                  background: isCurrentVideo ? '#000000' : '#f8fafc',
+                  overflow: 'hidden',
                 }}
               >
                 {mediaList.length > 0 ? (
                   <>
-                    {isMediaVideo(mediaList[safeSlideIndex]) ? (
-                      <video
-                        src={mediaList[safeSlideIndex]}
-                        controls
-                        playsInline
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
+                    {isCurrentVideo ? (
+                      <div style={{ position: 'relative', width: '100%', height: '100%', background: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <video
+                          key={playableVideoSrc || currentMedia}
+                          src={playableVideoSrc || currentMedia}
+                          poster={videoPoster || undefined}
+                          controls
+                          playsInline
+                          preload="auto"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain',
+                            backgroundColor: '#000000',
+                          }}
+                        />
+                      </div>
                     ) : (
                       <img
-                        src={mediaList[safeSlideIndex]}
+                        src={currentMedia}
                         alt={`Pratinjau Slide ${safeSlideIndex + 1}`}
                         style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.2s ease' }}
                       />
                     )}
 
-                    {/* Badge Counter Slide di Pojok Kanan Atas */}
-                    {(isCarouselMode || mediaList.length > 1) && (
+                    {/* Badge Counter Slide di Pojok Kanan Atas (Khusus Carousel) */}
+                    {isCarouselMode && !isVideoOrReels && mediaList.length > 1 && (
                       <div
                         style={{
                           position: 'absolute',
@@ -1449,8 +1498,8 @@ END:VCALENDAR`;
                       </div>
                     )}
 
-                    {/* Tombol Geser Kiri & Kanan jika ada > 1 gambar */}
-                    {mediaList.length > 1 && (
+                    {/* Tombol Geser Kiri & Kanan jika ada > 1 gambar (Khusus Carousel) */}
+                    {isCarouselMode && !isVideoOrReels && mediaList.length > 1 && (
                       <>
                         <button
                           type="button"

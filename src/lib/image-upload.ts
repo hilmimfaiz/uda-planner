@@ -152,13 +152,17 @@ export async function compressVideoFast(
   });
 }
 
+// Cache in-memory untuk Blob URLs yang sudah dikonversi agar tidak terjadi memory leak
+const blobUrlCache = new Map<string, string>();
+
 /**
  * Cek apakah string URL atau nama file berupa media video
  */
-export function isMediaVideo(url?: string | null): boolean {
+export function isMediaVideo(url?: string | null, contentType?: string): boolean {
+  if (contentType === 'video' || contentType === 'reels') return true;
   if (!url) return false;
   const clean = url.toLowerCase().split('?')[0];
-  if (clean.startsWith('data:video/')) return true;
+  if (clean.startsWith('data:video/') || clean.startsWith('blob:')) return true;
   return (
     clean.endsWith('.mp4') ||
     clean.endsWith('.webm') ||
@@ -166,6 +170,46 @@ export function isMediaVideo(url?: string | null): boolean {
     clean.endsWith('.m4v') ||
     clean.endsWith('.mkv')
   );
+}
+
+/**
+ * Konversi URL video (khususnya Base64 data:video/mp4) menjadi Blob URL streaming yang
+ * dapat diputar secara native oleh browser dengan kontrol play/pause, durasi, dan seek lengkap.
+ */
+export function toPlayableVideoUrl(url?: string | null): string {
+  if (!url) return '';
+  if (typeof window === 'undefined') return url;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:')) {
+    return url;
+  }
+
+  // Jika URL berupa data:video/...
+  if (url.startsWith('data:video/')) {
+    if (blobUrlCache.has(url)) {
+      return blobUrlCache.get(url)!;
+    }
+    try {
+      const parts = url.split(';base64,');
+      if (parts.length === 2) {
+        const mimeType = parts[0].replace('data:', '') || 'video/mp4';
+        const binary = atob(parts[1]);
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: mimeType });
+        const blobUrl = URL.createObjectURL(blob);
+        blobUrlCache.set(url, blobUrl);
+        return blobUrl;
+      }
+    } catch (e) {
+      console.warn('Gagal mengonversi data video ke streaming blob:', e);
+      return url;
+    }
+  }
+
+  return url;
 }
 
 /**

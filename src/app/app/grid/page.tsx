@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { DUMMY_BRANDS, DummyPost, DummyBrand } from "@/lib/dummy-data";
 import { POST_STATUSES } from "@/lib/platforms";
-import { isMediaVideo } from "@/lib/image-upload";
+import { isMediaVideo, toPlayableVideoUrl } from "@/lib/image-upload";
 import { GuidedTour, TourStep } from "@/components/guided-tour";
 import { PostService } from "@/services/post.service";
 import { BrandService } from "@/services/brand.service";
@@ -247,9 +247,10 @@ export default function GridInstagramPage() {
         {activeImage ? (
           isVideoItem ? (
             <video
-              src={activeImage}
+              src={toPlayableVideoUrl(activeImage)}
               muted
               playsInline
+              preload="metadata"
               style={{
                 width: "100%",
                 height: "100%",
@@ -517,11 +518,12 @@ export default function GridInstagramPage() {
         }}
       >
         {mediaSrc ? (
-          isMediaVideo(mediaSrc) ? (
+          isMediaVideo(mediaSrc, post.content_type) ? (
             <video
-              src={mediaSrc}
+              src={toPlayableVideoUrl(mediaSrc)}
               muted
               playsInline
+              preload="metadata"
               style={{
                 width: "100%",
                 height: "100%",
