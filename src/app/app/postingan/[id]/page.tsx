@@ -81,6 +81,7 @@ export default function PostEditorDetailPage() {
   const [showBankSnippetModal, setShowBankSnippetModal] = useState(false);
   const [snippetTab, setSnippetTab] = useState<'all' | 'caption' | 'hashtag'>('all');
   const [isSaving, setIsSaving] = useState(false);
+  const [savingProgress, setSavingProgress] = useState(0);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState<{
     isUploading: boolean;
@@ -554,12 +555,23 @@ export default function PostEditorDetailPage() {
     };
 
     setIsSaving(true);
+    setSavingProgress(15);
+
+    let currentProg = 15;
+    const saveProgressTimer = setInterval(() => {
+      currentProg = Math.min(92, currentProg + Math.floor(Math.random() * 8) + 6);
+      setSavingProgress(currentProg);
+    }, 65);
+
     try {
       if (isNew) {
         const created = await PostService.createPost({
           ...finalPayload,
           user_id: user?.id,
         });
+        clearInterval(saveProgressTimer);
+        setSavingProgress(100);
+        await new Promise((r) => setTimeout(r, 280));
         setPost(created);
         showSuccess(
           'Postingan Berhasil Dibuat!',
@@ -570,6 +582,9 @@ export default function PostEditorDetailPage() {
         );
       } else {
         const updated = await PostService.updatePost(post.id, finalPayload);
+        clearInterval(saveProgressTimer);
+        setSavingProgress(100);
+        await new Promise((r) => setTimeout(r, 280));
         if (updated) {
           setPost(updated);
         }
@@ -579,10 +594,13 @@ export default function PostEditorDetailPage() {
         );
       }
     } catch (err: any) {
+      clearInterval(saveProgressTimer);
       console.error('Error in handleSavePost:', err);
       showError('Gagal Menyimpan Postingan', err.message || 'Terjadi kesalahan sistem, silakan coba lagi.');
     } finally {
+      clearInterval(saveProgressTimer);
       setIsSaving(false);
+      setSavingProgress(0);
     }
   };
 
@@ -865,8 +883,64 @@ END:VCALENDAR`;
               className="btn-uda btn-uda-primary btn-uda-sm post-editor-btn-submit"
               onClick={handleSavePost}
               disabled={isSaving}
+              style={{
+                position: 'relative',
+                overflow: 'hidden',
+                minWidth: 155,
+                justifyContent: 'center',
+                cursor: isSaving ? 'not-allowed' : 'pointer',
+                opacity: isSaving ? 0.96 : 1,
+              }}
             >
-              {isSaving ? 'Menyimpan...' : isNew ? 'Buat Postingan' : 'Simpan Perubahan'}
+              {isSaving ? (
+                <>
+                  {/* Background Bar Berjalan */}
+                  <div
+                    className="uda-video-progress-bar"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      bottom: 0,
+                      width: `${savingProgress}%`,
+                      backgroundColor: '#15803d',
+                      backgroundImage:
+                        'linear-gradient(45deg, rgba(255,255,255,0.25) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0.25) 75%, transparent 75%, transparent)',
+                      backgroundSize: '20px 20px',
+                      transition: 'width 0.15s ease-out',
+                      zIndex: 1,
+                    }}
+                  />
+                  {/* Garis Progress di Bawah Tombol */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: 3,
+                      backgroundColor: 'rgba(0,0,0,0.25)',
+                      zIndex: 2,
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${savingProgress}%`,
+                        backgroundColor: '#facc15',
+                        transition: 'width 0.15s ease-out',
+                      }}
+                    />
+                  </div>
+                  {/* Teks Progres */}
+                  <span style={{ position: 'relative', zIndex: 3, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Menyimpan... {savingProgress}%</span>
+                  </span>
+                </>
+              ) : (
+                <span>{isNew ? 'Buat Postingan' : 'Simpan Perubahan'}</span>
+              )}
             </button>
           )}
         </div>
@@ -2009,9 +2083,63 @@ END:VCALENDAR`;
             className="btn-uda btn-uda-primary"
             onClick={handleSavePost}
             disabled={isSaving}
-            style={{ width: '100%', padding: '12px 18px', fontSize: '0.95rem', justifyContent: 'center' }}
+            style={{
+              width: '100%',
+              padding: '12px 18px',
+              fontSize: '0.95rem',
+              justifyContent: 'center',
+              position: 'relative',
+              overflow: 'hidden',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
+              opacity: isSaving ? 0.96 : 1,
+            }}
           >
-            {isSaving ? 'Menyimpan...' : isNew ? 'Buat Postingan Sekarang' : 'Simpan Perubahan'}
+            {isSaving ? (
+              <>
+                <div
+                  className="uda-video-progress-bar"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    bottom: 0,
+                    width: `${savingProgress}%`,
+                    backgroundColor: '#15803d',
+                    backgroundImage:
+                      'linear-gradient(45deg, rgba(255,255,255,0.25) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0.25) 75%, transparent 75%, transparent)',
+                    backgroundSize: '20px 20px',
+                    transition: 'width 0.15s ease-out',
+                    zIndex: 1,
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 4,
+                    backgroundColor: 'rgba(0,0,0,0.25)',
+                    zIndex: 2,
+                  }}
+                >
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${savingProgress}%`,
+                      backgroundColor: '#facc15',
+                      transition: 'width 0.15s ease-out',
+                    }}
+                  />
+                </div>
+                <span style={{ position: 'relative', zIndex: 3, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Menyimpan Postingan... {savingProgress}%</span>
+                </span>
+              </>
+            ) : (
+              <span>{isNew ? 'Buat Postingan Sekarang' : 'Simpan Perubahan'}</span>
+            )}
           </button>
         </div>
       )}
