@@ -513,25 +513,6 @@ export default function UndanganAnggotaPage() {
           <Building size={32} />
         </div>
 
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            backgroundColor: '#f3e8ff',
-            color: '#7e22ce',
-            fontSize: '0.74rem',
-            fontWeight: 800,
-            padding: '4px 12px',
-            borderRadius: 999,
-            marginBottom: 14,
-            border: '1px solid #d8b4fe',
-          }}
-        >
-          <Sparkles size={13} />
-          <span>UNDANGAN KOLABORASI RESMI</span>
-        </div>
-
         <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a', marginBottom: 10, letterSpacing: '-0.02em' }}>
           Undangan Bergabung ke Brand
         </h1>
@@ -652,7 +633,7 @@ export default function UndanganAnggotaPage() {
                 textAlign: 'left',
               }}
             >
-              ✨ <strong>Benefit Otomatis:</strong> Menerima undangan ini akan otomatis mengubah status langganan Anda menjadi <strong>Paket TIM</strong>.
+              <strong>Benefit Otomatis:</strong> Menerima undangan ini akan otomatis mengubah status langganan Anda menjadi <strong>Paket TIM</strong>.
             </div>
 
             <button
