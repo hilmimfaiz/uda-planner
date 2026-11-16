@@ -62,18 +62,16 @@ export default function DaftarPostinganPage() {
   const { confirmDelete, showSuccess } = useModal();
   const [posts, setPosts] = useState<DummyPost[]>(() => {
     try {
-      const cached = PostService.getCachedPosts();
-      return cached.length > 0 ? cached : DUMMY_POSTS;
+      return PostService.getCachedPosts({}, user?.id);
     } catch {
-      return DUMMY_POSTS;
+      return [];
     }
   });
   const [brands, setBrands] = useState<DummyBrand[]>(() => {
     try {
-      const cached = BrandService.getCachedBrands();
-      return cached.length > 0 ? cached : DUMMY_BRANDS;
+      return BrandService.getCachedBrands();
     } catch {
-      return DUMMY_BRANDS;
+      return [];
     }
   });
   const [isLoading, setIsLoading] = useState(true);

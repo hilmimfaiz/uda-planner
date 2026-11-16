@@ -49,7 +49,7 @@ export default function PostEditorDetailPage() {
 
   const defaultNewPost: DummyPost = {
     id: `post-${Date.now()}`,
-    brand_id: DUMMY_BRANDS[0]?.id || 'brand-1',
+    brand_id: '',
     title: '',
     caption: '',
     hashtags: '',
@@ -71,12 +71,12 @@ export default function PostEditorDetailPage() {
 
   const [post, setPost] = useState<DummyPost>(() => {
     if (!isNew && rawId) {
-      const cached = PostService.getCachedPosts().find((p) => p.id === rawId);
+      const cached = PostService.getCachedPosts({}, user?.id).find((p) => p.id === rawId);
       if (cached) return cached;
     }
     return defaultNewPost;
   });
-  const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
+  const [brands, setBrands] = useState<DummyBrand[]>(() => BrandService.getCachedBrands(user?.id));
   const [snippets, setSnippets] = useState<DummySnippet[]>(DUMMY_SNIPPETS);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showRevisionModal, setShowRevisionModal] = useState(false);
@@ -525,8 +525,10 @@ export default function PostEditorDetailPage() {
             const activeBrandId = typeof window !== 'undefined' ? localStorage.getItem('uda_active_brand_id') : null;
             const targetBrand = (activeBrandId && validBrands.find((b) => b.id === activeBrandId)) || validBrands[0];
             setPost((prev) => ({ ...prev, brand_id: targetBrand.id }));
-            BrandService.getUserBrandRole(targetBrand.id, user?.id).then((r) => setUserRole(r || 'owner'));
+            BrandService.getUserBrandRole(targetBrand.id, user?.id).then((r) => setUserRole(r));
           }
+        } else if (isNew) {
+          setIsAccessDenied(true);
         }
         setIsLoadingBrands(false);
       })
@@ -539,20 +541,24 @@ export default function PostEditorDetailPage() {
     });
 
     if (!isNew && rawId) {
-      const cached = PostService.getCachedPosts().find((p) => p.id === rawId);
+      const cached = PostService.getCachedPosts({}, user?.id).find((p) => p.id === rawId);
       if (!cached) {
         setIsLoadingPost(true);
       }
       PostService.getPostById(rawId, user?.id).then(async (existingPost) => {
         if (!existingPost) {
-          if (!cached) setIsAccessDenied(true);
+          setIsAccessDenied(true);
         } else {
+          const r = await BrandService.getUserBrandRole(existingPost.brand_id, user?.id);
+          if (!r) {
+            setIsAccessDenied(true);
+            return;
+          }
           setPost(existingPost);
           if (existingPost.cover_url) {
             setVideoPoster(existingPost.cover_url);
           }
-          const r = await BrandService.getUserBrandRole(existingPost.brand_id, user?.id);
-          setUserRole(r || 'owner');
+          setUserRole(r);
         }
         setIsLoadingPost(false);
       });
@@ -636,9 +642,17 @@ export default function PostEditorDetailPage() {
       return;
     }
 
-    const targetBrandId = (post.brand_id && brands.some((b) => b.id === post.brand_id))
-      ? post.brand_id
-      : (brands[0]?.id || post.brand_id || 'brand-1');
+    if (!brands || brands.length === 0) {
+      showError('Brand Tidak Ditemukan', 'Anda belum memiliki brand atau belum tergabung dalam tim brand manapun untuk membuat postingan.');
+      return;
+    }
+
+    const targetBrand = brands.find((b) => b.id === post.brand_id) || brands[0];
+    if (!targetBrand) {
+      showError('Brand Tidak Valid', 'Silakan pilih brand yang sah terlebih dahulu.');
+      return;
+    }
+    const targetBrandId = targetBrand.id;
 
     const finalMediaUrls = isCarouselMode
       ? mediaList.slice(0, MAX_CAROUSEL_IMAGES)

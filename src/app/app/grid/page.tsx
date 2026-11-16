@@ -51,15 +51,14 @@ export default function GridInstagramPage() {
   const { user, account } = useAuth();
   const [brands, setBrands] = useState<DummyBrand[]>(() => {
     try {
-      const cached = BrandService.getCachedBrands();
-      return cached.length > 0 ? cached : DUMMY_BRANDS;
+      return BrandService.getCachedBrands();
     } catch {
-      return DUMMY_BRANDS;
+      return [];
     }
   });
-  const [posts, setPosts] = useState<DummyPost[]>(() => PostService.getCachedPosts());
+  const [posts, setPosts] = useState<DummyPost[]>(() => PostService.getCachedPosts({}, user?.id));
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedBrandId, setSelectedBrandId] = useState<string>("brand-1");
+  const [selectedBrandId, setSelectedBrandId] = useState<string>("");
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:5">("1:1");
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'reviewer' | 'viewer' | null>(null);
   const [slideIndices, setSlideIndices] = useState<Record<string, number>>({});
@@ -83,7 +82,7 @@ export default function GridInstagramPage() {
 
     const loadPosts = async () => {
       try {
-        const cached = PostService.getCachedPosts();
+        const cached = PostService.getCachedPosts({}, user?.id);
         if (isMounted && cached.length > 0) setPosts(cached);
         const data = await PostService.getPosts({}, user?.id);
         if (isMounted && data) setPosts(data);

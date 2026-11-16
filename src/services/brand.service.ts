@@ -42,6 +42,10 @@ export class BrandService {
         const rawAuth = localStorage.getItem('uda_auth_profile');
         if (rawAuth) finalOwnerId = JSON.parse(rawAuth)?.id;
       }
+      if (!finalOwnerId) {
+        const rawUser = localStorage.getItem('uda_auth_user');
+        if (rawUser) finalOwnerId = JSON.parse(rawUser)?.id;
+      }
       if (finalOwnerId) {
         const rawUserBrands = localStorage.getItem(`uda_cached_brands_${finalOwnerId}`);
         if (rawUserBrands) {
@@ -51,7 +55,31 @@ export class BrandService {
       }
       const stored = getStoredCustomBrands();
       if (finalOwnerId) {
-        return stored.filter((b) => b.owner_id === finalOwnerId);
+        const results: DummyBrand[] = stored.filter((b) => b.owner_id === finalOwnerId);
+        const rawTeam = localStorage.getItem('uda_team_membership_' + finalOwnerId);
+        if (rawTeam) {
+          try {
+            const team = JSON.parse(rawTeam);
+            if (team && team.brand_id) {
+              const teamBrand = stored.find((b) => b.id === team.brand_id) || {
+                id: team.brand_id,
+                owner_id: team.owner_id || 'owner-unknown',
+                name: team.brand_name || 'Brand Tim',
+                handle: (team.brand_name || 'brand').toLowerCase().replace(/[^a-z0-9]+/g, ''),
+                platforms: ['instagram'],
+                color: '#16a34a',
+                avatar_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
+                require_approval: false,
+                is_archived: false,
+                post_count_this_month: 0,
+              };
+              if (!results.some((b) => b.id === teamBrand.id)) {
+                results.push(teamBrand);
+              }
+            }
+          } catch {}
+        }
+        return results;
       }
       return stored;
     } catch {

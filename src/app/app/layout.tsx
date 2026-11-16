@@ -239,7 +239,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           Notification.permission === 'granted' &&
           localStorage.getItem('uda_browser_notif_enabled') === 'true';
 
-        const cachedPosts = PostService.getCachedPosts();
+        const cachedPosts = PostService.getCachedPosts({}, user?.id);
         const posts = cachedPosts.length > 0 ? cachedPosts : await PostService.getPosts({}, user?.id);
         const now = Date.now();
 

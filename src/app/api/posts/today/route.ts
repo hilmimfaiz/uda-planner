@@ -5,10 +5,11 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const brandId = searchParams.get('brandId') || undefined;
+    const userId = searchParams.get('userId') || undefined;
     const dateParam = searchParams.get('date');
 
     const targetDate = dateParam ? new Date(dateParam) : new Date();
-    const posts = await PostService.getPostsForDate(targetDate, { brandId });
+    const posts = await PostService.getPostsForDate(targetDate, { brandId }, userId);
 
     return NextResponse.json({
       success: true,

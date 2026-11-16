@@ -28,11 +28,11 @@ export default function BerandaPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [posts, setPosts] = useState<DummyPost[]>(() => {
     const todayStr = new Date().toDateString();
-    return PostService.getCachedPosts().filter(
+    return PostService.getCachedPosts({}, user?.id).filter(
       (p) => p.scheduled_at && new Date(p.scheduled_at).toDateString() === todayStr
     );
   });
-  const [brands, setBrands] = useState<DummyBrand[]>(() => BrandService.getCachedBrands());
+  const [brands, setBrands] = useState<DummyBrand[]>(() => BrandService.getCachedBrands(user?.id));
   const [selectedBrandFilter, setSelectedBrandFilter] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -114,7 +114,7 @@ export default function BerandaPage() {
       selectedBrandFilter !== "all" ? { brandId: selectedBrandFilter } : {};
 
     // Tampilkan data cache lokal secara instan terlebih dahulu
-    const cachedForDate = PostService.getCachedPosts(filters).filter(
+    const cachedForDate = PostService.getCachedPosts(filters, user?.id).filter(
       (p) => p.scheduled_at && new Date(p.scheduled_at).toDateString() === targetDateStr
     );
     setPosts(cachedForDate);

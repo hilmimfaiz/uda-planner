@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PostService } from '@/services/post.service';
+import { BrandService } from '@/services/brand.service';
 import { QuotaService } from '@/services/quota.service';
 
 export async function GET(req: NextRequest) {
@@ -32,6 +33,19 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const accountId = body.accountId || 'acc-001';
+
+    if (!body.brand_id) {
+      return NextResponse.json({ success: false, error: 'brand_id wajib disertakan.' }, { status: 400 });
+    }
+
+    // Brand-Based Access Control: Pastikan pembuat memiliki akses ke brand ini
+    const userRole = await BrandService.getUserBrandRole(body.brand_id, body.user_id);
+    if (!userRole) {
+      return NextResponse.json({ success: false, error: 'Akses Ditolak: Anda tidak memiliki akses ke brand ini.' }, { status: 403 });
+    }
+    if (userRole === 'viewer') {
+      return NextResponse.json({ success: false, error: 'Akses Ditolak: Peran Viewer hanya memiliki hak baca dan tidak dapat membuat postingan.' }, { status: 403 });
+    }
 
     const quotaCheck = await QuotaService.canCreatePost(accountId);
     if (!quotaCheck.allowed) {
@@ -118,9 +132,15 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, ...updates } = body;
+    const { id, userId, ...updates } = body;
     if (!id) {
       return NextResponse.json({ success: false, error: 'Post ID is required' }, { status: 400 });
+    }
+
+    // Brand-Based Access Control: Cek hak akses ke postingan dan brand terkait
+    const existingPost = await PostService.getPostById(id, userId);
+    if (!existingPost) {
+      return NextResponse.json({ success: false, error: 'Akses Ditolak: Postingan tidak ditemukan atau Anda tidak memiliki akses ke brand terkait.' }, { status: 403 });
     }
 
     const { createAdminClient } = await import('@/lib/supabase/server');
@@ -152,7 +172,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    const updated = await PostService.updatePost(id, updates);
+    const updated = await PostService.updatePost(id, updates, userId);
     return NextResponse.json({ success: true, data: updated });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -163,8 +183,19 @@ export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
+    const userId = searchParams.get('userId') || undefined;
     if (!id) {
       return NextResponse.json({ success: false, error: 'Post ID is required' }, { status: 400 });
+    }
+
+    // Brand-Based Access Control: Cek hak akses ke postingan
+    const existingPost = await PostService.getPostById(id, userId);
+    if (!existingPost) {
+      return NextResponse.json({ success: false, error: 'Akses Ditolak: Postingan tidak ditemukan atau Anda tidak memiliki akses ke brand terkait.' }, { status: 403 });
+    }
+    const role = await BrandService.getUserBrandRole(existingPost.brand_id, userId);
+    if (role === 'viewer' || role === 'editor') {
+      return NextResponse.json({ success: false, error: 'Akses Ditolak: Hanya Owner atau Reviewer yang dapat menghapus postingan.' }, { status: 403 });
     }
 
     const { createAdminClient } = await import('@/lib/supabase/server');
@@ -177,7 +208,7 @@ export async function DELETE(req: NextRequest) {
       }
     }
 
-    await PostService.deletePost(id);
+    await PostService.deletePost(id, userId);
     return NextResponse.json({ success: true, message: 'Post deleted successfully' });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
