@@ -23,6 +23,8 @@ import {
   Building,
   Video as VideoIcon,
   Film,
+  LayoutGrid,
+  Play,
 } from 'lucide-react';
 import { compressImageToBase64, compressVideoFast, isMediaVideo, toPlayableVideoUrl } from '@/lib/image-upload';
 import { DUMMY_BRANDS, DUMMY_SNIPPETS, DummyPost, DummyBrand, DummySnippet } from '@/lib/dummy-data';
@@ -62,6 +64,7 @@ export default function PostEditorDetailPage() {
     posted_url: null,
     media_url: '',
     media_urls: [],
+    cover_url: '',
     aspect_ratio: '1:1',
     comments_count: 0,
   };
@@ -93,8 +96,18 @@ export default function PostEditorDetailPage() {
   } | null>(null);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [directBlobUrl, setDirectBlobUrl] = useState<string>('');
-  const [videoPoster, setVideoPoster] = useState<string>('');
+  const [videoPoster, setVideoPoster] = useState<string>(() => {
+    if (!isNew && rawId) {
+      const cached = PostService.getCachedPosts().find((p) => p.id === rawId);
+      if (cached?.cover_url) return cached.cover_url;
+    }
+    return '';
+  });
+  const [coverPreviewMode, setCoverPreviewMode] = useState<'feed' | 'grid'>('feed');
+  const [reelsGridRatio, setReelsGridRatio] = useState<'1:1' | '9:16'>('1:1');
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const coverFileInputRef = React.useRef<HTMLInputElement>(null);
 
   const formatBytes = (bytes: number): string => {
     if (bytes <= 0) return '0 KB';
@@ -326,6 +339,7 @@ export default function PostEditorDetailPage() {
           ...prev,
           media_url: videoUrl,
           media_urls: [videoUrl],
+          cover_url: prev.cover_url || thumbnailUrl || '',
         }));
         setActiveSlideIndex(0);
         showSuccess(
@@ -449,6 +463,57 @@ export default function PostEditorDetailPage() {
     setActiveSlideIndex((prevIdx) => Math.max(0, Math.min(prevIdx, nextUrls.length - 1)));
   };
 
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showError('Format Tidak Didukung', 'Cover hanya memperbolehkan file gambar (JPG, PNG, atau WebP).');
+      if (e.target) e.target.value = '';
+      return;
+    }
+
+    try {
+      setIsUploadingCover(true);
+      // Untuk Reels max 1080x1920 (9:16), untuk Video feed max 1080x1350 (4:5 / 1:1)
+      const maxW = 1080;
+      const maxH = post.content_type === 'reels' ? 1920 : 1350;
+      const base64Cover = await compressImageToBase64(file, maxW, maxH, 0.82);
+      setPost((prev) => ({
+        ...prev,
+        cover_url: base64Cover,
+      }));
+      setVideoPoster(base64Cover);
+      showSuccess(
+        'Cover Berhasil Diatur!',
+        `Gambar sampul berhasil diunggah dan disesuaikan untuk pratinjau Grid Instagram (${post.content_type === 'reels' ? '9:16 dengan area aman 1:1' : '1:1 / 4:5'}).`
+      );
+    } catch (err: any) {
+      showError('Gagal Memproses Cover', err.message || 'Terjadi kesalahan saat memproses gambar cover.');
+    } finally {
+      setIsUploadingCover(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleRemoveCover = () => {
+    setPost((prev) => ({
+      ...prev,
+      cover_url: '',
+    }));
+    showSuccess('Cover Khusus Dihapus', 'Cover khusus telah dihapus. Tampilan Grid akan menggunakan frame video otomatis.');
+  };
+
+  const handleUseVideoFrame = () => {
+    if (videoPoster) {
+      setPost((prev) => ({
+        ...prev,
+        cover_url: videoPoster,
+      }));
+      showSuccess('Frame Video Diterapkan', 'Frame pembuka video berhasil ditetapkan sebagai cover postingan.');
+    }
+  };
+
   React.useEffect(() => {
     setIsLoadingBrands(true);
     BrandService.getBrands(user?.id)
@@ -483,6 +548,9 @@ export default function PostEditorDetailPage() {
           if (!cached) setIsAccessDenied(true);
         } else {
           setPost(existingPost);
+          if (existingPost.cover_url) {
+            setVideoPoster(existingPost.cover_url);
+          }
           const r = await BrandService.getUserBrandRole(existingPost.brand_id, user?.id);
           setUserRole(r || 'owner');
         }
@@ -552,11 +620,13 @@ export default function PostEditorDetailPage() {
       : mediaList.length > 0
       ? [mediaList[0]]
       : [];
+    const finalCoverUrl = isVideoOrReels ? (post.cover_url || videoPoster || '') : '';
     const finalPayload: DummyPost = {
       ...post,
       brand_id: targetBrandId,
       media_urls: finalMediaUrls,
       media_url: finalMediaUrls[0] || '',
+      cover_url: finalCoverUrl,
     };
 
     setIsSaving(true);
@@ -1475,7 +1545,7 @@ END:VCALENDAR`;
                     {isMediaVideo(mediaList[0], post.content_type) ? (
                       <video
                         src={playableVideoSrc || mediaList[0]}
-                        poster={videoPoster || undefined}
+                        poster={post.cover_url || videoPoster || undefined}
                         muted
                         playsInline
                         preload="metadata"
@@ -1579,6 +1649,220 @@ END:VCALENDAR`;
             )}
           </div>
 
+          {/* Fitur Cover Khusus Video & Reels */}
+          {isVideoOrReels && (
+            <div
+              style={{
+                border: '1.5px solid #86efac',
+                background: 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)',
+                borderRadius: 12,
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+                boxShadow: '0 2px 8px rgba(22, 163, 74, 0.06)',
+              }}
+            >
+              {/* Header Cover */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      backgroundColor: '#dcfce7',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#15803d',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <ImageIcon size={18} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
+                      Cover / Sampul ({post.content_type === 'reels' ? 'Reels' : 'Video'})
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                      {post.content_type === 'reels'
+                        ? 'Rekomendasi: 9:16 (1080×1920 px) • Pratinjau Grid Profil Instagram otomatis dipotong 1:1 di bagian tengah'
+                        : 'Rekomendasi: 1:1 Persegi (1080×1080 px) atau 4:5 (1080×1350 px) untuk Grid Instagram'}
+                    </div>
+                  </div>
+                </div>
+
+                {post.cover_url && !isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveCover}
+                    className="btn-uda btn-uda-danger btn-uda-sm"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: '0.74rem' }}
+                  >
+                    <Trash2 size={13} />
+                    <span>Hapus Cover</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Input file tersembunyi untuk Cover */}
+              <input
+                ref={coverFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: 'none' }}
+                onChange={handleCoverUpload}
+                disabled={isReadOnly || isUploadingCover}
+              />
+
+              {/* Box Preview Thumbnail Cover & Kontrol */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 16,
+                  flexWrap: 'wrap',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 10,
+                  padding: 12,
+                }}
+              >
+                {/* Visual Thumbnail */}
+                <div
+                  style={{
+                    width: post.content_type === 'reels' ? 84 : 96,
+                    height: post.content_type === 'reels' ? 120 : 96,
+                    borderRadius: 8,
+                    border: '1.5px solid #0f172a',
+                    backgroundColor: '#0f172a',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                  }}
+                >
+                  {(post.cover_url || videoPoster) ? (
+                    <>
+                      <img
+                        src={post.cover_url || videoPoster}
+                        alt="Sampul Cover"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                      {/* Bounding box safe zone 1:1 di tengah khusus Reels */}
+                      {post.content_type === 'reels' && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: 0,
+                            right: 0,
+                            transform: 'translateY(-50%)',
+                            height: 84, // 84px equals the width -> 1:1 square
+                            borderTop: '1.5px dashed rgba(255, 255, 255, 0.9)',
+                            borderBottom: '1.5px dashed rgba(255, 255, 255, 0.9)',
+                            backgroundColor: 'rgba(0, 0, 0, 0.15)',
+                            pointerEvents: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: '0.58rem',
+                              fontWeight: 800,
+                              color: '#ffffff',
+                              background: 'rgba(0,0,0,0.65)',
+                              padding: '1px 4px',
+                              borderRadius: 3,
+                            }}
+                          >
+                            Grid IG 1:1
+                          </span>
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 4,
+                          right: 4,
+                          backgroundColor: 'rgba(0,0,0,0.7)',
+                          color: '#ffffff',
+                          borderRadius: 4,
+                          padding: '2px 4px',
+                          fontSize: '0.62rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        {post.content_type === 'reels' ? <Film size={11} /> : <VideoIcon size={11} />}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: 6, color: '#94a3b8' }}>
+                      <ImageIcon size={22} style={{ margin: '0 auto 4px auto', opacity: 0.6 }} />
+                      <div style={{ fontSize: '0.62rem' }}>Belum ada cover</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Deskripsi Status & Tombol Aksi */}
+                <div style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ fontSize: '0.78rem', color: '#475569', lineHeight: 1.45 }}>
+                    {post.cover_url ? (
+                      <span style={{ color: '#15803d', fontWeight: 700 }}>
+                        ✓ Cover kustom terpasang aktif untuk pratinjau Grid Instagram.
+                      </span>
+                    ) : videoPoster ? (
+                      <span style={{ color: '#0f172a' }}>
+                        ℹ️ Saat ini menggunakan frame pembuka video. Anda dapat mengunggah gambar cover kustom beresolusi tinggi.
+                      </span>
+                    ) : (
+                      <span>
+                        ℹ️ Unggah gambar cover khusus atau unggah file video untuk otomatis menghasilkan frame cover.
+                      </span>
+                    )}
+                  </div>
+
+                  {!isReadOnly && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+                      <button
+                        type="button"
+                        className="btn-uda btn-uda-secondary btn-uda-sm"
+                        onClick={() => coverFileInputRef.current?.click()}
+                        disabled={isUploadingCover}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.76rem', padding: '5px 12px' }}
+                      >
+                        {isUploadingCover ? <Loader2 size={13} className="animate-spin" /> : <UploadCloud size={13} />}
+                        <span>{post.cover_url ? 'Ganti Cover' : 'Unggah Cover Khusus'}</span>
+                      </button>
+
+                      {videoPoster && post.cover_url && post.cover_url !== videoPoster && (
+                        <button
+                          type="button"
+                          className="btn-uda btn-uda-outline btn-uda-sm"
+                          onClick={handleUseVideoFrame}
+                          style={{ fontSize: '0.76rem', padding: '5px 10px' }}
+                        >
+                          Gunakan Frame Video
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Caption dengan Tombol Sisipkan dari Bank & Penghitung Karakter */}
           <div id="tour-editor-caption" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div className="post-editor-caption-header">
@@ -1657,27 +1941,265 @@ END:VCALENDAR`;
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Pratinjau Sosmed (Feed Mockup dengan Slider Carousel Interaktif) */}
           <div id="tour-editor-preview" className="uda-card post-editor-card" style={{ padding: 18 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
               <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                Pratinjau Feed Media Sosial
+                {isVideoOrReels && coverPreviewMode === 'grid' ? 'Pratinjau Grid Instagram' : 'Pratinjau Feed Media Sosial'}
               </h3>
-              {isCarouselMode && !isVideoOrReels && mediaList.length > 1 && (
-                <span
-                  style={{
-                    fontSize: '0.74rem',
-                    fontWeight: 800,
-                    color: '#15803d',
-                    background: '#dcfce7',
-                    padding: '2px 8px',
-                    borderRadius: 999,
-                  }}
-                >
-                  Slide {safeSlideIndex + 1} dari {mediaList.length}
-                </span>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {isVideoOrReels && (
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      background: '#f1f5f9',
+                      padding: 2,
+                      borderRadius: 8,
+                      border: '1px solid #cbd5e1',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setCoverPreviewMode('feed')}
+                      style={{
+                        padding: '4px 9px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        borderRadius: 6,
+                        border: 'none',
+                        background: coverPreviewMode === 'feed' ? '#ffffff' : 'transparent',
+                        color: coverPreviewMode === 'feed' ? '#0f172a' : '#64748b',
+                        boxShadow: coverPreviewMode === 'feed' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        transition: 'all 0.15s ease',
+                      }}
+                      title="Pratinjau Feed & Pemutar Video"
+                    >
+                      <Play size={11} />
+                      <span>Feed</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCoverPreviewMode('grid')}
+                      style={{
+                        padding: '4px 9px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        borderRadius: 6,
+                        border: 'none',
+                        background: coverPreviewMode === 'grid' ? '#16a34a' : 'transparent',
+                        color: coverPreviewMode === 'grid' ? '#ffffff' : '#64748b',
+                        boxShadow: coverPreviewMode === 'grid' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        transition: 'all 0.15s ease',
+                      }}
+                      title="Pratinjau Sampul Cover pada Grid Instagram"
+                    >
+                      <LayoutGrid size={11} />
+                      <span>Grid IG</span>
+                    </button>
+                  </div>
+                )}
+                {isCarouselMode && !isVideoOrReels && mediaList.length > 1 && (
+                  <span
+                    style={{
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      color: '#15803d',
+                      background: '#dcfce7',
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                    }}
+                  >
+                    Slide {safeSlideIndex + 1} dari {mediaList.length}
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: '#ffffff' }}>
+            {isVideoOrReels && coverPreviewMode === 'grid' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* Switcher Tab untuk Reels (Grid Profil 1:1 vs Tab Reels 9:16) */}
+                {post.content_type === 'reels' && (
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
+                    <button
+                      type="button"
+                      onClick={() => setReelsGridRatio('1:1')}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        borderRadius: 999,
+                        border: reelsGridRatio === '1:1' ? '1.5px solid #16a34a' : '1px solid #cbd5e1',
+                        background: reelsGridRatio === '1:1' ? '#f0fdf4' : '#ffffff',
+                        color: reelsGridRatio === '1:1' ? '#16a34a' : '#475569',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      Grid Profil (1:1 Persegi)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReelsGridRatio('9:16')}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        borderRadius: 999,
+                        border: reelsGridRatio === '9:16' ? '1.5px solid #16a34a' : '1px solid #cbd5e1',
+                        background: reelsGridRatio === '9:16' ? '#f0fdf4' : '#ffffff',
+                        color: reelsGridRatio === '9:16' ? '#16a34a' : '#475569',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      Tab Reels (9:16 Vertikal)
+                    </button>
+                  </div>
+                )}
+
+                {/* Box Tile Grid Instagram */}
+                <div
+                  style={{
+                    border: '1.5px solid #0f172a',
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    background: '#0f172a',
+                    boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+                    position: 'relative',
+                    aspectRatio: post.content_type === 'reels' && reelsGridRatio === '9:16' ? '9 / 16' : '1 / 1',
+                    maxHeight: 460,
+                    margin: '0 auto',
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {(post.cover_url || videoPoster || currentMedia) ? (
+                    <>
+                      <img
+                        src={post.cover_url || videoPoster || currentMedia}
+                        alt="Pratinjau Cover Grid"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          objectPosition: 'center',
+                        }}
+                      />
+
+                      {/* Panduan Safe-Zone Area 1:1 jika di mode Reels 9:16 */}
+                      {post.content_type === 'reels' && reelsGridRatio === '9:16' && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: 0,
+                            right: 0,
+                            transform: 'translateY(-50%)',
+                            aspectRatio: '1 / 1',
+                            borderTop: '2px dashed rgba(255, 255, 255, 0.85)',
+                            borderBottom: '2px dashed rgba(255, 255, 255, 0.85)',
+                            backgroundColor: 'rgba(0, 0, 0, 0.15)',
+                            pointerEvents: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 800,
+                              color: '#ffffff',
+                              background: 'rgba(0,0,0,0.65)',
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                            }}
+                          >
+                            Area Aman Grid Profil IG (1:1)
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Badge Icon Video / Reels di Pojok Kanan Atas */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 10,
+                          right: 10,
+                          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                          color: '#ffffff',
+                          borderRadius: 6,
+                          padding: '4px 6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          backdropFilter: 'blur(4px)',
+                        }}
+                      >
+                        {post.content_type === 'reels' ? <Film size={14} /> : <VideoIcon size={14} />}
+                      </div>
+
+                      {/* Label Keterangan di Bawah Tile */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          background: 'linear-gradient(to top, rgba(15,23,42,0.88), transparent)',
+                          padding: '16px 12px 8px',
+                          color: '#ffffff',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {post.content_type === 'reels'
+                          ? (reelsGridRatio === '1:1'
+                            ? 'Pratinjau Grid Profil Instagram (1:1 Persegi Tengah)'
+                            : 'Pratinjau Tab Reels (9:16 Vertikal Penuh)')
+                          : 'Pratinjau Grid Profil Instagram (1:1 Persegi)'}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: 24, color: '#94a3b8' }}>
+                      {post.content_type === 'reels' ? <Film size={36} /> : <VideoIcon size={36} />}
+                      <div style={{ fontSize: '0.82rem', marginTop: 8 }}>Belum ada video atau cover yang diunggah</div>
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    fontSize: '0.72rem',
+                    color: '#64748b',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <Sparkles size={14} style={{ color: '#16a34a', flexShrink: 0 }} />
+                  <span>
+                    {post.content_type === 'reels'
+                      ? 'Format Reels otomatis disesuaikan: 1:1 di Feed Grid Profil pengguna, dan 9:16 di Tab Reels Instagram.'
+                      : 'Format Video otomatis disesuaikan untuk tampilan 1:1 di Grid Feed Instagram.'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: '#ffffff' }}>
               {/* Header Feed */}
               <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1734,7 +2256,7 @@ END:VCALENDAR`;
                         <video
                           key={playableVideoSrc || currentMedia}
                           src={playableVideoSrc || currentMedia}
-                          poster={videoPoster || undefined}
+                          poster={post.cover_url || videoPoster || undefined}
                           controls
                           playsInline
                           preload="auto"
@@ -1915,6 +2437,7 @@ END:VCALENDAR`;
                 </div>
               </div>
             </div>
+            )}
           </div>
 
           {/* Kartu Status & Alur Persetujuan (Workflow) */}

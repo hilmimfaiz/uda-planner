@@ -17,6 +17,7 @@ const normalizePostMedia = (p: any): DummyPost => {
     ...p,
     media_url: finalUrls[0] || primaryUrl || '',
     media_urls: finalUrls,
+    cover_url: typeof p?.cover_url === 'string' ? p.cover_url.trim() : (p?.cover_url || ''),
   };
 };
 
@@ -127,7 +128,7 @@ export class PostService {
         const { data, error } = await query;
         if (!error && data && data.length > 0) {
           const dbPosts: DummyPost[] = data.map((p: any) => {
-            const { notes: cleanNotes, mediaUrl, mediaUrls } = this.extractMediaAndNotes(p.notes);
+            const { notes: cleanNotes, mediaUrl, mediaUrls, coverUrl } = this.extractMediaAndNotes(p.notes);
             const resolvedUrls = mediaUrls && mediaUrls.length > 0
               ? mediaUrls
               : mediaUrl || p.media_url
@@ -150,6 +151,7 @@ export class PostService {
               posted_url: p.posted_url || null,
               media_url: resolvedUrls[0] || mediaUrl || p.media_url || '',
               media_urls: resolvedUrls,
+              cover_url: coverUrl || p.cover_url || '',
               aspect_ratio: '1:1',
               comments_count: 0,
             };
@@ -250,11 +252,18 @@ export class PostService {
     return results;
   }
 
-  static extractMediaAndNotes(rawNotes: string | null): { notes: string; mediaUrl?: string; mediaUrls?: string[] } {
+  static extractMediaAndNotes(rawNotes: string | null): { notes: string; mediaUrl?: string; mediaUrls?: string[]; coverUrl?: string } {
     if (!rawNotes) return { notes: '' };
     let clean = rawNotes;
     let mediaUrls: string[] | undefined;
     let mediaUrl: string | undefined;
+    let coverUrl: string | undefined;
+
+    const coverMatch = clean.match(/<!--COVER_URL:([\s\S]*?)-->/);
+    if (coverMatch) {
+      coverUrl = coverMatch[1].trim();
+      clean = clean.replace(/<!--COVER_URL:[\s\S]*?-->/g, '').trim();
+    }
 
     const multiMatch = clean.match(/<!--MEDIA_URLS:([\s\S]*?)-->/);
     if (multiMatch) {
@@ -280,13 +289,14 @@ export class PostService {
       clean = clean.replace(/<!--MEDIA_URL:[\s\S]*?-->/g, '').trim();
     }
 
-    return { notes: clean, mediaUrl, mediaUrls };
+    return { notes: clean, mediaUrl, mediaUrls, coverUrl };
   }
 
-  static embedMediaInNotes(notes?: string | null, mediaUrl?: string | null, mediaUrls?: string[] | null): string | null {
+  static embedMediaInNotes(notes?: string | null, mediaUrl?: string | null, mediaUrls?: string[] | null, coverUrl?: string | null): string | null {
     const cleanNotes = (notes || '')
       .replace(/<!--MEDIA_URLS:[\s\S]*?-->/g, '')
       .replace(/<!--MEDIA_URL:[\s\S]*?-->/g, '')
+      .replace(/<!--COVER_URL:[\s\S]*?-->/g, '')
       .trim();
 
     const validUrls = Array.isArray(mediaUrls)
@@ -295,13 +305,16 @@ export class PostService {
       ? [mediaUrl.trim()]
       : [];
 
+    let result = cleanNotes;
     if (validUrls.length > 1) {
-      return `${cleanNotes}\n\n<!--MEDIA_URLS:${JSON.stringify(validUrls)}-->\n<!--MEDIA_URL:${validUrls[0]}-->`.trim();
+      result = `${result}\n\n<!--MEDIA_URLS:${JSON.stringify(validUrls)}-->\n<!--MEDIA_URL:${validUrls[0]}-->`.trim();
+    } else if (validUrls.length === 1) {
+      result = `${result}\n\n<!--MEDIA_URL:${validUrls[0]}-->`.trim();
     }
-    if (validUrls.length === 1) {
-      return `${cleanNotes}\n\n<!--MEDIA_URL:${validUrls[0]}-->`.trim();
+    if (coverUrl && coverUrl.trim()) {
+      result = `${result}\n<!--COVER_URL:${coverUrl.trim()}-->`.trim();
     }
-    return cleanNotes || null;
+    return result || null;
   }
 
   static async getPostById(id: string, userId?: string): Promise<DummyPost | null> {
@@ -316,7 +329,7 @@ export class PostService {
         const { data, error } = await supabase.from('posts' as any).select('*').eq('id', id).maybeSingle();
         if (!error && data) {
           const d = data as any;
-          const { notes, mediaUrl, mediaUrls } = this.extractMediaAndNotes(d.notes);
+          const { notes, mediaUrl, mediaUrls, coverUrl } = this.extractMediaAndNotes(d.notes);
           const resolvedUrls =
             mediaUrls && mediaUrls.length > 0
               ? mediaUrls
@@ -342,6 +355,7 @@ export class PostService {
             posted_url: d.posted_url || null,
             media_url: resolvedUrls[0] || mediaUrl || '',
             media_urls: resolvedUrls,
+            cover_url: coverUrl || d.cover_url || localFound?.cover_url || '',
             aspect_ratio: '1:1',
             comments_count: 0,
           });
@@ -424,6 +438,7 @@ export class PostService {
       posted_url: payload.posted_url || null,
       media_url: primaryMediaUrl,
       media_urls: resolvedMediaUrls,
+      cover_url: payload.cover_url || '',
       aspect_ratio: payload.aspect_ratio || '1:1',
       comments_count: 0,
     };
@@ -449,7 +464,7 @@ export class PostService {
 
     if (supabase) {
       try {
-        const finalNotes = this.embedMediaInNotes(payload.notes, primaryMediaUrl, resolvedMediaUrls);
+        const finalNotes = this.embedMediaInNotes(payload.notes, primaryMediaUrl, resolvedMediaUrls, payload.cover_url);
         const insertPayload: any = {
           title: payload.title,
           caption: payload.caption || '',
@@ -480,7 +495,7 @@ export class PostService {
           const { data, error } = await (supabase.from('posts' as any) as any).insert(insertPayload).select().single();
           if (!error && data) {
             const d = data as any;
-            const { notes: cleanNotes, mediaUrl, mediaUrls } = this.extractMediaAndNotes(d.notes);
+            const { notes: cleanNotes, mediaUrl, mediaUrls, coverUrl } = this.extractMediaAndNotes(d.notes);
             const finalUrls = resolvedMediaUrls.length > 0 ? resolvedMediaUrls : (mediaUrls || (mediaUrl ? [mediaUrl] : []));
             const created: DummyPost = {
               ...newPost,
@@ -489,6 +504,7 @@ export class PostService {
               notes: cleanNotes || newPost.notes,
               media_url: finalUrls[0] || primaryMediaUrl || mediaUrl || newPost.media_url,
               media_urls: finalUrls,
+              cover_url: payload.cover_url || coverUrl || '',
             };
 
             if (created.media_url && created.media_url.startsWith('data:') && typeof window !== 'undefined') {
@@ -561,6 +577,7 @@ export class PostService {
         : basePost?.media_urls || (basePost?.media_url ? [basePost.media_url] : []);
 
     const primaryMediaUrl = resolvedMediaUrls[0] || (updates.media_url !== undefined ? updates.media_url : basePost?.media_url) || '';
+    const primaryCoverUrl = updates.cover_url !== undefined ? updates.cover_url : (basePost?.cover_url || '');
 
     if (primaryMediaUrl && primaryMediaUrl.startsWith('data:') && typeof window !== 'undefined') {
       saveMediaToCache('post_media_' + id, primaryMediaUrl);
@@ -585,9 +602,9 @@ export class PostService {
         if (updates.pillar_id !== undefined) {
           dbUpdates.pillar_id = isUuid(updates.pillar_id || '') ? updates.pillar_id : null;
         }
-        if (updates.notes !== undefined || updates.media_url !== undefined || updates.media_urls !== undefined) {
+        if (updates.notes !== undefined || updates.media_url !== undefined || updates.media_urls !== undefined || updates.cover_url !== undefined) {
           const notesText = updates.notes !== undefined ? updates.notes : (basePost?.notes || '');
-          dbUpdates.notes = this.embedMediaInNotes(notesText, primaryMediaUrl, resolvedMediaUrls);
+          dbUpdates.notes = this.embedMediaInNotes(notesText, primaryMediaUrl, resolvedMediaUrls, primaryCoverUrl);
         }
         if (updates.posted_at !== undefined) dbUpdates.posted_at = updates.posted_at;
         if (updates.posted_url !== undefined) dbUpdates.posted_url = updates.posted_url;
@@ -609,7 +626,7 @@ export class PostService {
           fetch('/api/posts', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, ...updates, media_url: primaryMediaUrl, media_urls: resolvedMediaUrls }),
+            body: JSON.stringify({ id, ...updates, media_url: primaryMediaUrl, media_urls: resolvedMediaUrls, cover_url: primaryCoverUrl }),
           }).catch((err) => console.warn('PATCH /api/posts sync notice:', err));
         } catch {}
       }
@@ -632,6 +649,7 @@ export class PostService {
       posted_url: updates.posted_url || null,
       media_url: primaryMediaUrl,
       media_urls: resolvedMediaUrls,
+      cover_url: primaryCoverUrl,
       aspect_ratio: '1:1',
       comments_count: 0,
     };
@@ -641,6 +659,7 @@ export class PostService {
       ...updates,
       media_url: primaryMediaUrl,
       media_urls: resolvedMediaUrls,
+      cover_url: primaryCoverUrl,
       id,
     });
 

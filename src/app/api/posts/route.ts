@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     if (admin && body.brand_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.brand_id)) {
       try {
-        const finalNotes = PostService.embedMediaInNotes(body.notes, body.media_url, body.media_urls);
+        const finalNotes = PostService.embedMediaInNotes(body.notes, body.media_url, body.media_urls, body.cover_url);
         const insertPayload: any = {
           brand_id: body.brand_id,
           title: body.title,
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
         const { data: dbPost, error: dbErr } = await (admin.from('posts' as any) as any).insert(insertPayload).select().single();
         if (!dbErr && dbPost) {
-          const { notes: cleanNotes, mediaUrl, mediaUrls } = PostService.extractMediaAndNotes(dbPost.notes);
+          const { notes: cleanNotes, mediaUrl, mediaUrls, coverUrl } = PostService.extractMediaAndNotes(dbPost.notes);
           return NextResponse.json({
             success: true,
             data: {
@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
               notes: cleanNotes,
               media_url: mediaUrl,
               media_urls: mediaUrls,
+              cover_url: coverUrl,
               comments_count: 0,
             },
           }, { status: 201 });
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest) {
       user_id: body.user_id,
       media_url: body.media_url,
       media_urls: body.media_urls,
+      cover_url: body.cover_url,
       notes: body.notes,
     });
 
@@ -132,11 +134,12 @@ export async function PATCH(req: NextRequest) {
         if (updates.caption !== undefined) dbUpdates.caption = updates.caption;
         if (updates.content_type !== undefined) dbUpdates.content_type = updates.content_type;
         if (updates.scheduled_at !== undefined) dbUpdates.scheduled_at = updates.scheduled_at;
-        if (updates.notes !== undefined || updates.media_url !== undefined || updates.media_urls !== undefined) {
+        if (updates.notes !== undefined || updates.media_url !== undefined || updates.media_urls !== undefined || updates.cover_url !== undefined) {
           dbUpdates.notes = PostService.embedMediaInNotes(
             updates.notes,
             updates.media_url,
-            updates.media_urls
+            updates.media_urls,
+            updates.cover_url
           );
         }
         dbUpdates.updated_at = new Date().toISOString();

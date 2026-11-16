@@ -244,10 +244,22 @@ export default function GridInstagramPage() {
           background: "#1e293b",
         }}
       >
-        {activeImage ? (
+        {post.cover_url ? (
+          <img
+            src={post.cover_url}
+            alt={post.title}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              transition: "transform 0.2s ease",
+            }}
+          />
+        ) : activeImage ? (
           isVideoItem ? (
             <video
               src={toPlayableVideoUrl(activeImage)}
+              poster={post.cover_url || undefined}
               muted
               playsInline
               preload="metadata"
@@ -517,10 +529,21 @@ export default function GridInstagramPage() {
           border: "1px solid rgba(255, 255, 255, 0.08)",
         }}
       >
-        {mediaSrc ? (
+        {post.cover_url ? (
+          <img
+            src={post.cover_url}
+            alt={post.title}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            }}
+          />
+        ) : mediaSrc ? (
           isMediaVideo(mediaSrc, post.content_type) ? (
             <video
               src={toPlayableVideoUrl(mediaSrc)}
+              poster={post.cover_url || undefined}
               muted
               playsInline
               preload="metadata"
