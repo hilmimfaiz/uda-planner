@@ -1775,7 +1775,7 @@ export default function PengaturanBrandDetailPage() {
                   </div>
                   <p style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 4 }}>
                     {isBrandOwner
-                      ? 'Kelola hak akses tim: Owner (Akses Penuh), Editor (Buat Konten), Reviewer (Menyetujui), Viewer (Lihat Saja)'
+                      ? 'Daftar anggota tim kolaborator. Peran anggota bersifat tetap sesuai undangan (hapus anggota jika ingin mengundang ulang dengan peran baru).'
                       : `Daftar anggota tim kolaborator pada brand ${brand.name}`}
                   </p>
                 </div>
@@ -1860,39 +1860,20 @@ export default function PengaturanBrandDetailPage() {
                           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#16a34a', background: '#f0fdf4', padding: '4px 10px', borderRadius: 6, border: '1px solid #bbf7d0' }}>
                             Owner (Penuh)
                           </span>
-                        ) : isBrandOwner ? (
-                          <select
-                            className="brand-dropdown-select"
-                            value={m.role}
-                            onChange={async (e) => {
-                              const newRole = e.target.value as any;
-                              const updatedMembers = members.map((item) => (item.id === m.id ? { ...item, role: newRole } : item));
-                              setMembers(updatedMembers);
-                              localStorage.setItem('uda_brand_members_' + brand.id, JSON.stringify(updatedMembers));
-                              await MemberService.updateRole(brand.id, m.id, newRole, brand.name, m.email);
-                              playSuccessSound();
-                              showToast(`Peran ${m.name} diubah menjadi ${newRole.toUpperCase()}`);
-                            }}
-                            style={{ fontSize: '0.82rem', padding: '6px 10px', minWidth: 120 }}
-                          >
-                            <option value="editor">Editor (Buat Konten)</option>
-                            <option value="reviewer">Reviewer (Menyetujui)</option>
-                            <option value="viewer">Viewer (Lihat Saja)</option>
-                          </select>
                         ) : (
                           <span
                             style={{
                               fontSize: '0.8rem',
                               fontWeight: 700,
-                              color: effectiveRole === 'reviewer' ? '#4338ca' : effectiveRole === 'editor' ? '#92400e' : '#475569',
-                              background: effectiveRole === 'reviewer' ? '#e0e7ff' : effectiveRole === 'editor' ? '#fef3c7' : '#f1f5f9',
+                              color: (m.role || effectiveRole) === 'reviewer' ? '#4338ca' : (m.role || effectiveRole) === 'editor' ? '#92400e' : '#475569',
+                              background: (m.role || effectiveRole) === 'reviewer' ? '#e0e7ff' : (m.role || effectiveRole) === 'editor' ? '#fef3c7' : '#f1f5f9',
                               padding: '4px 10px',
                               borderRadius: 6,
                               border: '1px solid currentColor',
                               textTransform: 'capitalize',
                             }}
                           >
-                            {effectiveRole === 'editor' ? 'Editor (Buat Konten)' : effectiveRole === 'reviewer' ? 'Reviewer (Menyetujui)' : 'Viewer (Lihat Saja)'}
+                            {(m.role || effectiveRole) === 'editor' ? 'Editor (Buat Konten)' : (m.role || effectiveRole) === 'reviewer' ? 'Reviewer (Menyetujui)' : 'Viewer (Lihat Saja)'}
                           </span>
                         )}
 
@@ -1906,7 +1887,7 @@ export default function PengaturanBrandDetailPage() {
                             onClick={() => {
                               confirmDelete({
                                 title: `Hapus Anggota ${m.name}?`,
-                                message: `Apakah Anda yakin ingin menghapus ${m.name} (${m.email}) dari brand "${brand.name}"? Akses mereka ke brand ini akan dicabut.`,
+                                message: `Apakah Anda yakin ingin menghapus ${m.name} (${m.email}) dari brand "${brand.name}"? Akses mereka ke brand ini akan dicabut. Jika ingin mengubah peran, silakan undang kembali anggota setelah dihapus.`,
                                 confirmText: 'Ya, Hapus Anggota',
                                 onConfirm: async () => {
                                   await MemberService.leaveTeam(m.id, m.email, brand.id, brand.name);
@@ -1914,7 +1895,7 @@ export default function PengaturanBrandDetailPage() {
                                   setMembers(updated);
                                   localStorage.setItem('uda_brand_members_' + brand.id, JSON.stringify(updated));
                                   playSuccessSound();
-                                  showSuccess('Anggota Dihapus', `${m.name} telah berhasil dihapus dari brand dan status paketnya dikembalikan menjadi Free.`);
+                                  showSuccess('Anggota Dihapus', `${m.name} telah berhasil dihapus dari brand. Anda dapat mengundang kembali untuk menetapkan peran baru jika diinginkan.`);
                                 },
                               });
                             }}
