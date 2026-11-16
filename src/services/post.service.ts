@@ -178,6 +178,35 @@ export class PostService {
     // Hanya ambil postingan yang terhubung dengan brand yang dapat diakses pengguna
     const stored = allStored.filter((p) => p.brand_id && accessibleBrandIds.has(p.brand_id));
 
+    // Sinkronisasi dari API Server (/api/posts) yang menggunakan Admin Client
+    // untuk memastikan seluruh postingan dari Owner & Editor pada brand terkait dapat diakses seluruh tim
+    if (typeof window !== 'undefined' && effectiveUserId) {
+      try {
+        let apiUrl = `/api/posts?userId=${effectiveUserId}`;
+        if (filters.brandId && filters.brandId !== 'all') apiUrl += `&brandId=${filters.brandId}`;
+        if (filters.status && filters.status !== 'all') apiUrl += `&status=${filters.status}`;
+        if (filters.search) apiUrl += `&search=${encodeURIComponent(filters.search)}`;
+        if (filters.pillarId && filters.pillarId !== 'all') apiUrl += `&pillarId=${filters.pillarId}`;
+        if (filters.startDate) apiUrl += `&startDate=${encodeURIComponent(filters.startDate)}`;
+        if (filters.endDate) apiUrl += `&endDate=${encodeURIComponent(filters.endDate)}`;
+
+        const res = await fetch(apiUrl);
+        const resJson = await res.json();
+        if (resJson.success && Array.isArray(resJson.data)) {
+          const apiPosts: DummyPost[] = resJson.data.map(normalizePostMedia);
+
+          // Simpan master posts ke storage lokal
+          const apiIds = new Set(apiPosts.map((p) => p.id));
+          const otherStored = allStored.filter((p) => !apiIds.has(p.id) && (!p.brand_id || !accessibleBrandIds.has(p.brand_id)));
+          saveStoredPosts([...apiPosts, ...otherStored]);
+
+          return this.filterPostsLocally(apiPosts, filters, accessibleBrandIds);
+        }
+      } catch (apiErr) {
+        console.warn('PostService.getPosts API fetch notice, fallback to direct db:', apiErr);
+      }
+    }
+
     if (supabase) {
       try {
         let query = supabase.from('posts' as any).select('*').order('created_at', { ascending: false });
@@ -501,6 +530,9 @@ export class PostService {
     if (role === 'viewer') {
       throw new Error('Akses Ditolak: Peran Viewer hanya memiliki hak baca dan tidak dapat membuat postingan baru.');
     }
+    if (role === 'reviewer') {
+      throw new Error('Akses Ditolak: Peran Reviewer hanya dapat mereview postingan dan tidak dapat membuat postingan baru.');
+    }
 
     const resolvedMediaUrls =
       Array.isArray(payload.media_urls) && payload.media_urls.length > 0
@@ -509,6 +541,39 @@ export class PostService {
         ? [payload.media_url]
         : [];
     const primaryMediaUrl = resolvedMediaUrls[0] || payload.media_url || '';
+
+    // Coba simpan melalui API server /api/posts yang menggunakan Service Role Admin
+    // agar seluruh anggota tim dapat melihat postingan secara tersinkronisasi
+    if (typeof window !== 'undefined' && effectiveUserId) {
+      try {
+        const apiRes = await fetch('/api/posts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...payload,
+            brand_id: payload.brand_id,
+            user_id: effectiveUserId,
+            content_type: payload.content_type || 'feed',
+            media_url: primaryMediaUrl,
+            media_urls: resolvedMediaUrls,
+            cover_url: payload.cover_url,
+            notes: payload.notes,
+          }),
+        });
+        const apiJson = await apiRes.json();
+        if (apiJson.success && apiJson.data) {
+          const created: DummyPost = normalizePostMedia(apiJson.data);
+          const currentStored = getStoredPosts();
+          saveStoredPosts([created, ...currentStored.filter((p) => p.id !== created.id)]);
+          window.dispatchEvent(new CustomEvent('uda_post_created', { detail: created }));
+          window.dispatchEvent(new CustomEvent('uda_post_updated', { detail: created }));
+          window.dispatchEvent(new Event('storage'));
+          return created;
+        }
+      } catch (apiErr) {
+        console.warn('PostService.createPost API notice, fallback to direct db:', apiErr);
+      }
+    }
 
     const fallbackId = `post-${Date.now()}`;
     const newPost: DummyPost = {
@@ -623,6 +688,14 @@ export class PostService {
     }
     if (role === 'viewer') {
       throw new Error('Akses Ditolak: Peran Viewer hanya memiliki hak baca dan tidak dapat mengubah isi postingan.');
+    }
+    if (role === 'reviewer') {
+      const allowedKeys = ['status', 'notes', 'id', 'userId', 'brand_id'];
+      const attemptedKeys = Object.keys(updates);
+      const invalidKeys = attemptedKeys.filter((k) => !allowedKeys.includes(k));
+      if (invalidKeys.length > 0) {
+        throw new Error('Akses Ditolak: Peran Reviewer tidak dapat mengubah isi konten (judul, caption, media). Anda hanya dapat menyetujui jadwal atau memberikan catatan revisi.');
+      }
     }
 
     if (updates.brand_id && basePost?.brand_id && updates.brand_id !== basePost.brand_id) {
@@ -769,8 +842,8 @@ export class PostService {
       if (!role) {
         throw new Error('Akses Ditolak: Anda tidak memiliki hak akses terhadap brand postingan ini.');
       }
-      if (role === 'viewer' || role === 'editor') {
-        throw new Error('Akses Ditolak: Hanya Owner atau Reviewer yang dapat menghapus postingan.');
+      if (role !== 'owner') {
+        throw new Error('Akses Ditolak: Hanya Owner dari brand yang berhak menghapus postingan.');
       }
     }
 

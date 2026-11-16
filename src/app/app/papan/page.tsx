@@ -31,6 +31,7 @@ import {
   playNotificationSound,
 } from "@/lib/audio-effects";
 import { addAppNotification } from "@/lib/notification-manager";
+import { createClient } from "@/lib/supabase/client";
 
 const papanTourSteps: TourStep[] = [
   {
@@ -153,6 +154,17 @@ export default function PapanKanbanPage() {
     window.addEventListener("uda_team_updated", handleDataChange);
     window.addEventListener("storage", handleDataChange);
 
+    const supabase = createClient();
+    let channel: any = null;
+    if (supabase) {
+      channel = supabase
+        .channel("brand_posts_room_papan")
+        .on("broadcast", { event: "post_updated" }, () => {
+          handleDataChange();
+        })
+        .subscribe();
+    }
+
     return () => {
       isMounted = false;
       window.removeEventListener("uda_post_updated", loadPosts);
@@ -160,6 +172,11 @@ export default function PapanKanbanPage() {
       window.removeEventListener("uda_post_deleted", loadPosts);
       window.removeEventListener("uda_team_updated", handleDataChange);
       window.removeEventListener("storage", handleDataChange);
+      if (channel && supabase) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
   }, [user?.id]);
 

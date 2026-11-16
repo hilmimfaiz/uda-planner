@@ -27,6 +27,7 @@ import { PostService } from "@/services/post.service";
 import { BrandService } from "@/services/brand.service";
 import { useAuth } from "@/contexts/auth-context";
 import { GuidedTour, TourStep } from "@/components/guided-tour";
+import { createClient } from "@/lib/supabase/client";
 
 const kalenderTourSteps: TourStep[] = [
   {
@@ -117,11 +118,27 @@ export default function KalenderPage() {
     window.addEventListener("uda_post_deleted", loadPosts);
     window.addEventListener("storage", loadPosts);
 
+    const supabase = createClient();
+    let channel: any = null;
+    if (supabase) {
+      channel = supabase
+        .channel("brand_posts_room_kalender")
+        .on("broadcast", { event: "post_updated" }, () => {
+          loadPosts();
+        })
+        .subscribe();
+    }
+
     return () => {
       window.removeEventListener("uda_post_updated", loadPosts);
       window.removeEventListener("uda_post_created", loadPosts);
       window.removeEventListener("uda_post_deleted", loadPosts);
       window.removeEventListener("storage", loadPosts);
+      if (channel && supabase) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
   }, [user?.id]);
 

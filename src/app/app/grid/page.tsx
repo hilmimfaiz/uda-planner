@@ -24,6 +24,7 @@ import { GuidedTour, TourStep } from "@/components/guided-tour";
 import { PostService } from "@/services/post.service";
 import { BrandService } from "@/services/brand.service";
 import { useAuth } from "@/contexts/auth-context";
+import { createClient } from "@/lib/supabase/client";
 
 const gridTourSteps: TourStep[] = [
   {
@@ -98,12 +99,28 @@ export default function GridInstagramPage() {
     window.addEventListener("uda_post_deleted", loadPosts);
     window.addEventListener("storage", loadPosts);
 
+    const supabase = createClient();
+    let channel: any = null;
+    if (supabase) {
+      channel = supabase
+        .channel("brand_posts_room_grid")
+        .on("broadcast", { event: "post_updated" }, () => {
+          loadPosts();
+        })
+        .subscribe();
+    }
+
     return () => {
       isMounted = false;
       window.removeEventListener("uda_post_updated", loadPosts);
       window.removeEventListener("uda_post_created", loadPosts);
       window.removeEventListener("uda_post_deleted", loadPosts);
       window.removeEventListener("storage", loadPosts);
+      if (channel && supabase) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
   }, [user?.id]);
 

@@ -36,6 +36,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useModal } from '@/contexts/modal-context';
 import { GuidedTour, TourStep } from '@/components/guided-tour';
 import { addAppNotification } from '@/lib/notification-manager';
+import { createClient } from '@/lib/supabase/client';
 
 const MAX_CAROUSEL_IMAGES = 10;
 
@@ -122,7 +123,14 @@ export default function PostEditorDetailPage() {
   const [isLoadingPost, setIsLoadingPost] = useState(false);
   const [isLoadingBrands, setIsLoadingBrands] = useState(true);
 
-  const isReadOnly = userRole === 'viewer';
+  const isOwner = userRole === 'owner';
+  const isEditor = userRole === 'editor';
+  const isReviewer = userRole === 'reviewer';
+  const isViewer = userRole === 'viewer';
+  const canEditContent = isOwner || isEditor;
+  const canDelete = isOwner;
+  const canReview = isOwner || isReviewer;
+  const isReadOnly = !canEditContent;
   const isVideoOrReels = post.content_type === 'video' || post.content_type === 'reels';
   const isCarouselMode = post.content_type === 'carousel';
 
@@ -584,11 +592,49 @@ export default function PostEditorDetailPage() {
     window.addEventListener('uda_member_role_changed', handleRoleChanged);
     window.addEventListener('uda_member_removed', handleMemberRemoved);
 
+    const handlePostUpdated = (e: any) => {
+      if (!isNew && rawId && (e.detail?.id === rawId || e.detail?.postId === rawId)) {
+        PostService.getPostById(rawId, user?.id).then((fresh) => {
+          if (fresh) {
+            setPost(fresh);
+            if (fresh.cover_url) setVideoPoster(fresh.cover_url);
+          }
+        });
+      }
+    };
+    window.addEventListener('uda_post_updated', handlePostUpdated);
+
+    // Subscribe to Supabase Realtime websocket
+    const supabase = createClient();
+    let channel: any = null;
+    if (supabase && post.brand_id) {
+      channel = supabase
+        .channel(`post_editor_${post.brand_id}_${rawId || 'new'}`)
+        .on('broadcast', { event: 'post_updated' }, (payload: any) => {
+          if (!isNew && rawId && payload?.payload?.postId === rawId) {
+            PostService.getPostById(rawId, user?.id).then((fresh) => {
+              if (fresh) {
+                setPost(fresh);
+                if (fresh.cover_url) setVideoPoster(fresh.cover_url);
+                showToast('🔔 Postingan telah disinkronkan dari pembaruan anggota tim');
+              }
+            });
+          }
+        })
+        .subscribe();
+    }
+
     return () => {
       window.removeEventListener('uda_member_role_changed', handleRoleChanged);
       window.removeEventListener('uda_member_removed', handleMemberRemoved);
+      window.removeEventListener('uda_post_updated', handlePostUpdated);
+      if (channel && supabase) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
-  }, [post.brand_id, router]);
+  }, [post.brand_id, rawId, isNew, user?.id, router]);
 
   const fallbackBrand: DummyBrand = {
     id: post.brand_id || 'no-brand',
@@ -907,6 +953,25 @@ END:VCALENDAR`;
     );
   }
 
+  if (isNew && (isReviewer || isViewer)) {
+    return (
+      <div className="uda-card" style={{ maxWidth: 540, margin: '60px auto', padding: '40px 32px', textAlign: 'center' }}>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+          <AlertCircle size={32} />
+        </div>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+          Tidak Memiliki Hak Membuat Postingan
+        </h2>
+        <p style={{ color: '#64748b', fontSize: '0.88rem', lineHeight: 1.6, marginBottom: 24 }}>
+          Role Anda ({userRole?.toUpperCase()}) hanya memiliki izin untuk {isReviewer ? 'mereview postingan yang diajukan' : 'melihat postingan'}. Hanya Owner dan Editor yang berhak membuat postingan konten baru.
+        </p>
+        <button className="btn-uda btn-uda-primary" onClick={() => router.push('/app/daftar')}>
+          Kembali ke Daftar Postingan
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <GuidedTour steps={postinganTourSteps} tourKey="uda_tour_postingan" />
@@ -931,7 +996,28 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {isReadOnly && (
+      {isReviewer && (
+        <div
+          style={{
+            padding: '12px 18px',
+            background: '#eef2ff',
+            border: '1.5px solid #c7d2fe',
+            borderRadius: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            color: '#3730a3',
+            fontSize: '0.86rem',
+            fontWeight: 600,
+          }}
+        >
+          <span>
+            <strong>Mode Reviewer:</strong> Anda memiliki hak akses untuk mengevaluasi konten, menyetujui (Approve), atau memberikan catatan revisi pada Alur Status &amp; Persetujuan. Anda tidak dapat mengubah isi konten secara langsung.
+          </span>
+        </div>
+      )}
+
+      {isViewer && (
         <div
           style={{
             padding: '12px 18px',
@@ -947,8 +1033,47 @@ END:VCALENDAR`;
           }}
         >
           <span>
-            <strong>Mode Lihat Saja (Viewer):</strong> Anda terdaftar sebagai Viewer pada brand ini. Anda dapat meninjau detail dan pratinjau feed, namun tidak memiliki izin untuk mengedit atau menghapus konten.
+            <strong>Mode Lihat Saja (Viewer):</strong> Anda terdaftar sebagai Viewer pada brand ini. Anda dapat meninjau detail dan pratinjau feed seluruh jenis konten (Foto, Carousel, Reels, Video), namun tidak memiliki izin untuk mengedit, menghapus, atau mereview konten.
           </span>
+        </div>
+      )}
+
+      {post.notes && post.notes.trim().length > 0 && (
+        <div
+          style={{
+            padding: '14px 18px',
+            background: '#fffbeb',
+            border: '1.5px solid #fde68a',
+            borderRadius: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            color: '#92400e',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: '0.92rem' }}>
+            <AlertCircle size={18} style={{ color: '#d97706' }} />
+            <span>Catatan Revisi dari Reviewer:</span>
+          </div>
+          <div
+            style={{
+              background: '#ffffff',
+              padding: '10px 14px',
+              borderRadius: 8,
+              border: '1px solid #fef3c7',
+              fontSize: '0.88rem',
+              lineHeight: 1.5,
+              color: '#451a03',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {post.notes}
+          </div>
+          {(isOwner || isEditor) && (
+            <div style={{ fontSize: '0.8rem', color: '#b45309', fontWeight: 600 }}>
+              💡 Silakan tindak lanjuti dan sesuaikan konten postingan sesuai arahan revisi di atas, simpan perubahan, lalu ajukan review kembali.
+            </div>
+          )}
         </div>
       )}
 
@@ -984,14 +1109,14 @@ END:VCALENDAR`;
         </div>
 
         <div className="post-editor-top-actions">
-          {!isNew && (userRole === 'owner' || userRole === 'reviewer') && (
+          {!isNew && isOwner && (
             <button className="btn-uda btn-uda-danger btn-uda-sm" onClick={handleDeletePost} title="Hapus Postingan">
               <Trash2 size={15} />
               <span>Hapus</span>
             </button>
           )}
 
-          {!isReadOnly && (
+          {canEditContent && (
             <button
               className="btn-uda btn-uda-primary btn-uda-sm post-editor-btn-submit"
               onClick={handleSavePost}
@@ -2484,7 +2609,7 @@ END:VCALENDAR`;
               Alur Status & Persetujuan
             </h3>
 
-            {isReadOnly ? (
+            {isViewer ? (
               <div style={{ padding: '12px 14px', background: '#f8fafc', borderRadius: 8, fontSize: '0.82rem', color: '#64748b', textAlign: 'center' }}>
                 Mode Viewer: Anda hanya memiliki izin membaca status postingan.
               </div>
@@ -2497,9 +2622,11 @@ END:VCALENDAR`;
                       style={{ flex: 1 }}
                       disabled={isNew}
                       title={isNew ? 'Postingan harus dibuat terlebih dahulu sebelum mengajukan review' : 'Minta review'}
-                      onClick={() => {
+                      onClick={async () => {
                         if (isNew) return;
-                        setPost({ ...post, status: 'review' });
+                        setPost((prev) => ({ ...prev, status: 'review' }));
+                        const updated = await PostService.updatePost(post.id, { status: 'review' }, user?.id);
+                        if (updated) setPost(updated);
                         addAppNotification({
                           type: 'review_request',
                           message: `Postingan "${post.title || 'Untitled'}" diajukan untuk review`,
@@ -2521,9 +2648,11 @@ END:VCALENDAR`;
                           ? 'Hanya Reviewer atau Owner yang dapat menyetujui postingan'
                           : 'Setujui postingan'
                       }
-                      onClick={() => {
+                      onClick={async () => {
                         if (isNew) return;
-                        setPost({ ...post, status: 'siap' });
+                        setPost((prev) => ({ ...prev, status: 'siap' }));
+                        const updated = await PostService.updatePost(post.id, { status: 'siap' }, user?.id);
+                        if (updated) setPost(updated);
                         addAppNotification({
                           type: 'approved',
                           message: `Postingan "${post.title || 'Untitled'}" telah disetujui dan siap tayang!`,
@@ -2547,6 +2676,7 @@ END:VCALENDAR`;
                       }
                       onClick={() => {
                         if (isNew) return;
+                        setRevisionNote(post.notes || '');
                         setShowRevisionModal(true);
                       }}
                     >
@@ -2572,12 +2702,15 @@ END:VCALENDAR`;
                       ? 'Postingan harus disetujui Reviewer/Owner terlebih dahulu'
                       : 'Tandai postingan sudah tayang'
                   }
-                  onClick={() => {
+                  onClick={async () => {
                     if (isNew) {
                       showToast('⚠️ Silakan buat dan simpan postingan terlebih dahulu.');
                       return;
                     }
-                    setPost({ ...post, status: 'terposting', posted_at: new Date().toISOString() });
+                    const nowIso = new Date().toISOString();
+                    setPost((prev) => ({ ...prev, status: 'terposting', posted_at: nowIso }));
+                    const updated = await PostService.updatePost(post.id, { status: 'terposting', posted_at: nowIso }, user?.id);
+                    if (updated) setPost(updated);
                     addAppNotification({
                       type: 'approved',
                       message: `Postingan "${post.title || 'Untitled'}" telah ditandai Sudah Tayang!`,
@@ -2756,10 +2889,21 @@ END:VCALENDAR`;
               </button>
               <button
                 className="btn-uda btn-uda-danger"
-                onClick={() => {
-                  setPost({ ...post, status: 'draft', notes: revisionNote });
+                onClick={async () => {
+                  if (!revisionNote.trim()) {
+                    showError('Catatan Wajib Diisi', 'Silakan masukkan masukan atau instruksi revisi untuk ditindaklanjuti tim.');
+                    return;
+                  }
+                  setPost((prev) => ({ ...prev, status: 'draft', notes: revisionNote }));
                   setShowRevisionModal(false);
-                  showToast('📝 Catatan revisi dikirimkan ke editor.');
+                  const updated = await PostService.updatePost(post.id, { status: 'draft', notes: revisionNote }, user?.id);
+                  if (updated) setPost(updated);
+                  addAppNotification({
+                    type: 'review_request',
+                    message: `Postingan "${post.title || 'Untitled'}" memerlukan revisi: ${revisionNote.slice(0, 50)}...`,
+                    link: `/app/postingan/${post.id}`,
+                  });
+                  showSuccess('Catatan Revisi Terkirim!', 'Status postingan dikembalikan ke Draft dan catatan revisi telah disimpan untuk ditindaklanjuti.');
                 }}
               >
                 Kirim Revisi

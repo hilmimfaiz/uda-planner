@@ -21,6 +21,7 @@ import { BrandService } from '@/services/brand.service';
 import { useModal } from '@/contexts/modal-context';
 import { useAuth } from '@/contexts/auth-context';
 import { GuidedTour, TourStep } from '@/components/guided-tour';
+import { createClient } from '@/lib/supabase/client';
 
 function generatePaginationPages(current: number, total: number): (number | '...')[] {
   if (total <= 7) {
@@ -79,7 +80,9 @@ export default function DaftarPostinganPage() {
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPlatform, setFilterPlatform] = useState('all');
+  const [filterContentType, setFilterContentType] = useState('all');
   const [sortOrder, setSortOrder] = useState<'terbaru' | 'terlama'>('terbaru');
+  const [userRolesByBrand, setUserRolesByBrand] = useState<Record<string, string | null>>({});
 
   // Paginasi
   const [currentPage, setCurrentPage] = useState(1);
@@ -87,6 +90,24 @@ export default function DaftarPostinganPage() {
 
   React.useEffect(() => {
     let isMounted = true;
+
+    const loadBrandsAndRoles = async () => {
+      try {
+        const bList = await BrandService.getBrands(user?.id);
+        if (!isMounted) return;
+        const list = bList || [];
+        setBrands(list);
+
+        const rolesMap: Record<string, string | null> = {};
+        await Promise.all(
+          list.map(async (b) => {
+            const role = await BrandService.getUserBrandRole(b.id, user?.id);
+            rolesMap[b.id] = role;
+          })
+        );
+        if (isMounted) setUserRolesByBrand(rolesMap);
+      } catch {}
+    };
 
     const loadPosts = async () => {
       try {
@@ -97,22 +118,44 @@ export default function DaftarPostinganPage() {
       }
     };
 
+    loadBrandsAndRoles();
     loadPosts();
-    BrandService.getBrands(user?.id).then((data) => {
-      if (isMounted) setBrands(data || []);
-    });
+
+    const handleDataChange = () => {
+      loadBrandsAndRoles();
+      loadPosts();
+    };
 
     window.addEventListener('uda_post_updated', loadPosts);
     window.addEventListener('uda_post_created', loadPosts);
     window.addEventListener('uda_post_deleted', loadPosts);
-    window.addEventListener('storage', loadPosts);
+    window.addEventListener('uda_member_role_changed', handleDataChange);
+    window.addEventListener('storage', handleDataChange);
+
+    // Supabase Realtime channel subscription
+    const supabase = createClient();
+    let channel: any = null;
+    if (supabase) {
+      channel = supabase
+        .channel('brand_posts_room_daftar')
+        .on('broadcast', { event: 'post_updated' }, () => {
+          loadPosts();
+        })
+        .subscribe();
+    }
 
     return () => {
       isMounted = false;
       window.removeEventListener('uda_post_updated', loadPosts);
       window.removeEventListener('uda_post_created', loadPosts);
       window.removeEventListener('uda_post_deleted', loadPosts);
-      window.removeEventListener('storage', loadPosts);
+      window.removeEventListener('uda_member_role_changed', handleDataChange);
+      window.removeEventListener('storage', handleDataChange);
+      if (channel && supabase) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {}
+      }
     };
   }, [user?.id]);
 
@@ -122,6 +165,7 @@ export default function DaftarPostinganPage() {
       if (filterBrand !== 'all' && p.brand_id !== filterBrand) return false;
       if (filterStatus !== 'all' && p.status !== filterStatus) return false;
       if (filterPlatform !== 'all' && !p.platforms.includes(filterPlatform)) return false;
+      if (filterContentType !== 'all' && p.content_type !== filterContentType) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         return p.title.toLowerCase().includes(q) || p.caption.toLowerCase().includes(q);
@@ -212,13 +256,23 @@ export default function DaftarPostinganPage() {
             <Download size={15} />
             <span>Ekspor CSV</span>
           </button>
-          <button
-            className="btn-uda btn-uda-primary btn-uda-sm"
-            onClick={() => router.push('/app/postingan/baru')}
-          >
-            <Plus size={16} />
-            <span>Postingan Baru</span>
-          </button>
+          {(() => {
+            const canCreate =
+              filterBrand !== 'all'
+                ? userRolesByBrand[filterBrand] === 'owner' || userRolesByBrand[filterBrand] === 'editor'
+                : Object.values(userRolesByBrand).some((r) => r === 'owner' || r === 'editor') ||
+                  brands.some((b) => b.owner_id === user?.id);
+            if (!canCreate) return null;
+            return (
+              <button
+                className="btn-uda btn-uda-primary btn-uda-sm"
+                onClick={() => router.push('/app/postingan/baru')}
+              >
+                <Plus size={16} />
+                <span>Postingan Baru</span>
+              </button>
+            );
+          })()}
         </div>
       </div>
 
@@ -289,6 +343,21 @@ export default function DaftarPostinganPage() {
           <option value="linkedin">LinkedIn</option>
           <option value="facebook">Facebook</option>
           <option value="youtube">YouTube</option>
+        </select>
+
+        <select
+          className="brand-dropdown-select"
+          value={filterContentType}
+          onChange={(e) => {
+            setFilterContentType(e.target.value);
+            setCurrentPage(1);
+          }}
+        >
+          <option value="all">Semua Tipe Konten</option>
+          <option value="feed">Foto (Feed)</option>
+          <option value="carousel">Carousel</option>
+          <option value="reels">Reels</option>
+          <option value="video">Video</option>
         </select>
 
         <select
@@ -399,28 +468,36 @@ export default function DaftarPostinganPage() {
                           >
                             Detail
                           </button>
-                          <button
-                            className="btn-uda btn-uda-secondary btn-uda-sm"
-                            title="Hapus Postingan"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              confirmDelete({
-                                title: 'Hapus Postingan Ini?',
-                                message: `Apakah Anda yakin ingin menghapus "${post.title}"?`,
-                                onConfirm: async () => {
-                                  try {
-                                    await PostService.deletePost(post.id, user?.id);
-                                    setPosts((prev) => prev.filter((p) => p.id !== post.id));
-                                    showSuccess('Postingan Berhasil Dihapus', `Postingan "${post.title}" telah dihapus.`);
-                                  } catch (err: any) {
-                                    alert(err.message || 'Gagal menghapus postingan');
-                                  }
-                                },
-                              });
-                            }}
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          {(() => {
+                            const postBrandRole =
+                              userRolesByBrand[post.brand_id] ||
+                              (brands.find((b) => b.id === post.brand_id)?.owner_id === user?.id ? 'owner' : null);
+                            if (postBrandRole !== 'owner') return null;
+                            return (
+                              <button
+                                className="btn-uda btn-uda-secondary btn-uda-sm"
+                                title="Hapus Postingan"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  confirmDelete({
+                                    title: 'Hapus Postingan Ini?',
+                                    message: `Apakah Anda yakin ingin menghapus "${post.title}"?`,
+                                    onConfirm: async () => {
+                                      try {
+                                        await PostService.deletePost(post.id, user?.id);
+                                        setPosts((prev) => prev.filter((p) => p.id !== post.id));
+                                        showSuccess('Postingan Berhasil Dihapus', `Postingan "${post.title}" telah dihapus.`);
+                                      } catch (err: any) {
+                                        alert(err.message || 'Gagal menghapus postingan');
+                                      }
+                                    },
+                                  });
+                                }}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            );
+                          })()}
                         </div>
                       </td>
                     </tr>
