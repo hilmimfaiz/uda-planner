@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
             id: b.id,
             owner_id: b.owner_id || ownerId,
             name: b.name,
-            handle: b.handle || b.slug || b.name.toLowerCase().replace(/[^a-z0-9]+/g, ''),
+            handle: b.handle || b.slug || b.name.toLowerCase().replace(/[^a-z0-9_.]+/g, ''),
             platforms: b.platforms || ['instagram'],
             color: b.color || '#16A34A',
             avatar_url: b.avatar_url || b.logo_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
                   id: b.id,
                   owner_id: b.owner_id,
                   name: b.name,
-                  handle: b.handle || b.slug || b.name.toLowerCase().replace(/[^a-z0-9]+/g, ''),
+                  handle: b.handle || b.slug || b.name.toLowerCase().replace(/[^a-z0-9_.]+/g, ''),
                   platforms: b.platforms || ['instagram'],
                   color: b.color || '#16A34A',
                   avatar_url: b.avatar_url || b.logo_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
@@ -97,8 +97,7 @@ export async function POST(req: NextRequest) {
     const cleanHandle = (body.handle || body.slug || body.name || '')
       .toLowerCase()
       .replace(/@/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+      .replace(/[^a-z0-9_.]+/g, '') || 'brand';
 
     const admin = createAdminClient();
     if (admin && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveOwnerId)) {
@@ -178,7 +177,9 @@ export async function PUT(req: NextRequest) {
     if (admin && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
       const dbUpdates: any = {};
       if (updates.name !== undefined) dbUpdates.name = updates.name;
-      if (updates.handle !== undefined) dbUpdates.handle = updates.handle;
+      if (updates.handle !== undefined) {
+        dbUpdates.handle = String(updates.handle).toLowerCase().replace(/@/g, '').replace(/[^a-z0-9_.]+/g, '');
+      }
       if (updates.color !== undefined) dbUpdates.color = updates.color;
       if (updates.avatar_url !== undefined || updates.avatarUrl !== undefined) {
         dbUpdates.avatar_url = updates.avatar_url || updates.avatarUrl;

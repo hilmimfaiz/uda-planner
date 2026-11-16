@@ -65,7 +65,7 @@ export class BrandService {
                 id: team.brand_id,
                 owner_id: team.owner_id || 'owner-unknown',
                 name: team.brand_name || 'Brand Tim',
-                handle: (team.brand_name || 'brand').toLowerCase().replace(/[^a-z0-9]+/g, ''),
+                handle: (team.brand_name || 'brand').toLowerCase().replace(/[^a-z0-9_.]+/g, ''),
                 platforms: ['instagram'],
                 color: '#16a34a',
                 avatar_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
@@ -541,7 +541,7 @@ export class BrandService {
               id: b.id,
               owner_id: b.owner_id || finalOwnerId,
               name: b.name,
-              handle: b.handle || b.slug || b.name.toLowerCase().replace(/[^a-z0-9]+/g, ''),
+              handle: b.handle || b.slug || b.name.toLowerCase().replace(/[^a-z0-9_.]+/g, ''),
               platforms: b.platforms || ['instagram'],
               color: b.color || '#16A34A',
               avatar_url: b.avatar_url || b.logo_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
@@ -568,7 +568,7 @@ export class BrandService {
                     id: b.id,
                     owner_id: b.owner_id,
                     name: b.name,
-                    handle: b.handle || b.slug || b.name.toLowerCase().replace(/[^a-z0-9]+/g, ''),
+                    handle: b.handle || b.slug || b.name.toLowerCase().replace(/[^a-z0-9_.]+/g, ''),
                     platforms: b.platforms || ['instagram'],
                     color: b.color || '#16A34A',
                     avatar_url: b.avatar_url || b.logo_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
@@ -665,7 +665,7 @@ export class BrandService {
                   id: team.brand_id,
                   owner_id: 'owner',
                   name: team.brand_name || 'Brand Tim',
-                  handle: (team.brand_name || 'brandtim').toLowerCase().replace(/[^a-z0-9]+/g, ''),
+                  handle: (team.brand_name || 'brandtim').toLowerCase().replace(/[^a-z0-9_.]+/g, ''),
                   platforms: ['instagram'],
                   color: '#16A34A',
                   avatar_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
@@ -708,7 +708,7 @@ export class BrandService {
                     id: inv.brand_id,
                     owner_id: 'owner',
                     name: inv.brand_name || 'Brand Tim',
-                    handle: (inv.brand_name || 'brandtim').toLowerCase().replace(/[^a-z0-9]+/g, ''),
+                    handle: (inv.brand_name || 'brandtim').toLowerCase().replace(/[^a-z0-9_.]+/g, ''),
                     platforms: ['instagram'],
                     color: '#16A34A',
                     avatar_url: inv.brand_avatar || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
@@ -750,7 +750,7 @@ export class BrandService {
             id: d.id,
             owner_id: d.owner_id || 'user-1',
             name: d.name,
-            handle: d.handle || d.slug || d.name.toLowerCase().replace(/[^a-z0-9]+/g, ''),
+            handle: d.handle || d.slug || d.name.toLowerCase().replace(/[^a-z0-9_.]+/g, ''),
             platforms: d.platforms || ['instagram'],
             color: d.color || '#16A34A',
             avatar_url: d.avatar_url || d.logo_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
@@ -788,8 +788,7 @@ export class BrandService {
     const cleanHandle = (payload.handle || payload.slug || payload.name)
       .toLowerCase()
       .replace(/@/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+      .replace(/[^a-z0-9_.]+/g, '') || 'brand';
 
     const supabase = createClient();
     let effectiveOwnerId = payload.ownerId || payload.userId || payload.accountId;
@@ -912,7 +911,11 @@ export class BrandService {
       try {
         const dbUpdates: any = {};
         if (updates.name !== undefined) dbUpdates.name = updates.name;
-        if (updates.handle !== undefined) dbUpdates.handle = updates.handle;
+        if (updates.handle !== undefined) {
+          const cleanH = String(updates.handle).toLowerCase().replace(/@/g, '').replace(/[^a-z0-9_.]+/g, '');
+          dbUpdates.handle = cleanH;
+          updates.handle = cleanH;
+        }
         if (updates.color !== undefined) dbUpdates.color = updates.color;
         if (updates.avatar_url !== undefined) {
           dbUpdates.avatar_url = updates.avatar_url;

@@ -69,7 +69,7 @@ export default function OnboardingBrandPage() {
         return;
       }
 
-      const cleanHandle = handle.replace(/^@/, '').trim();
+      const cleanHandle = handle.toLowerCase().replace(/@/g, '').replace(/[^a-z0-9_.]/g, '').trim();
 
       const newBrand = {
         owner_id: user.id,
@@ -240,9 +240,15 @@ export default function OnboardingBrandPage() {
                 type="text"
                 placeholder="kopisenja.id"
                 value={handle}
-                onChange={(e) => setHandle(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase().replace(/@/g, '').replace(/[^a-z0-9_.]/g, '');
+                  setHandle(val);
+                }}
                 style={{ width: '100%', padding: '10px 14px 10px 32px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.9rem', outline: 'none' }}
               />
+              <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'block', marginTop: 4 }}>
+                Hanya huruf kecil, angka, simbol underscore (_), dan titik (.) yang diperbolehkan.
+              </span>
             </div>
           </div>
 

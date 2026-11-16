@@ -774,10 +774,16 @@ export default function DaftarBrandPage() {
                 setIsCreatingBrand(true);
                 try {
                   const finalPlatforms = selectedPlatforms.length > 0 ? selectedPlatforms : ['instagram'];
+                  const cleanH = newHandle.toLowerCase().replace(/@/g, '').replace(/[^a-z0-9_.]/g, '');
+                  if (!cleanH.trim()) {
+                    showError('Username Wajib Diisi', 'Silakan masukkan username handle brand.');
+                    setIsCreatingBrand(false);
+                    return;
+                  }
                   const created = await BrandService.createBrand({
                     ownerId: user?.id,
                     name: newName,
-                    handle: newHandle.replace('@', ''),
+                    handle: cleanH,
                     color: newColor,
                     avatarUrl: newAvatarUrl,
                     platforms: finalPlatforms,
@@ -916,7 +922,10 @@ export default function DaftarBrandPage() {
                     required
                     placeholder="udacoding_lab"
                     value={newHandle}
-                    onChange={(e) => setNewHandle(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value.toLowerCase().replace(/@/g, '').replace(/[^a-z0-9_.]/g, '');
+                      setNewHandle(val);
+                    }}
                     style={{
                       padding: '8px 12px',
                       border: '1px solid #e2e8f0',
@@ -925,6 +934,9 @@ export default function DaftarBrandPage() {
                       fontSize: '0.9rem',
                     }}
                   />
+                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                    Hanya diperbolehkan huruf kecil, angka, serta simbol underscore (_) dan titik (.).
+                  </span>
                 </div>
 
                 {/* Kolom Platform: Input dengan Enter menjadi Checkbox */}

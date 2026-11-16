@@ -1462,9 +1462,16 @@ export default function PengaturanBrandDetailPage() {
               <input
                 type="text"
                 value={brandHandle}
-                onChange={(e) => setBrandHandle(e.target.value.replace('@', ''))}
+                onChange={(e) => {
+                  const val = e.target.value.toLowerCase().replace(/@/g, '').replace(/[^a-z0-9_.]/g, '');
+                  setBrandHandle(val);
+                }}
+                placeholder="udacoding_lab"
                 style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 8, marginTop: 4, outline: 'none', fontSize: '0.9rem' }}
               />
+              <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'block', marginTop: 4 }}>
+                Hanya diperbolehkan huruf kecil, angka, serta simbol underscore (_) dan titik (.).
+              </span>
             </div>
 
             <div>
@@ -1615,9 +1622,10 @@ export default function PengaturanBrandDetailPage() {
                 style={{ width: 'fit-content', marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}
                 onClick={async () => {
                   const finalPlatforms = selectedPlatforms.length > 0 ? selectedPlatforms : ['instagram'];
+                  const cleanH = brandHandle.toLowerCase().replace(/@/g, '').replace(/[^a-z0-9_.]/g, '');
                   const updated = await BrandService.updateBrand(brand.id, {
                     name: brandName,
-                    handle: brandHandle,
+                    handle: cleanH,
                     color: brandColor,
                     avatar_url: brandAvatarUrl,
                     platforms: finalPlatforms,
