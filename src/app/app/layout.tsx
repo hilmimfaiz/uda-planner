@@ -227,6 +227,115 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Sinkronisasi Real-Time Global untuk Perubahan Role & Akses Anggota Tim di Seluruh Halaman /app
+  useEffect(() => {
+    if (!user?.id) return;
+    const supabase = createClient();
+    if (!supabase) return;
+
+    const rooms = [`user_room_${user.id}`];
+    if (user.email) {
+      rooms.push(`user_room_${user.email.toLowerCase().trim()}`);
+    }
+
+    const channels: any[] = [];
+    rooms.forEach((roomName) => {
+      const ch = supabase
+        .channel(roomName)
+        .on('broadcast', { event: 'member_update' }, async (payload: any) => {
+          const data = payload?.payload;
+          if (!data) return;
+
+          const isMe =
+            data.userId === user.id ||
+            (user.email && data.userEmail?.toLowerCase() === user.email.toLowerCase());
+
+          if (!isMe) return;
+
+          if (data.type === 'role_updated') {
+            const newRole = data.newRole?.toLowerCase();
+            if (newRole && typeof window !== 'undefined') {
+              try {
+                localStorage.setItem('uda_system_role_' + user.id, newRole);
+                const rawTeam = localStorage.getItem('uda_team_membership_' + user.id);
+                if (rawTeam) {
+                  const team = JSON.parse(rawTeam);
+                  if (team.brand_id === data.brandId) {
+                    team.role = newRole;
+                    localStorage.setItem('uda_team_membership_' + user.id, JSON.stringify(team));
+                  }
+                }
+                const rawInv = localStorage.getItem('uda_brand_invitations');
+                if (rawInv) {
+                  const invList = JSON.parse(rawInv);
+                  const updated = invList.map((inv: any) =>
+                    inv.brand_id === data.brandId &&
+                    ((user.email && inv.target_email?.toLowerCase() === user.email.toLowerCase()) ||
+                      inv.target_user_id === user.id)
+                      ? { ...inv, role: newRole }
+                      : inv
+                  );
+                  localStorage.setItem('uda_brand_invitations', JSON.stringify(updated));
+                }
+              } catch {}
+
+              window.dispatchEvent(
+                new CustomEvent('uda_member_role_changed', {
+                  detail: { brandId: data.brandId, userId: user.id, role: newRole, brandName: data.brandName },
+                })
+              );
+              window.dispatchEvent(new Event('storage'));
+            }
+          } else if (data.type === 'member_removed') {
+            await MemberService.leaveTeam(user.id, user.email, data.brandId, data.brandName);
+            window.dispatchEvent(
+              new CustomEvent('uda_member_removed', {
+                detail: { brandId: data.brandId, userId: user.id, email: user.email, brandName: data.brandName },
+              })
+            );
+            window.dispatchEvent(new Event('storage'));
+          }
+        })
+        .subscribe();
+      channels.push(ch);
+    });
+
+    return () => {
+      channels.forEach((ch) => {
+        try {
+          supabase.removeChannel(ch);
+        } catch {}
+      });
+    };
+  }, [user?.id, user?.email]);
+
+  // Sinkronisasi Real-Time Global untuk Paket & Variasi Durasi Dinamis
+  useEffect(() => {
+    const supabase = createClient();
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel('global_plans_room')
+      .on('broadcast', { event: 'plan_updated' }, async () => {
+        try {
+          const latest = await PlanService.getAllPlans();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('uda_plans_updated', { detail: latest }));
+            window.dispatchEvent(new Event('storage'));
+          }
+        } catch (e) {
+          console.warn('Realtime global plan_updated sync err:', e);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    };
+  }, []);
+
   // Scheduler Background Pengingat Jadwal Tayang Otomatis
   useEffect(() => {
     const checkUpcomingPosts = async () => {

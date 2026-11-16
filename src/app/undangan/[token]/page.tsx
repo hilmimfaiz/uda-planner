@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Users, CheckCircle2, ShieldCheck, ArrowRight, Loader2, LogIn, Sparkles, Building, Clock, AlertTriangle } from 'lucide-react';
+import { Users, CheckCircle2, ShieldCheck, ArrowRight, Loader2, LogIn, Sparkles, Building, Clock, AlertTriangle, Crown, Copy, Check } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { MemberService } from '@/services/member.service';
+import { BrandService, isUuid } from '@/services/brand.service';
 import { createClient } from '@/lib/supabase/client';
 import { playSuccessSound, playErrorSound } from '@/lib/audio-effects';
 import Link from 'next/link';
@@ -22,6 +23,8 @@ export default function UndanganAnggotaPage() {
   const [isJoining, setIsJoining] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
+  const [isOwnerOfBrand, setIsOwnerOfBrand] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [inviteData, setInviteData] = useState<{
     id?: string;
     brand_id: string;
@@ -162,15 +165,90 @@ export default function UndanganAnggotaPage() {
 
       setIsExpired(linkIsExpired);
       setInviteData(found);
+
+      // Cek apakah pengguna yang sedang login adalah Owner dari brand ini
+      if (user?.id && found?.brand_id) {
+        if (found.owner_id && found.owner_id === user.id) {
+          setIsOwnerOfBrand(true);
+        } else {
+          const cachedBrands = BrandService.getCachedBrands(user.id);
+          const isOwned = cachedBrands.some((b) => b.id === found.brand_id && b.owner_id === user.id);
+          if (isOwned) {
+            setIsOwnerOfBrand(true);
+          } else {
+            BrandService.getUserBrandRole(found.brand_id, user.id).then((r) => {
+              if (r === 'owner') setIsOwnerOfBrand(true);
+            });
+          }
+        }
+      }
+
       setIsLoading(false);
     };
 
     findInvite();
-  }, [token, searchParams]);
+  }, [token, searchParams, user?.id]);
+
+  // Verifikasi status owner secara reaktif
+  useEffect(() => {
+    if (!user?.id || !inviteData?.brand_id) {
+      setIsOwnerOfBrand(false);
+      return;
+    }
+
+    let isMounted = true;
+    const verifyOwner = async () => {
+      if (inviteData.owner_id && inviteData.owner_id === user.id) {
+        if (isMounted) setIsOwnerOfBrand(true);
+        return;
+      }
+
+      const cachedBrands = BrandService.getCachedBrands(user.id);
+      if (cachedBrands.some((b) => b.id === inviteData.brand_id && b.owner_id === user.id)) {
+        if (isMounted) setIsOwnerOfBrand(true);
+        return;
+      }
+
+      const role = await BrandService.getUserBrandRole(inviteData.brand_id, user.id);
+      if (role === 'owner') {
+        if (isMounted) setIsOwnerOfBrand(true);
+        return;
+      }
+
+      if (supabase && isUuid(inviteData.brand_id)) {
+        try {
+          const { data: bData } = await (supabase.from('brands' as any) as any)
+            .select('owner_id')
+            .eq('id', inviteData.brand_id)
+            .maybeSingle();
+          if (bData && bData.owner_id === user.id) {
+            if (isMounted) setIsOwnerOfBrand(true);
+            return;
+          }
+        } catch {}
+      }
+
+      if (isMounted) setIsOwnerOfBrand(false);
+    };
+
+    verifyOwner();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, inviteData?.brand_id, inviteData?.owner_id]);
+
+  const handleCopyInviteLink = () => {
+    if (typeof window !== 'undefined') {
+      navigator.clipboard.writeText(window.location.href);
+      setCopiedLink(true);
+      playSuccessSound();
+      setTimeout(() => setCopiedLink(false), 2500);
+    }
+  };
 
   // Eksekusi Penerimaan Undangan & Otomatis Ubah Status Jadi TIM
   const handleAcceptInvite = async () => {
-    if (!inviteData) return;
+    if (!inviteData || isOwnerOfBrand) return;
     setIsJoining(true);
 
     const currentUserId = user?.id || `usr-${Date.now()}`;
@@ -465,6 +543,175 @@ export default function UndanganAnggotaPage() {
           >
             Kembali ke Beranda
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Jika pengguna yang login adalah OWNER dari brand yang diundang, cegah akses undangan dan tampilkan pesan khusus
+  if (isOwnerOfBrand && inviteData) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 50%, #fefce8 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20,
+        }}
+      >
+        <div
+          className="uda-card"
+          style={{
+            maxWidth: 480,
+            width: '100%',
+            padding: 36,
+            textAlign: 'center',
+            borderRadius: 20,
+            border: '2.5px solid #0f172a',
+            boxShadow: '8px 8px 0px #0f172a',
+            backgroundColor: '#ffffff',
+          }}
+        >
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 16,
+              background: '#fef3c7',
+              color: '#d97706',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 18px',
+              border: '2px solid #0f172a',
+              boxShadow: '3px 3px 0px #0f172a',
+            }}
+          >
+            <Crown size={32} />
+          </div>
+
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              backgroundColor: '#fef3c7',
+              color: '#92400e',
+              fontSize: '0.74rem',
+              fontWeight: 800,
+              padding: '4px 12px',
+              borderRadius: 999,
+              marginBottom: 14,
+              border: '1px solid #fde68a',
+            }}
+          >
+            <span>👑 ANDA ADALAH PEMILIK BRAND INI</span>
+          </div>
+
+          <h1 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#0f172a', marginBottom: 12 }}>
+            Tautan Ini Milik Anda
+          </h1>
+
+          <p style={{ color: '#475569', fontSize: '0.92rem', lineHeight: 1.6, marginBottom: 20 }}>
+            Tautan undangan ini milik Anda untuk brand <strong style={{ color: '#0f172a' }}>"{inviteData.brand_name}"</strong>. Anda tidak dapat bergabung ke brand milik Anda sendiri sebagai anggota tim.
+          </p>
+
+          <div
+            style={{
+              backgroundColor: '#f8fafc',
+              border: '1.5px dashed #cbd5e1',
+              borderRadius: 14,
+              padding: '14px 16px',
+              marginBottom: 22,
+              textAlign: 'left',
+            }}
+          >
+            <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700, marginBottom: 6 }}>
+              Bagikan ke Anggota Tim yang Dituju:
+            </div>
+            <div
+              style={{
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                color: '#0f172a',
+                wordBreak: 'break-all',
+                marginBottom: 12,
+                backgroundColor: '#ffffff',
+                padding: '8px 10px',
+                borderRadius: 8,
+                border: '1px solid #e2e8f0',
+              }}
+            >
+              {typeof window !== 'undefined' ? window.location.href : ''}
+            </div>
+            <p style={{ fontSize: '0.82rem', color: '#0f172a', margin: 0, lineHeight: 1.5, fontWeight: 700 }}>
+              💡 Tautan ini milik anda, anda hanya bisa berikan tautan ke anggota yang dituju.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button
+              type="button"
+              onClick={handleCopyInviteLink}
+              className="btn-uda btn-uda-primary"
+              style={{
+                width: '100%',
+                height: 46,
+                fontSize: '0.92rem',
+                fontWeight: 900,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                cursor: 'pointer',
+              }}
+            >
+              {copiedLink ? (
+                <>
+                  <Check size={18} />
+                  <span>Tautan Berhasil Disalin!</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={18} />
+                  <span>Salin Tautan Undangan</span>
+                </>
+              )}
+            </button>
+
+            <Link
+              href={inviteData.brand_id ? `/app/brand/${inviteData.brand_id}` : '/app/brand'}
+              className="btn-uda btn-uda-secondary"
+              style={{
+                width: '100%',
+                height: 44,
+                fontSize: '0.88rem',
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                textDecoration: 'none',
+              }}
+            >
+              <span>Kelola Brand Ini</span>
+            </Link>
+
+            <Link
+              href="/app"
+              style={{
+                fontSize: '0.82rem',
+                color: '#64748b',
+                textDecoration: 'none',
+                fontWeight: 600,
+                marginTop: 4,
+              }}
+            >
+              Kembali ke Beranda
+            </Link>
+          </div>
         </div>
       </div>
     );
