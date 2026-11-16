@@ -1726,7 +1726,7 @@ export default function PengaturanBrandDetailPage() {
                       title={members.filter((m) => m.role !== 'owner').length >= 10 ? 'Batas kuota 10 anggota kolaborator tercapai' : 'Undang anggota baru'}
                     >
                       <Plus size={14} />
-                      <span>+ Undang Anggota</span>
+                      <span>Undang Anggota</span>
                     </button>
                   </div>
                 )}

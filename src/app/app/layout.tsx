@@ -812,7 +812,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               style={{ textDecoration: 'none' }}
             >
               <Plus size={16} />
-              <span>+ Postingan</span>
+              <span>Postingan</span>
             </Link>
 
             {/* Notification Bell */}

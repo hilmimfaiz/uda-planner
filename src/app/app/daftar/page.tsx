@@ -219,7 +219,7 @@ export default function DaftarPostinganPage() {
             onClick={() => router.push('/app/postingan/baru')}
           >
             <Plus size={16} />
-            <span>+ Postingan Baru</span>
+            <span>Postingan Baru</span>
           </button>
         </div>
       </div>
