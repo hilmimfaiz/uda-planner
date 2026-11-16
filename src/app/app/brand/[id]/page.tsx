@@ -198,6 +198,29 @@ export default function PengaturanBrandDetailPage() {
         }
       }
 
+      // Sinkronisasi peran terbaru dari server API /api/invitations
+      try {
+        const invRes = await fetch(`/api/invitations?brandId=${brandId}`);
+        if (invRes.ok) {
+          const sInvites = await invRes.json();
+          if (Array.isArray(sInvites)) {
+            sInvites.forEach((inv: any) => {
+              if (inv.status === 'accepted' && inv.role) {
+                const targetIdx = rawMembers.findIndex(
+                  (m: any) =>
+                    (inv.target_user_id && (m.id === inv.target_user_id || m.user_id === inv.target_user_id)) ||
+                    (inv.email && m.email?.toLowerCase() === inv.email.toLowerCase()) ||
+                    (inv.target_email && m.email?.toLowerCase() === inv.target_email.toLowerCase())
+                );
+                if (targetIdx >= 0) {
+                  rawMembers[targetIdx].role = inv.role.toLowerCase();
+                }
+              }
+            });
+          }
+        }
+      } catch {}
+
       // Pastikan pemilik asli brand selalu ada di list
       const hasOwner = rawMembers.some((m) => m.role === 'owner');
       if (!hasOwner && currentBrand?.owner_id) {
@@ -448,35 +471,78 @@ export default function PengaturanBrandDetailPage() {
           )
           .subscribe();
 
-        // 2. Supabase Broadcast Channel untuk sinkronisasi instan <100ms
-        roomChannel = supabase
-          .channel(`brand_room_${brandId}`)
-          .on('broadcast', { event: 'member_update' }, async (payload: any) => {
-            const data = payload?.payload;
-            if (!data) return;
-            const isMe =
-              data.userId === user.id ||
-              (user.email && data.userEmail?.toLowerCase() === user.email.toLowerCase());
+        // 2. Supabase Broadcast Channels untuk sinkronisasi instan <100ms
+        const roomsToListen = [`brand_room_${brandId}`];
+        if (user.id) roomsToListen.push(`user_room_${user.id}`);
+        if (user.email) roomsToListen.push(`user_room_${user.email.toLowerCase().trim()}`);
 
-            if (data.type === 'member_removed' && isMe) {
-              setIsAccessDenied(true);
-              setUserRole(null);
-              playErrorSound();
-              showError('Akses Dicabut', 'Anda bukan bagian dari anggota tim lagi.');
-              await MemberService.leaveTeam(user.id, user.email, brandId, currentBrand?.name || brandName);
-              if (refreshUserData) await refreshUserData();
-            } else if (data.type === 'role_updated' && data.userId === user.id) {
-              if (data.newRole && data.newRole !== userRole) {
-                setUserRole(data.newRole);
-                playSuccessSound();
-                showToast(`🔔 Peran Anda telah diubah menjadi ${data.newRole.toUpperCase()} oleh pemilik brand.`);
+        const activeChannels: any[] = [];
+        roomsToListen.forEach((roomName) => {
+          const ch = supabase
+            .channel(roomName)
+            .on('broadcast', { event: 'member_update' }, async (payload: any) => {
+              const data = payload?.payload;
+              if (!data) return;
+              const isMe =
+                data.userId === user.id ||
+                (user.email && data.userEmail?.toLowerCase() === user.email.toLowerCase());
+
+              if (data.type === 'member_removed' && isMe) {
+                setIsAccessDenied(true);
+                setUserRole(null);
+                playErrorSound();
+                showError('Akses Dicabut', 'Anda bukan bagian dari anggota tim lagi.');
+                await MemberService.leaveTeam(user.id, user.email, brandId, currentBrand?.name || brandName);
+                if (refreshUserData) await refreshUserData();
+              } else if (data.type === 'role_updated' && isMe) {
+                const newRole = data.newRole?.toLowerCase();
+                if (newRole && newRole !== userRole) {
+                  setUserRole(newRole);
+                  if (typeof window !== 'undefined') {
+                    try {
+                      localStorage.setItem('uda_system_role_' + user.id, newRole);
+                      const rawTeam = localStorage.getItem('uda_team_membership_' + user.id);
+                      if (rawTeam) {
+                        const team = JSON.parse(rawTeam);
+                        if (team.brand_id === brandId) {
+                          team.role = newRole;
+                          localStorage.setItem('uda_team_membership_' + user.id, JSON.stringify(team));
+                        }
+                      }
+                      const rawInv = localStorage.getItem('uda_brand_invitations');
+                      if (rawInv) {
+                        const invList = JSON.parse(rawInv);
+                        const updated = invList.map((inv: any) =>
+                          inv.brand_id === brandId &&
+                          ((user.email && inv.target_email?.toLowerCase() === user.email.toLowerCase()) ||
+                            inv.target_user_id === user.id)
+                            ? { ...inv, role: newRole }
+                            : inv
+                        );
+                        localStorage.setItem('uda_brand_invitations', JSON.stringify(updated));
+                      }
+                    } catch {}
+                  }
+                  playSuccessSound();
+                  const roleLabel =
+                    newRole === 'reviewer'
+                      ? 'Reviewer (Menyetujui)'
+                      : newRole === 'editor'
+                      ? 'Editor (Buat Konten)'
+                      : newRole === 'viewer'
+                      ? 'Viewer (Lihat Saja)'
+                      : 'Owner';
+                  showToast(`🔔 Peran Anda di brand ini telah diubah menjadi ${roleLabel}`);
+                  loadBrandMembers();
+                }
+              } else {
                 loadBrandMembers();
               }
-            } else {
-              loadBrandMembers();
-            }
-          })
-          .subscribe();
+            })
+            .subscribe();
+          activeChannels.push(ch);
+        });
+        roomChannel = activeChannels;
       } catch {}
     }
 
@@ -538,7 +604,19 @@ export default function PengaturanBrandDetailPage() {
       window.removeEventListener('uda_member_removed', onMemberRemovedEvent);
       window.removeEventListener('storage', checkAndSyncRole);
       if (supabase && memberChannel) supabase.removeChannel(memberChannel);
-      if (supabase && roomChannel) supabase.removeChannel(roomChannel);
+      if (supabase && roomChannel) {
+        if (Array.isArray(roomChannel)) {
+          roomChannel.forEach((ch) => {
+            try {
+              supabase.removeChannel(ch);
+            } catch {}
+          });
+        } else {
+          try {
+            supabase.removeChannel(roomChannel);
+          } catch {}
+        }
+      }
     };
   }, [
     brandId,
@@ -1737,6 +1815,7 @@ export default function PengaturanBrandDetailPage() {
                 {members.map((m) => {
                   const isMemberOwner = m.role === 'owner';
                   const isCurrentUser = m.id === user?.id || (user?.email && m.email?.toLowerCase() === user?.email?.toLowerCase());
+                  const effectiveRole = isCurrentUser && userRole ? userRole : m.role;
 
                   return (
                     <div
@@ -1768,7 +1847,7 @@ export default function PengaturanBrandDetailPage() {
                               </span>
                             ) : isCurrentUser ? (
                               <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 999, background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>
-                                Anda ({m.role.toUpperCase()})
+                                Anda ({effectiveRole.toUpperCase()})
                               </span>
                             ) : null}
                           </div>
@@ -1805,15 +1884,15 @@ export default function PengaturanBrandDetailPage() {
                             style={{
                               fontSize: '0.8rem',
                               fontWeight: 700,
-                              color: m.role === 'reviewer' ? '#4338ca' : m.role === 'editor' ? '#92400e' : '#475569',
-                              background: m.role === 'reviewer' ? '#e0e7ff' : m.role === 'editor' ? '#fef3c7' : '#f1f5f9',
+                              color: effectiveRole === 'reviewer' ? '#4338ca' : effectiveRole === 'editor' ? '#92400e' : '#475569',
+                              background: effectiveRole === 'reviewer' ? '#e0e7ff' : effectiveRole === 'editor' ? '#fef3c7' : '#f1f5f9',
                               padding: '4px 10px',
                               borderRadius: 6,
                               border: '1px solid currentColor',
                               textTransform: 'capitalize',
                             }}
                           >
-                            {m.role === 'editor' ? 'Editor (Buat Konten)' : m.role === 'reviewer' ? 'Reviewer (Menyetujui)' : 'Viewer (Lihat Saja)'}
+                            {effectiveRole === 'editor' ? 'Editor (Buat Konten)' : effectiveRole === 'reviewer' ? 'Reviewer (Menyetujui)' : 'Viewer (Lihat Saja)'}
                           </span>
                         )}
 

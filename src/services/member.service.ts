@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client';
 import { initialBrandMembers, initialProfiles } from '@/lib/supabase/mock-data';
 import { BrandMember, BrandRole, Invitation, Profile } from '@/types/database.types';
+import { sendRealtimeBroadcast } from '@/lib/realtime';
 
 let mockMembers: BrandMember[] = [...initialBrandMembers];
 let mockInvitations: Invitation[] = [];
@@ -81,6 +82,8 @@ export class MemberService {
     brandName?: string,
     userEmail?: string
   ): Promise<BrandMember | null> {
+    const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : undefined;
+
     // 1. Panggil server API /api/invitations via PUT action 'update_role' dengan admin client
     try {
       await fetch('/api/invitations', {
@@ -90,7 +93,7 @@ export class MemberService {
           action: 'update_role',
           brandId,
           userId,
-          userEmail,
+          userEmail: cleanEmail,
           role,
           brandName,
         }),
@@ -103,22 +106,28 @@ export class MemberService {
     const supabase = createClient();
     if (supabase) {
       try {
-        const { data, error } = await (supabase.from('brand_members' as any) as any)
+        await (supabase.from('brand_members' as any) as any)
           .update({ role, updated_at: new Date().toISOString() })
-          .match({ brand_id: brandId, user_id: userId })
-          .select()
-          .single();
-        if (!error && data) {
-          // Real-time broadcast channel
-          try {
-            supabase.channel(`brand_room_${brandId}`).send({
-              type: 'broadcast',
-              event: 'member_update',
-              payload: { brandId, type: 'role_updated', userId, newRole: role, brandName },
-            });
-          } catch {}
-        }
+          .match({ brand_id: brandId, user_id: userId });
       } catch {}
+
+      // Broadcast real-time terjamin ke semua room terkait
+      const broadcastPayload = {
+        brandId,
+        type: 'role_updated',
+        userId,
+        userEmail: cleanEmail,
+        newRole: role,
+        brandName,
+      };
+
+      sendRealtimeBroadcast(`brand_room_${brandId}`, 'member_update', broadcastPayload).catch(() => {});
+      if (cleanEmail) {
+        sendRealtimeBroadcast(`user_room_${cleanEmail}`, 'member_update', broadcastPayload).catch(() => {});
+      }
+      if (userId) {
+        sendRealtimeBroadcast(`user_room_${userId}`, 'member_update', broadcastPayload).catch(() => {});
+      }
     }
 
     // 3. Update localStorage brand_members & trigger storage event
@@ -305,13 +314,22 @@ export class MemberService {
 
     // 2. Broadcast via Supabase channel jika ada brandId
     if (supabase && brandId) {
-      try {
-        supabase.channel(`brand_room_${brandId}`).send({
-          type: 'broadcast',
-          event: 'member_update',
-          payload: { brandId, type: 'member_removed', userId, userEmail, brandName },
-        });
-      } catch {}
+      const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : undefined;
+      const broadcastPayload = {
+        brandId,
+        type: 'member_removed',
+        userId,
+        userEmail: cleanEmail,
+        brandName,
+      };
+
+      sendRealtimeBroadcast(`brand_room_${brandId}`, 'member_update', broadcastPayload).catch(() => {});
+      if (cleanEmail) {
+        sendRealtimeBroadcast(`user_room_${cleanEmail}`, 'member_update', broadcastPayload).catch(() => {});
+      }
+      if (userId) {
+        sendRealtimeBroadcast(`user_room_${userId}`, 'member_update', broadcastPayload).catch(() => {});
+      }
     }
 
     // 2. Hapus record dari database brand_members via client jika ada sesi

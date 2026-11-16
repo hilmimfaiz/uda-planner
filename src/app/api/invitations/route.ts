@@ -5,6 +5,9 @@ import path from 'path';
 
 const BACKUP_FILE = path.join(process.cwd(), '.server_invitations.json');
 
+const isUuid = (val?: string | null) =>
+  !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
 function loadBackupInvites(): any[] {
   try {
     if (fs.existsSync(BACKUP_FILE)) {
@@ -353,39 +356,66 @@ export async function PUT(req: NextRequest) {
       saveBackupInvites(updated);
     } else if (action === 'update_role') {
       const cleanTargetEmail = (userEmail || '').trim().toLowerCase();
-      if (admin && brandId && (userId || cleanTargetEmail) && role) {
+      const targetUserIds = new Set<string>();
+      if (userId) targetUserIds.add(userId);
+
+      if (admin && cleanTargetEmail) {
         try {
-          let resolvedTargetId = userId;
-          if (!resolvedTargetId && cleanTargetEmail) {
-            const { data: pUser } = await (admin.from('profiles' as any) as any)
-              .select('id')
-              .ilike('email', cleanTargetEmail)
-              .maybeSingle();
-            if (pUser?.id) resolvedTargetId = pUser.id;
+          const { data: pUser } = await (admin.from('profiles' as any) as any)
+            .select('id')
+            .ilike('email', cleanTargetEmail)
+            .maybeSingle();
+          if (pUser?.id) {
+            targetUserIds.add(pUser.id);
           }
+        } catch {}
+      }
 
-          if (resolvedTargetId) {
-            await (admin.from('brand_members' as any) as any)
-              .update({ role, updated_at: new Date().toISOString() })
-              .eq('brand_id', brandId)
-              .eq('user_id', resolvedTargetId);
+      if (admin && brandId && role) {
+        try {
+          for (const targetUid of Array.from(targetUserIds)) {
+            if (isUuid(targetUid) && isUuid(brandId)) {
+              const { data: existingBM } = await (admin.from('brand_members' as any) as any)
+                .select('id')
+                .eq('brand_id', brandId)
+                .eq('user_id', targetUid)
+                .maybeSingle();
 
-            // Tambahkan notifikasi real-time untuk anggota yang diubah rolenya
-            await (admin.from('notifications' as any) as any).insert({
-              user_id: resolvedTargetId,
-              type: 'role_updated',
-              message: `Role Anda di brand "${brandName || 'Brand'}" telah diubah menjadi ${role.toUpperCase()}.`,
-              link: `/app/brand/${brandId}`,
-              is_read: false,
-            } as any);
+              if (existingBM) {
+                await (admin.from('brand_members' as any) as any)
+                  .update({ role, updated_at: new Date().toISOString() })
+                  .eq('id', (existingBM as any).id);
+              } else {
+                await (admin.from('brand_members' as any) as any)
+                  .insert({
+                    brand_id: brandId,
+                    user_id: targetUid,
+                    role,
+                  } as any);
+              }
+
+              // Tambahkan notifikasi real-time untuk anggota yang diubah rolenya
+              await (admin.from('notifications' as any) as any).insert({
+                user_id: targetUid,
+                type: 'role_updated',
+                message: `Role Anda di brand "${brandName || 'Brand'}" telah diubah menjadi ${role.toUpperCase()}.`,
+                link: `/app/brand/${brandId}`,
+                is_read: false,
+              } as any);
+            }
           }
 
           let invQ: any = (admin.from('invitations' as any) as any).update({ role }).eq('brand_id', brandId);
-          if (resolvedTargetId) {
-            invQ = invQ.or(`target_user_id.eq.${resolvedTargetId},invited_by.eq.${resolvedTargetId}`);
+          const filterOr = [];
+          for (const uid of Array.from(targetUserIds)) {
+            filterOr.push(`target_user_id.eq.${uid}`);
+            filterOr.push(`invited_by.eq.${uid}`);
           }
           if (cleanTargetEmail) {
-            invQ = invQ.ilike('email', cleanTargetEmail);
+            filterOr.push(`email.ilike.${cleanTargetEmail}`);
+          }
+          if (filterOr.length > 0) {
+            invQ = invQ.or(filterOr.join(','));
           }
           await invQ;
         } catch (dbErr) {
@@ -398,7 +428,7 @@ export async function PUT(req: NextRequest) {
       const updated = all.map((i) => {
         const matchBrand = brandId ? i.brand_id === brandId : true;
         const matchUser =
-          (userId && (i.target_user_id === userId || i.user_id === userId)) ||
+          Array.from(targetUserIds).some((uid) => i.target_user_id === uid || i.user_id === uid) ||
           (cleanTargetEmail && (i.target_email || i.email)?.toLowerCase() === cleanTargetEmail);
         if (matchBrand && matchUser) {
           return { ...i, role };

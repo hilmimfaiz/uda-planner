@@ -237,9 +237,59 @@ export class BrandService {
           }
         }
 
-        const member = memberRes?.data;
-        if (member && member.role) {
-          const validRole = member.role.toLowerCase() as 'editor' | 'reviewer' | 'viewer';
+        let member = memberRes?.data;
+        if (!member?.role && userEmail) {
+          try {
+            const { data: prof } = await (supabase.from('profiles' as any) as any)
+              .select('id')
+              .ilike('email', userEmail.trim())
+              .maybeSingle();
+            if (prof?.id && prof.id !== finalUserId) {
+              const { data: memberByProf } = await (supabase.from('brand_members' as any) as any)
+                .select('role')
+                .eq('brand_id', brandId)
+                .eq('user_id', prof.id)
+                .maybeSingle();
+              if (memberByProf) member = memberByProf;
+            }
+          } catch {}
+        }
+
+        // Pengecekan sekunder live ke server API /api/invitations
+        let serverRole: 'editor' | 'reviewer' | 'viewer' | null = null;
+        let isServerRemoved = false;
+        if ((!member || !member.role) && typeof window !== 'undefined' && brandId && (finalUserId || userEmail)) {
+          try {
+            const params = new URLSearchParams();
+            params.set('brandId', brandId);
+            if (finalUserId) params.set('userId', finalUserId);
+            if (userEmail) params.set('email', userEmail);
+
+            const res = await fetch(`/api/invitations?${params.toString()}`);
+            if (res.ok) {
+              const invList = await res.json();
+              if (Array.isArray(invList) && invList.length > 0) {
+                const myInv = invList.find((inv: any) =>
+                  inv.brand_id === brandId &&
+                  ((userEmail && (inv.target_email?.toLowerCase() === userEmail.toLowerCase() || inv.email?.toLowerCase() === userEmail.toLowerCase())) ||
+                   (finalUserId && (inv.target_user_id === finalUserId || inv.user_id === finalUserId)))
+                );
+                if (myInv) {
+                  if (myInv.status === 'left' || myInv.status === 'cancelled') {
+                    isServerRemoved = true;
+                  } else if (myInv.status === 'accepted' && myInv.role) {
+                    serverRole = myInv.role.toLowerCase() as 'editor' | 'reviewer' | 'viewer';
+                  }
+                }
+              }
+            }
+          } catch {}
+        }
+
+        const effectiveMemberRole = member?.role?.toLowerCase() || serverRole;
+
+        if (effectiveMemberRole) {
+          const validRole = effectiveMemberRole as 'editor' | 'reviewer' | 'viewer';
           // Sinkronkan ke local storage agar peran terbaru langsung aktif seketika
           if (typeof window !== 'undefined' && finalUserId) {
             try {
@@ -259,7 +309,7 @@ export class BrandService {
 
         // PENTING: Jika brand ditemukan di Supabase dan user BUKAN owner, serta TIDAK DITEMUKAN di brand_members:
         // Artinya akses user ini telah DICABUT atau user BUKAN lagi anggota tim!
-        if (brand && brand.owner_id !== finalUserId && (!member || !member.role)) {
+        if (isServerRemoved || (brand && brand.owner_id !== finalUserId && !effectiveMemberRole)) {
           // Bersihkan sisa cache lokal untuk brand ini agar tidak lolos ke pengecekan lokal berikutnya
           if (typeof window !== 'undefined') {
             try {

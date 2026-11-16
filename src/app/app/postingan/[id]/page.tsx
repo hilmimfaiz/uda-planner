@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Copy,
@@ -558,6 +558,31 @@ export default function PostEditorDetailPage() {
       });
     }
   }, [rawId, isNew, user?.id]);
+
+  // Sinkronisasi Real-Time jika owner mengubah role anggota tim atau mencabut akses saat di halaman editor postingan
+  useEffect(() => {
+    const handleRoleChanged = (e: any) => {
+      if (e.detail?.brandId === post.brand_id && e.detail?.role) {
+        setUserRole(e.detail.role);
+        showToast(`🔔 Peran Anda di brand ini telah diperbarui menjadi ${e.detail.role.toUpperCase()}`);
+      }
+    };
+    const handleMemberRemoved = (e: any) => {
+      if (e.detail?.brandId === post.brand_id) {
+        setIsAccessDenied(true);
+        showError('Akses Dicabut', 'Anda bukan bagian dari anggota tim lagi.');
+        setTimeout(() => router.push('/app/daftar'), 1500);
+      }
+    };
+
+    window.addEventListener('uda_member_role_changed', handleRoleChanged);
+    window.addEventListener('uda_member_removed', handleMemberRemoved);
+
+    return () => {
+      window.removeEventListener('uda_member_role_changed', handleRoleChanged);
+      window.removeEventListener('uda_member_removed', handleMemberRemoved);
+    };
+  }, [post.brand_id, router]);
 
   const fallbackBrand: DummyBrand = {
     id: post.brand_id || 'no-brand',
