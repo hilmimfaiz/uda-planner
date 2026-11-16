@@ -47,6 +47,7 @@ import { PostService } from '@/services/post.service';
 import { PlanService } from '@/services/plan.service';
 import { createClient } from '@/lib/supabase/client';
 import { MemberService } from '@/services/member.service';
+import { BrandService } from '@/services/brand.service';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -466,11 +467,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!isLoading && user) {
       if (isAdmin) return;
       try {
+        const cachedBrands = BrandService.getCachedBrands(user.id);
+        const hasExistingBrands = cachedBrands && cachedBrands.length > 0;
         const hasCompletedOnboarding =
           user.user_metadata?.has_completed_onboarding === true ||
-          localStorage.getItem('uda_profile_setup_done_' + user.id) === 'true';
+          localStorage.getItem('uda_profile_setup_done_' + user.id) === 'true' ||
+          localStorage.getItem('uda_profile_setup_done') === 'true' ||
+          hasExistingBrands;
 
-        // Jika belum melengkapi profil awal:
+        if (hasExistingBrands || user.user_metadata?.has_completed_onboarding === true) {
+          localStorage.setItem('uda_profile_setup_done_' + user.id, 'true');
+        }
+
+        // Jika belum melengkapi profil awal (hanya akun baru yang belum menyelesaikan profil):
         if (!hasCompletedOnboarding) {
           router.replace('/profil-awal');
           return;

@@ -18,6 +18,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { PlanService, DynamicPlan, PlanDurationItem } from '@/services/plan.service';
+import { BrandService } from '@/services/brand.service';
 
 export default function ProfilAwalPage() {
   const router = useRouter();
@@ -129,6 +130,115 @@ export default function ProfilAwalPage() {
   // Tangkap data auth langsung dari Supabase Session & Validasi Hak Akses Khusus Pengguna Baru
   useEffect(() => {
     let isMounted = true;
+    let authUnsubscribe: (() => void) | null = null;
+    let fallbackTimeout: NodeJS.Timeout | null = null;
+
+    const evaluateUser = async (currentUser: any) => {
+      if (!isMounted || !currentUser) return;
+
+      // 1. JIKA AKUN ADMINISTRATOR: LANGSUNG KE /admin
+      const userEmail = (currentUser.email || '').toLowerCase().trim();
+      const isEmailAdmin =
+        userEmail === 'admin@udaplanner.id' ||
+        userEmail === 'admin@udaplanner.com' ||
+        userEmail === 'admin@udacoding.id' ||
+        userEmail.startsWith('admin@');
+
+      if (isEmailAdmin) {
+        router.replace('/admin');
+        return;
+      }
+
+      // 2. CEK APAKAH SUDAH PERNAH TERDAFTAR DI SISTEM:
+      // - Sudah menyelesaikan onboarding (user_metadata.has_completed_onboarding)
+      // - Sudah ada flag di localStorage
+      // - Sudah memiliki brand (owner_id = currentUser.id)
+      // - Sudah bergabung ke brand lain sebagai member
+      // - Sudah memiliki postingan
+      const hasCompletedOnboarding =
+        currentUser.user_metadata?.has_completed_onboarding === true ||
+        (typeof window !== 'undefined' && (
+          localStorage.getItem('uda_profile_setup_done_' + currentUser.id) === 'true' ||
+          localStorage.getItem('uda_profile_setup_done') === 'true'
+        ));
+
+      let hasExistingBrand = false;
+      let hasBrandMember = false;
+      let hasExistingPosts = false;
+
+      if (supabase) {
+        try {
+          const [brandRes, memberRes, postRes] = await Promise.all([
+            (supabase.from('brands' as any) as any)
+              .select('id')
+              .eq('owner_id', currentUser.id)
+              .limit(1),
+            (supabase.from('brand_members' as any) as any)
+              .select('id')
+              .eq('user_id', currentUser.id)
+              .limit(1),
+            (supabase.from('posts' as any) as any)
+              .select('id')
+              .eq('user_id', currentUser.id)
+              .limit(1),
+          ]);
+
+          hasExistingBrand = Array.isArray(brandRes.data) && brandRes.data.length > 0;
+          hasBrandMember = Array.isArray(memberRes.data) && memberRes.data.length > 0;
+          hasExistingPosts = Array.isArray(postRes.data) && postRes.data.length > 0;
+        } catch (queryErr) {
+          console.warn('Check user data error:', queryErr);
+        }
+      }
+
+      // Cek cache BrandService lokal
+      const cachedBrands = BrandService.getCachedBrands(currentUser.id);
+      if (cachedBrands && cachedBrands.length > 0) {
+        hasExistingBrand = true;
+      }
+
+      const isAlreadyRegistered =
+        hasCompletedOnboarding ||
+        hasExistingBrand ||
+        hasBrandMember ||
+        hasExistingPosts;
+
+      // JIKA SUDAH PERNAH TERDAFTAR DI SISTEM:
+      // (Contohnya terdaftar di sistem 2 menit yang lalu atau akun lama yang sudah aktif)
+      // Langsung diarahkan ke halaman dashboard /app
+      if (isAlreadyRegistered) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('uda_profile_setup_done_' + currentUser.id, 'true');
+        }
+        router.replace('/app');
+        return;
+      }
+
+      // 3. JIKA AKUN BARU YANG SAH (BELUM MELENGKAPI PROFIL):
+      // Tampilkan form lengkapi detail profil
+      setAccessDenied({ denied: false, reason: null });
+
+      const defaultName =
+        currentUser.user_metadata?.full_name ||
+        currentUser.user_metadata?.name ||
+        profile?.full_name ||
+        currentUser.email?.split('@')[0] ||
+        '';
+      setFullName((prev) => (prev ? prev : defaultName));
+
+      const rawPhoto =
+        profile?.avatar_url ||
+        currentUser.user_metadata?.avatar_url ||
+        currentUser.user_metadata?.picture ||
+        null;
+
+      if (rawPhoto && typeof rawPhoto === 'string' && rawPhoto.trim().length > 5) {
+        setAvatarUrl((prev) => (prev !== null ? prev : rawPhoto));
+        setImgLoadError(false);
+      }
+
+      setIsReady(true);
+    };
 
     const checkSession = async () => {
       try {
@@ -137,95 +247,52 @@ export default function ProfilAwalPage() {
           return;
         }
 
+        // Cek jika terdapat parameter code (PKCE flow dari email confirmation)
+        if (typeof window !== 'undefined') {
+          const urlParams = new URLSearchParams(window.location.search);
+          const code = urlParams.get('code');
+          if (code) {
+            try {
+              const { data: exData } = await supabase.auth.exchangeCodeForSession(code);
+              if (exData?.user) {
+                await evaluateUser(exData.user);
+                return;
+              }
+            } catch (exErr) {
+              console.warn('Code exchange notice:', exErr);
+            }
+          }
+        }
+
         const { data: { session } } = await supabase.auth.getSession();
         const currentUser = session?.user || user;
 
-        // 1. JIKA BELUM LOGIN: TOLAK AKSES DENGAN NOMOR ERROR 403
-        if (!currentUser) {
-          if (isMounted) {
-            setAccessDenied({ denied: true, reason: 'unauthenticated' });
-            setIsReady(true);
-          }
+        if (currentUser) {
+          await evaluateUser(currentUser);
           return;
         }
 
-        // 2. JIKA AKUN ADMINISTRATOR: LANGSUNG KE /admin
-        const userEmail = (currentUser.email || '').toLowerCase().trim();
-        const isEmailAdmin =
-          userEmail === 'admin@udaplanner.id' ||
-          userEmail === 'admin@udaplanner.com' ||
-          userEmail === 'admin@udacoding.id' ||
-          userEmail.startsWith('admin@');
-
-        if (isEmailAdmin) {
-          if (isMounted) {
-            router.replace('/admin');
+        // Dengarkan event onAuthStateChange jika session masih diproses dari URL hash (#access_token=...)
+        let resolved = false;
+        const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+          if (newSession?.user && !resolved) {
+            resolved = true;
+            if (fallbackTimeout) clearTimeout(fallbackTimeout);
+            await evaluateUser(newSession.user);
           }
-          return;
-        }
+        });
+        authUnsubscribe = () => authListener?.subscription?.unsubscribe();
 
-        // 3. JIKA SUDAH MENYELESAIKAN ONBOARDING / BUKAN PENGGUNA BARU: LANGSUNG TERUSKAN KE DASHBOARD /app
-        const hasCompletedOnboarding =
-          currentUser.user_metadata?.has_completed_onboarding === true ||
-          (typeof window !== 'undefined' && localStorage.getItem('uda_profile_setup_done_' + currentUser.id) === 'true');
-
-        // Query status profil, akun, dan brand pengguna di database Supabase
-        const [profRes, accRes, brandRes] = await Promise.all([
-          (supabase.from('profiles' as any) as any)
-            .select('id, full_name, created_at')
-            .eq('id', currentUser.id)
-            .maybeSingle(),
-          (supabase.from('accounts' as any) as any)
-            .select('id, plan_code')
-            .eq('user_id', currentUser.id)
-            .maybeSingle(),
-          (supabase.from('brands' as any) as any)
-            .select('id')
-            .eq('user_id', currentUser.id)
-            .limit(1),
-        ]);
-
-        const hasBrand = Array.isArray(brandRes.data) && brandRes.data.length > 0;
-        const hasEstablishedAccount =
-          !!accRes.data?.plan_code &&
-          !!profRes.data?.full_name &&
-          (typeof window !== 'undefined' ? localStorage.getItem('uda_needs_profile_setup') !== 'true' : true);
-
-        const isEstablishedUser = hasCompletedOnboarding || hasBrand || hasEstablishedAccount;
-
-        if (isEstablishedUser) {
-          if (isMounted) {
-            router.replace('/app');
+        // Fallback jika tidak ada sesi login setelah toleransi 2.5 detik:
+        // Arahkan ke /masuk (bukan 403)
+        fallbackTimeout = setTimeout(() => {
+          if (!resolved && isMounted) {
+            resolved = true;
+            router.replace('/masuk?redirect=/profil-awal');
           }
-          return;
-        }
-
-        // 4. JIKA PENGGUNA BARU YANG SAH:
-        if (isMounted) {
-          setAccessDenied({ denied: false, reason: null });
-
-          const googleName =
-            currentUser.user_metadata?.full_name ||
-            currentUser.user_metadata?.name ||
-            profile?.full_name ||
-            currentUser.email?.split('@')[0] ||
-            '';
-          setFullName((prev) => (prev ? prev : googleName));
-
-          const rawPhoto =
-            profile?.avatar_url ||
-            currentUser.user_metadata?.avatar_url ||
-            currentUser.user_metadata?.picture ||
-            null;
-
-          if (rawPhoto && typeof rawPhoto === 'string' && rawPhoto.trim().length > 5) {
-            setAvatarUrl((prev) => (prev !== null ? prev : rawPhoto));
-            setImgLoadError(false);
-          }
-        }
+        }, 2500);
       } catch (err) {
         console.warn('Session check error:', err);
-      } finally {
         if (isMounted) setIsReady(true);
       }
     };
@@ -234,8 +301,10 @@ export default function ProfilAwalPage() {
 
     return () => {
       isMounted = false;
+      if (authUnsubscribe) authUnsubscribe();
+      if (fallbackTimeout) clearTimeout(fallbackTimeout);
     };
-  }, [user, profile, supabase]);
+  }, [user, profile, supabase, router]);
 
   // Helper kompresi gambar lokal super ringan (~2-3 KB) agar aman disimpan di database
   const fileToBase64Thumbnail = (file: File): Promise<string> => {
