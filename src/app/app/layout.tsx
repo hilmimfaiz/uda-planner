@@ -580,6 +580,42 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         user?.id &&
         localStorage.getItem('uda_account_deleted_' + user.id) === 'true'));
 
+  if (isLoading && !user && !profile) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 14,
+          backgroundColor: '#f8fafc',
+          fontFamily: 'Plus Jakarta Sans, sans-serif',
+        }}
+      >
+        <div
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: '50%',
+            backgroundColor: '#ffffff',
+            border: '2px solid #0f172a',
+            boxShadow: '4px 4px 0px #0f172a',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Loader2 size={26} className="animate-spin text-emerald-600" style={{ color: '#16a34a' }} />
+        </div>
+        <span style={{ color: '#64748b', fontSize: '0.9rem', fontWeight: 700 }}>
+          Memuat UdaPlanner...
+        </span>
+      </div>
+    );
+  }
+
   if (!isLoading && isDeletedAccount) {
     return (
       <div

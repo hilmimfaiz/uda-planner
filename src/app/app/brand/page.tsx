@@ -52,16 +52,19 @@ export default function DaftarBrandPage() {
   const { user, account, refreshUserData } = useAuth();
   const { showSuccess, showError, confirmAction } = useModal();
   const supabase = createClient();
-  const [brands, setBrands] = useState<DummyBrand[]>(DUMMY_BRANDS);
+  const [brands, setBrands] = useState<DummyBrand[]>(() => BrandService.getCachedBrands(user?.id) || DUMMY_BRANDS);
+  const [isLoadingBrands, setIsLoadingBrands] = useState<boolean>(true);
   const [showAddBrandModal, setShowAddBrandModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [brandRoles, setBrandRoles] = useState<Record<string, 'owner' | 'editor' | 'reviewer' | 'viewer'>>({});
   const [isInvitedTeamMember, setIsInvitedTeamMember] = useState<boolean>(false);
 
   const loadBrandsData = React.useCallback(async () => {
-    const data = await BrandService.getBrands(user?.id);
-    const loadedBrands = data || [];
-    setBrands(loadedBrands);
+    setIsLoadingBrands(true);
+    try {
+      const data = await BrandService.getBrands(user?.id);
+      const loadedBrands = data || [];
+      setBrands(loadedBrands);
 
     if (!user?.id) return;
 
@@ -120,6 +123,11 @@ export default function DaftarBrandPage() {
     setBrandRoles(rolesMap);
     const isInvited = !hasOwnedBrand && (hasInvitedBrand || loadedBrands.some((b) => b.owner_id !== user.id));
     setIsInvitedTeamMember(isInvited);
+    } catch (err) {
+      console.warn('loadBrandsData err:', err);
+    } finally {
+      setIsLoadingBrands(false);
+    }
   }, [user?.id, supabase]);
 
   React.useEffect(() => {
@@ -314,6 +322,25 @@ export default function DaftarBrandPage() {
                 }}
               >
                 {brands.length} / {maxBrands} Brand (Paket {planCode.toUpperCase()})
+              </span>
+            )}
+            {isLoadingBrands && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  color: '#16a34a',
+                  background: '#f0fdf4',
+                  padding: '3px 8px',
+                  borderRadius: 999,
+                  border: '1px solid #bbf7d0',
+                }}
+              >
+                <Loader2 size={12} className="animate-spin" />
+                <span>Memuat...</span>
               </span>
             )}
           </div>
@@ -648,7 +675,23 @@ export default function DaftarBrandPage() {
           );
         })}
 
-        {brands.length === 0 && (
+        {isLoadingBrands && brands.length === 0 ? (
+          <div
+            className="uda-card"
+            style={{
+              gridColumn: '1 / -1',
+              textAlign: 'center',
+              padding: '60px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <Loader2 size={36} className="animate-spin" style={{ color: '#16a34a' }} />
+            <span style={{ fontSize: '0.92rem', color: '#64748b', fontWeight: 600 }}>Memuat daftar brand...</span>
+          </div>
+        ) : brands.length === 0 ? (
           <div
             className="uda-card"
             style={{
@@ -694,7 +737,7 @@ export default function DaftarBrandPage() {
               </button>
             )}
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Modal Tambah Brand - Hanya untuk Owner */}

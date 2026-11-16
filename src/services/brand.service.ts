@@ -205,7 +205,18 @@ export class BrandService {
    */
   static async getUserBrandRole(brandId: string, userId?: string): Promise<'owner' | 'editor' | 'reviewer' | 'viewer' | null> {
     if (!brandId) return null;
-    const supabase = createClient();
+
+    let supabase: any = null;
+    if (typeof window === 'undefined') {
+      try {
+        const { createAdminClient } = await import('@/lib/supabase/server');
+        supabase = createAdminClient();
+      } catch {}
+    }
+    if (!supabase) {
+      supabase = createClient();
+    }
+
     let finalUserId = userId;
     let userEmail = '';
 

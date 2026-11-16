@@ -92,6 +92,15 @@ function PageTransitionLoaderInner() {
   useEffect(() => {
     if (!isNavigating) return;
 
+    // Safety timeout: jangan biarkan indikator loading menggantung lebih dari 4 detik
+    const maxTimeout = setTimeout(() => {
+      setProgress(100);
+      setTimeout(() => {
+        setIsNavigating(false);
+        setProgress(0);
+      }, 200);
+    }, 4000);
+
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev < 85) {
@@ -101,7 +110,10 @@ function PageTransitionLoaderInner() {
       });
     }, 150);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(maxTimeout);
+      clearInterval(interval);
+    };
   }, [isNavigating]);
 
   if (!isNavigating && progress === 0) return null;

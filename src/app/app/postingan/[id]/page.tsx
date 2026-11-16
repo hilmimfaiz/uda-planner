@@ -221,7 +221,7 @@ export default function PostEditorDetailPage() {
   }, [userRole, account?.plan_code, user?.id, user?.email, post.brand_id]);
 
   const isFreePlan = !account || account.plan_code === 'free';
-  const isContentLocked = isFreePlan && !isTeamMember;
+  const isContentLocked = false;
 
   const safeDate = (dateVal?: string | null): Date | null => {
     if (!dateVal) return null;
@@ -677,14 +677,6 @@ export default function PostEditorDetailPage() {
 
     if (!post.title.trim()) {
       showError('Judul Wajib Diisi', 'Silakan masukkan judul postingan sebelum menyimpannya ke database.');
-      return;
-    }
-
-    if (isContentLocked && (post.content_type === 'video' || post.content_type === 'reels')) {
-      showError(
-        'Tipe Konten Terkunci',
-        'Tipe konten Video dan Reels hanya tersedia untuk pelanggan paket Pro, Tim, atau anggota tim kolaborator brand. Silakan upgrade paket langganan Anda terlebih dahulu.'
-      );
       return;
     }
 
@@ -1243,13 +1235,6 @@ END:VCALENDAR`;
                 disabled={isReadOnly}
                 onChange={(e) => {
                   const val = e.target.value as any;
-                  if (isContentLocked && (val === 'video' || val === 'reels')) {
-                    showError(
-                      'Tipe Konten Terkunci',
-                      'Tipe konten Video dan Reels hanya tersedia untuk pelanggan paket Pro, Tim, atau anggota tim kolaborator brand. Silakan upgrade paket langganan Anda untuk membuka fitur ini.'
-                    );
-                    return;
-                  }
                   setPost({ ...post, content_type: val });
                 }}
                 style={{
@@ -1257,14 +1242,11 @@ END:VCALENDAR`;
                   cursor: isReadOnly ? 'not-allowed' : 'pointer',
                 }}
               >
-                {CONTENT_TYPES.map((t) => {
-                  const isLocked = isContentLocked && (t.id === 'video' || t.id === 'reels');
-                  return (
-                    <option key={t.id} value={t.id} disabled={isLocked}>
-                      {t.name} {isLocked ? '🔒 (Khusus Pro/Tim)' : ''}
-                    </option>
-                  );
-                })}
+                {CONTENT_TYPES.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

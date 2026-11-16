@@ -428,7 +428,16 @@ export class PostService {
     const stored = getStoredPosts();
     const localFound = stored.find((p) => p.id === id) || localPosts.find((p) => p.id === id);
 
-    const supabase = createClient();
+    let supabase: any = null;
+    if (typeof window === 'undefined') {
+      try {
+        const { createAdminClient } = await import('@/lib/supabase/server');
+        supabase = createAdminClient();
+      } catch {}
+    }
+    if (!supabase) {
+      supabase = createClient();
+    }
     let foundPost: DummyPost | null = null;
 
     if (supabase && isUuid(id)) {
@@ -569,6 +578,10 @@ export class PostService {
           window.dispatchEvent(new CustomEvent('uda_post_updated', { detail: created }));
           window.dispatchEvent(new Event('storage'));
           return created;
+        } else if (apiRes.status === 403) {
+          throw new Error(apiJson.error || 'Akses Ditolak: Anda tidak memiliki izin untuk membuat postingan pada brand ini.');
+        } else {
+          console.warn('API /api/posts notice:', apiJson?.error);
         }
       } catch (apiErr) {
         console.warn('PostService.createPost API notice, fallback to direct db:', apiErr);
