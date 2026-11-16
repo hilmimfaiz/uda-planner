@@ -115,6 +115,18 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
           }
         }
 
+        if (!authUserId && db) {
+          try {
+            const { data: acc } = await (db.from('accounts' as any) as any)
+              .select('user_id')
+              .eq('id', targetUserId)
+              .maybeSingle();
+            if (acc && acc.user_id) {
+              authUserId = acc.user_id;
+            }
+          } catch {}
+        }
+
         if (authUserId && typeof isSuspended === 'boolean') {
           await adminClient.auth.admin.updateUserById(authUserId, {
             user_metadata: { is_suspended: isSuspended },

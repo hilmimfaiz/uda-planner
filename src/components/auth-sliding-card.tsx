@@ -134,14 +134,21 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
         userEmail === 'admin@udaplanner.id' ||
         userEmail.startsWith('admin@');
 
-      if (!userIsAdmin && (
-        account?.is_suspended === true ||
-        user.user_metadata?.is_suspended === true ||
-        (typeof window !== 'undefined' && (
-          localStorage.getItem('uda_suspended_' + userEmail) === 'true' ||
-          localStorage.getItem('uda_suspended_' + user.id) === 'true'
-        ))
-      )) {
+      // Cek apakah akun berstatus suspended secara valid dari database / user metadata
+      const isAccountSuspended =
+        !userIsAdmin &&
+        (account?.is_suspended === true || user.user_metadata?.is_suspended === true);
+
+      // Jika akun tidak berstatus suspended (misal telah diaktifkan kembali oleh admin),
+      // segera bersihkan seluruh residu penanda lokal suspend agar tidak memblokir akses
+      if (!userIsAdmin && !isAccountSuspended && typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem('uda_suspended_' + userEmail);
+          if (user.id) localStorage.removeItem('uda_suspended_' + user.id);
+        } catch {}
+      }
+
+      if (isAccountSuspended) {
         signOut();
         setLoginError('Akun Anda telah dinonaktifkan (dibekukan) oleh Administrator. Silakan hubungi admin untuk mengaktifkan kembali akun Anda.');
         return;
@@ -171,7 +178,7 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
         }
       }
     }
-  }, [user, isAdmin, redirectPath, router, signOut]);
+  }, [user, account, isAdmin, redirectPath, router, signOut]);
 
   // Fungsi pergantian mode dengan animasi halus dan perubahan URL aman
   const switchTo = (target: 'login' | 'register') => {

@@ -472,14 +472,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Blokir akses dashboard bagi pengguna yang telah dibekukan oleh Admin
   const isSuspended =
     !isAdmin &&
-    (account?.is_suspended === true ||
-      user?.user_metadata?.is_suspended === true ||
-      (typeof window !== 'undefined' &&
-        user?.email &&
-        localStorage.getItem('uda_suspended_' + user.email.toLowerCase().trim()) === 'true') ||
-      (typeof window !== 'undefined' &&
-        user?.id &&
-        localStorage.getItem('uda_suspended_' + user.id) === 'true'));
+    (account?.is_suspended === true || user?.user_metadata?.is_suspended === true);
+
+  // Jika akun aktif dan tidak dibekukan, pastikan residu penanda lokal suspend dibersihkan
+  useEffect(() => {
+    if (!isAdmin && !isSuspended && typeof window !== 'undefined') {
+      try {
+        if (user?.email) localStorage.removeItem('uda_suspended_' + user.email.toLowerCase().trim());
+        if (user?.id) localStorage.removeItem('uda_suspended_' + user.id);
+      } catch {}
+    }
+  }, [isAdmin, isSuspended, user?.email, user?.id]);
 
   if (!isLoading && user && isSuspended) {
     return (

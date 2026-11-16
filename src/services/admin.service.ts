@@ -1208,6 +1208,34 @@ export class AdminService {
           }
         }
 
+        // Temukan seluruh id dan email terkait di cache admin untuk sinkronisasi menyeluruh
+        const rawAdminUsers = localStorage.getItem('uda_admin_users');
+        if (rawAdminUsers) {
+          try {
+            const stored = JSON.parse(rawAdminUsers);
+            const matched = stored.find((u: any) =>
+              u.id === userIdOrAccountId ||
+              u.userId === userIdOrAccountId ||
+              (cleanEmail && u.email?.toLowerCase().trim() === cleanEmail)
+            );
+            if (matched) {
+              if (matched.id) {
+                if (isSuspended) localStorage.setItem('uda_suspended_' + matched.id, 'true');
+                else localStorage.removeItem('uda_suspended_' + matched.id);
+              }
+              if (matched.userId) {
+                if (isSuspended) localStorage.setItem('uda_suspended_' + matched.userId, 'true');
+                else localStorage.removeItem('uda_suspended_' + matched.userId);
+              }
+              if (matched.email) {
+                const mEmail = matched.email.toLowerCase().trim();
+                if (isSuspended) localStorage.setItem('uda_suspended_' + mEmail, 'true');
+                else localStorage.removeItem('uda_suspended_' + mEmail);
+              }
+            }
+          } catch {}
+        }
+
         window.dispatchEvent(
           new CustomEvent('uda_user_suspended', {
             detail: {

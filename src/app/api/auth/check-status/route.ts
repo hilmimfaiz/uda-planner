@@ -78,21 +78,9 @@ export async function POST(req: NextRequest) {
     // Pengecekan status suspend / pembekuan
     let isSuspended = false;
 
-    // 1. Cek di auth.users (ban duration atau user_metadata)
-    if (authUser) {
-      if (authUser.banned_until) {
-        const banDate = new Date(authUser.banned_until);
-        if (!isNaN(banDate.getTime()) && banDate > new Date()) {
-          isSuspended = true;
-        }
-      }
-      if (authUser.user_metadata?.is_suspended === true) {
-        isSuspended = true;
-      }
-    }
-
-    // 2. Cek di tabel accounts (is_suspended)
-    if (!isSuspended && db) {
+    // 1. Cek di tabel accounts (is_suspended) - Database adalah primary source of truth
+    let accountSuspended: boolean | null = null;
+    if (db) {
       try {
         const queryIds = [authUserId, targetUserId, profileData?.id].filter(Boolean);
         if (queryIds.length > 0) {
@@ -103,13 +91,45 @@ export async function POST(req: NextRequest) {
               .limit(1)
               .maybeSingle();
 
-            if (acc && acc.is_suspended === true) {
-              isSuspended = true;
-              break;
+            if (acc) {
+              accountSuspended = acc.is_suspended === true;
+              if (accountSuspended) break;
             }
           }
         }
       } catch {}
+    }
+
+    // 2. Cek di auth.users (ban duration atau user_metadata)
+    let authSuspended = false;
+    if (authUser) {
+      if (authUser.banned_until) {
+        const banDate = new Date(authUser.banned_until);
+        if (!isNaN(banDate.getTime()) && banDate > new Date()) {
+          authSuspended = true;
+        }
+      }
+      if (authUser.user_metadata?.is_suspended === true) {
+        authSuspended = true;
+      }
+    }
+
+    // Jika di database accounts secara eksplisit is_suspended === false, pengguna telah diaktifkan kembali!
+    if (accountSuspended === false) {
+      isSuspended = false;
+      // Jika di auth.users masih ada residu ban GoTrue, bersihkan unban di server
+      if (authSuspended && adminClient && authUserId) {
+        try {
+          await adminClient.auth.admin.updateUserById(authUserId, {
+            user_metadata: { is_suspended: false },
+            ban_duration: 'none',
+          });
+        } catch {}
+      }
+    } else if (accountSuspended === true) {
+      isSuspended = true;
+    } else {
+      isSuspended = authSuspended;
     }
 
     return NextResponse.json({
