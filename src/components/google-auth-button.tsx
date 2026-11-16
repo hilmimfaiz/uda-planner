@@ -43,9 +43,9 @@ export function GoogleAuthButton({
         }
       } catch (e) {}
 
-      // Alihkan ke /profil-awal: jika akun sudah pernah onboarding, otomatis langsung diteruskan ke /app.
-      // Jika akun baru, pengguna akan langsung melihat form lengkapi profil & pemilihan paket.
-      const targetPath = '/profil-awal';
+      // Mode Masuk: selalu arahkan langsung ke dashboard (/app).
+      // Mode Daftar: arahkan ke /profil-awal untuk melengkapi profil jika pengguna baru.
+      const targetPath = mode === 'masuk' ? '/app' : '/profil-awal';
       const result = await signInWithGoogle(targetPath);
       if (result.error) {
         if (onError) onError(result.error);

@@ -1070,10 +1070,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 retryRes.data.user.email?.toLowerCase().startsWith('admin@');
 
               const needsOnboarding =
-                retryRes.data.user.user_metadata?.has_completed_onboarding !== true &&
-                (typeof window !== 'undefined'
-                  ? localStorage.getItem('uda_profile_setup_done_' + retryRes.data.user.id) !== 'true'
-                  : true);
+                typeof window !== 'undefined' &&
+                localStorage.getItem('uda_needs_profile_setup') === 'true' &&
+                retryRes.data.user.user_metadata?.has_completed_onboarding !== true;
 
               return { error: null, isAdmin: isUserAdmin, needsOnboarding };
             }
@@ -1108,9 +1107,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               manualUser.email?.toLowerCase().startsWith('admin@');
 
             const needsOnboarding =
-              typeof window !== 'undefined'
-                ? localStorage.getItem('uda_profile_setup_done_' + manualUser.id) !== 'true'
-                : true;
+              typeof window !== 'undefined' &&
+              localStorage.getItem('uda_needs_profile_setup') === 'true';
 
             return { error: null, isAdmin: isUserAdmin, needsOnboarding };
           }
@@ -1175,8 +1173,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const needsOnboarding =
         !isUserAdmin &&
-        data.user.user_metadata?.has_completed_onboarding !== true &&
-        (typeof window !== 'undefined' ? localStorage.getItem('uda_profile_setup_done_' + data.user.id) !== 'true' : true);
+        typeof window !== 'undefined' &&
+        localStorage.getItem('uda_needs_profile_setup') === 'true' &&
+        data.user.user_metadata?.has_completed_onboarding !== true;
 
       if (!needsOnboarding) {
         try {

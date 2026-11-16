@@ -105,7 +105,7 @@ export default function ProfilAwalPage() {
           return;
         }
 
-        // 2. JIKA AKUN ADMINISTRATOR: TOLAK AKSES DENGAN NOMOR ERROR 403
+        // 2. JIKA AKUN ADMINISTRATOR: LANGSUNG KE /admin
         const userEmail = (currentUser.email || '').toLowerCase().trim();
         const isEmailAdmin =
           userEmail === 'admin@udaplanner.id' ||
@@ -115,13 +115,12 @@ export default function ProfilAwalPage() {
 
         if (isEmailAdmin) {
           if (isMounted) {
-            setAccessDenied({ denied: true, reason: 'admin' });
-            setIsReady(true);
+            router.replace('/admin');
           }
           return;
         }
 
-        // 3. JIKA SUDAH MENYELESAIKAN ONBOARDING / BUKAN PENGGUNA BARU: TOLAK AKSES DENGAN ERROR 403
+        // 3. JIKA SUDAH MENYELESAIKAN ONBOARDING / BUKAN PENGGUNA BARU: LANGSUNG TERUSKAN KE DASHBOARD /app
         const hasCompletedOnboarding =
           currentUser.user_metadata?.has_completed_onboarding === true ||
           (typeof window !== 'undefined' && localStorage.getItem('uda_profile_setup_done_' + currentUser.id) === 'true');
@@ -152,8 +151,7 @@ export default function ProfilAwalPage() {
 
         if (isEstablishedUser) {
           if (isMounted) {
-            setAccessDenied({ denied: true, reason: 'already_registered' });
-            setIsReady(true);
+            router.replace('/app');
           }
           return;
         }

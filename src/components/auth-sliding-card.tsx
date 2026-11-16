@@ -160,15 +160,14 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
         window.location.href = '/admin';
       } else {
         const needsOnboarding =
-          user.user_metadata?.has_completed_onboarding !== true &&
-          (typeof window !== 'undefined'
-            ? localStorage.getItem('uda_profile_setup_done_' + user.id) !== 'true'
-            : true);
+          typeof window !== 'undefined' &&
+          localStorage.getItem('uda_needs_profile_setup') === 'true' &&
+          user.user_metadata?.has_completed_onboarding !== true;
 
         if (needsOnboarding) {
           router.push('/profil-awal');
         } else {
-          router.push(redirectPath && redirectPath !== '/masuk' ? redirectPath : '/app');
+          router.push(redirectPath && redirectPath !== '/masuk' && redirectPath !== '/profil-awal' ? redirectPath : '/app');
         }
       }
     }
@@ -225,9 +224,7 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
 
       const targetDestination = isTargetAdmin
         ? '/admin'
-        : result.needsOnboarding
-        ? '/profil-awal'
-        : redirectPath && redirectPath !== '/masuk'
+        : redirectPath && redirectPath !== '/masuk' && redirectPath !== '/profil-awal'
         ? redirectPath
         : '/app';
 
