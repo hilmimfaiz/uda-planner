@@ -2031,7 +2031,7 @@ END:VCALENDAR`;
 
                 {isNew && (
                   <p style={{ fontSize: '0.78rem', color: '#64748b', textAlign: 'center', margin: '4px 0 0 0', lineHeight: 1.4 }}>
-                    💡 Tombol ini akan aktif setelah postingan berhasil dibuat &amp; disimpan.
+                    Tombol ini akan aktif setelah postingan berhasil dibuat &amp; disimpan.
                   </p>
                 )}
               </div>
