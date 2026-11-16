@@ -379,6 +379,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Cek juga keanggotaan brand_members (HANYA anggota yang diundang, BUKAN owner!)
         if (!isExplicitlyFree && currentUser.id && (resolvedPlan === 'free' || !resolvedPlan)) {
           let isInvitedTeamMember = false;
+          let checkedSupabase = false;
           if (supabase) {
             try {
               const { data: dbMembers } = await (supabase.from('brand_members' as any) as any)
@@ -386,12 +387,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .eq('user_id', currentUser.id)
                 .neq('role', 'owner')
                 .limit(1);
+              checkedSupabase = true;
               if (dbMembers && dbMembers.length > 0) {
                 isInvitedTeamMember = true;
               }
             } catch (e) {}
           }
-          if (!isInvitedTeamMember && typeof window !== 'undefined') {
+          if (!checkedSupabase && typeof window !== 'undefined') {
             try {
               const uId = currentUser.id;
               if (uId && localStorage.getItem('uda_team_membership_' + uId)) {
@@ -425,6 +427,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Pastikan keanggotaan timnya di brand_members memang masih aktif. Jika sudah keluar -> kembalikan ke 'free'!
         if (resolvedPlan === 'team' && latestApprovedPlan !== 'team') {
           let hasActiveTeam = false;
+          let checkedSupabase = false;
           if (supabase && currentUser.id) {
             try {
               const { data: activeMems } = await (supabase.from('brand_members' as any) as any)
@@ -432,12 +435,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .eq('user_id', currentUser.id)
                 .neq('role', 'owner')
                 .limit(1);
+              checkedSupabase = true;
               if (activeMems && activeMems.length > 0) {
                 hasActiveTeam = true;
               }
             } catch (e) {}
           }
-          if (!hasActiveTeam && typeof window !== 'undefined') {
+          if (!checkedSupabase && typeof window !== 'undefined') {
             try {
               const uId = currentUser.id;
               const rawTeam = uId ? localStorage.getItem('uda_team_membership_' + uId) : null;
@@ -515,6 +519,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Cek juga keanggotaan brand_members (HANYA anggota yang diundang, BUKAN owner)
         if (!isExplicitlyFree && currentUser.id && (fallbackPlan === 'free' || !fallbackPlan)) {
           let isInvitedTeamMember = false;
+          let checkedSupabase = false;
           if (supabase) {
             try {
               const { data: dbMembers } = await (supabase.from('brand_members' as any) as any)
@@ -522,12 +527,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .eq('user_id', currentUser.id)
                 .neq('role', 'owner')
                 .limit(1);
+              checkedSupabase = true;
               if (dbMembers && dbMembers.length > 0) {
                 isInvitedTeamMember = true;
               }
             } catch (e) {}
           }
-          if (!isInvitedTeamMember && typeof window !== 'undefined') {
+          if (!checkedSupabase && typeof window !== 'undefined') {
             try {
               const uId = currentUser.id;
               if (uId && localStorage.getItem('uda_team_membership_' + uId)) {
@@ -560,6 +566,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Validasi fallback: jika 'team' tapi bukan pembayaran disetujui, pastikan keanggotaan aktif
         if (fallbackPlan === 'team' && latestApprovedPlan !== 'team') {
           let hasActiveTeam = false;
+          let checkedSupabase = false;
           if (supabase && currentUser.id) {
             try {
               const { data: activeMems } = await (supabase.from('brand_members' as any) as any)
@@ -567,12 +574,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .eq('user_id', currentUser.id)
                 .neq('role', 'owner')
                 .limit(1);
+              checkedSupabase = true;
               if (activeMems && activeMems.length > 0) {
                 hasActiveTeam = true;
               }
             } catch (e) {}
           }
-          if (!hasActiveTeam && typeof window !== 'undefined') {
+          if (!checkedSupabase && typeof window !== 'undefined') {
             try {
               const uId = currentUser.id;
               const rawTeam = uId ? localStorage.getItem('uda_team_membership_' + uId) : null;

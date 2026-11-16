@@ -74,15 +74,86 @@ export class MemberService {
     return newMember;
   }
 
-  static async updateRole(brandId: string, userId: string, role: BrandRole): Promise<BrandMember | null> {
+  static async updateRole(
+    brandId: string,
+    userId: string,
+    role: BrandRole,
+    brandName?: string,
+    userEmail?: string
+  ): Promise<BrandMember | null> {
+    // 1. Panggil server API /api/invitations via PUT action 'update_role' dengan admin client
+    try {
+      await fetch('/api/invitations', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_role',
+          brandId,
+          userId,
+          userEmail,
+          role,
+          brandName,
+        }),
+      });
+    } catch (apiErr) {
+      console.warn('API updateRole fetch warning:', apiErr);
+    }
+
+    // 2. Update via client supabase jika terhubung
     const supabase = createClient();
     if (supabase) {
-      const { data, error } = await (supabase.from('brand_members' as any) as any)
-        .update({ role, updated_at: new Date().toISOString() })
-        .match({ brand_id: brandId, user_id: userId })
-        .select()
-        .single();
-      if (!error && data) return data as BrandMember;
+      try {
+        const { data, error } = await (supabase.from('brand_members' as any) as any)
+          .update({ role, updated_at: new Date().toISOString() })
+          .match({ brand_id: brandId, user_id: userId })
+          .select()
+          .single();
+        if (!error && data) {
+          // Real-time broadcast channel
+          try {
+            supabase.channel(`brand_room_${brandId}`).send({
+              type: 'broadcast',
+              event: 'member_update',
+              payload: { brandId, type: 'role_updated', userId, newRole: role, brandName },
+            });
+          } catch {}
+        }
+      } catch {}
+    }
+
+    // 3. Update localStorage brand_members & trigger storage event
+    if (typeof window !== 'undefined') {
+      try {
+        const key = 'uda_brand_members_' + brandId;
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const list = JSON.parse(raw);
+          const updated = list.map((m: any) =>
+            m.id === userId || (userEmail && m.email?.toLowerCase() === userEmail.toLowerCase())
+              ? { ...m, role }
+              : m
+          );
+          localStorage.setItem(key, JSON.stringify(updated));
+        }
+
+        const rawTeam = localStorage.getItem('uda_team_membership_' + userId);
+        if (rawTeam) {
+          const team = JSON.parse(rawTeam);
+          if (team.brand_id === brandId) {
+            team.role = role;
+            localStorage.setItem('uda_team_membership_' + userId, JSON.stringify(team));
+          }
+        }
+
+        localStorage.setItem('uda_system_role_' + userId, role);
+
+        window.dispatchEvent(
+          new CustomEvent('uda_member_role_changed', {
+            detail: { brandId, userId, role, brandName },
+          })
+        );
+        window.dispatchEvent(new Event('storage'));
+      } catch (e) {}
     }
 
     const member = mockMembers.find((m) => m.brand_id === brandId && m.user_id === userId);
@@ -94,8 +165,8 @@ export class MemberService {
     return null;
   }
 
-  static async removeMember(brandId: string, userId: string): Promise<boolean> {
-    return MemberService.leaveTeam(userId, undefined, brandId);
+  static async removeMember(brandId: string, userId: string, brandName?: string, userEmail?: string): Promise<boolean> {
+    return MemberService.leaveTeam(userId, userEmail, brandId, brandName);
   }
 
   static async createInvitation(payload: {
@@ -212,7 +283,7 @@ export class MemberService {
   }
 
   // Keluar dari keanggotaan TIM
-  static async leaveTeam(userId: string, userEmail?: string, brandId?: string): Promise<boolean> {
+  static async leaveTeam(userId: string, userEmail?: string, brandId?: string, brandName?: string): Promise<boolean> {
     const supabase = createClient();
 
     // 1. Panggil server API /api/invitations dengan admin client agar update ke database Supabase dan auth user_metadata terjamin tanpa terhalang RLS
@@ -225,10 +296,22 @@ export class MemberService {
           userId,
           userEmail,
           brandId,
+          brandName,
         }),
       });
     } catch (apiErr) {
       console.warn('API leave team fetch warning:', apiErr);
+    }
+
+    // 2. Broadcast via Supabase channel jika ada brandId
+    if (supabase && brandId) {
+      try {
+        supabase.channel(`brand_room_${brandId}`).send({
+          type: 'broadcast',
+          event: 'member_update',
+          payload: { brandId, type: 'member_removed', userId, userEmail, brandName },
+        });
+      } catch {}
     }
 
     // 2. Hapus record dari database brand_members via client jika ada sesi
@@ -334,6 +417,16 @@ export class MemberService {
 
     // 4. Dispatch event realtime agar seluruh UI (sidebar, header, halaman langganan, brand) sinkron seketika
     if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('uda_member_removed', {
+          detail: {
+            brandId,
+            userId,
+            email: userEmail,
+            brandName,
+          },
+        })
+      );
       window.dispatchEvent(
         new CustomEvent('uda_account_updated', {
           detail: {

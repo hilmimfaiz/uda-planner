@@ -165,6 +165,137 @@ export default function PengaturanBrandDetailPage() {
     planCode?: string;
   } | null>(null);
 
+  const loadBrandMembers = React.useCallback(async () => {
+    try {
+      let profilesMap = new Map<string, any>();
+      if (supabase) {
+        try {
+          const { data: profs } = await (supabase.from('profiles' as any) as any)
+            .select('id, email, full_name, avatar_url');
+          if (profs) {
+            profs.forEach((p: any) => {
+              if (p.email) profilesMap.set(p.email.toLowerCase().trim(), p);
+              if (p.id) profilesMap.set(p.id, p);
+            });
+          }
+        } catch (e) {}
+      }
+
+      let rawMembers: any[] = [];
+      const mems = await MemberService.getBrandMembers(brandId);
+      if (mems && mems.length > 0) {
+        rawMembers = mems.map((m) => ({
+          id: m.user_id,
+          name: m.profile?.full_name || 'Anggota Tim',
+          email: m.profile?.email || 'member@udaplanner.id',
+          avatar: m.profile?.avatar_url,
+          role: m.role as any,
+        }));
+      } else {
+        const storedLocal = localStorage.getItem('uda_brand_members_' + brandId);
+        if (storedLocal) {
+          rawMembers = JSON.parse(storedLocal);
+        }
+      }
+
+      // Pastikan pemilik asli brand selalu ada di list
+      const hasOwner = rawMembers.some((m) => m.role === 'owner');
+      if (!hasOwner && currentBrand?.owner_id) {
+        const ownerProf = profilesMap.get(currentBrand.owner_id);
+        if (ownerProf) {
+          rawMembers.unshift({
+            id: ownerProf.id,
+            name: ownerProf.full_name || 'Pemilik Brand',
+            email: ownerProf.email || '',
+            avatar: ownerProf.avatar_url,
+            role: 'owner',
+          });
+        }
+      }
+
+      const syncedMembers = rawMembers.map((m: any) => {
+        const cleanEm = (m.email || '').toLowerCase().trim();
+        const prof = profilesMap.get(m.id) || (cleanEm && profilesMap.get(cleanEm));
+        const syncedAvatar = getSyncedAvatar(
+          prof?.full_name || m.name,
+          cleanEm,
+          prof?.avatar_url || (isGenericStockPhoto(m.avatar) ? null : m.avatar),
+          prof?.id || m.id
+        );
+        return {
+          ...m,
+          name: prof?.full_name || m.name,
+          avatar: syncedAvatar,
+        };
+      });
+
+      setMembers(syncedMembers);
+    } catch {}
+  }, [brandId, supabase, currentBrand?.owner_id]);
+
+  const loadBrandInvites = React.useCallback(async () => {
+    try {
+      let profilesMap = new Map<string, any>();
+      if (supabase) {
+        try {
+          const { data: profs } = await (supabase.from('profiles' as any) as any)
+            .select('id, email, full_name, avatar_url');
+          if (profs) {
+            profs.forEach((p: any) => {
+              if (p.email) profilesMap.set(p.email.toLowerCase().trim(), p);
+            });
+          }
+        } catch (e) {}
+      }
+
+      let allList: any[] = [];
+      try {
+        const res = await fetch(`/api/invitations?brandId=${brandId}`);
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && Array.isArray(resData.invitations)) {
+            allList = resData.invitations;
+          }
+        }
+      } catch {}
+
+      const raw = localStorage.getItem('uda_brand_invitations');
+      if (raw) {
+        const list = JSON.parse(raw);
+        list.forEach((loc: any) => {
+          if (!allList.some((s) => s.id === loc.id || (s.brand_id === loc.brand_id && (s.target_email || s.email)?.toLowerCase() === (loc.target_email || loc.email)?.toLowerCase()))) {
+            allList.push(loc);
+          }
+        });
+      }
+
+      const mapped = allList.map((inv: any) => {
+        const cleanEm = (inv.target_email || inv.email || '').toLowerCase().trim();
+        const prof = profilesMap.get(cleanEm);
+        const syncedAvatar = getSyncedAvatar(
+          prof?.full_name || inv.target_name,
+          cleanEm,
+          prof?.avatar_url || (isGenericStockPhoto(inv.target_avatar) ? null : inv.target_avatar),
+          prof?.id
+        );
+        return {
+          ...inv,
+          target_name: prof?.full_name || inv.target_name || cleanEm.split('@')[0],
+          target_avatar: syncedAvatar,
+        };
+      });
+      localStorage.setItem('uda_brand_invitations', JSON.stringify(mapped));
+      setPendingInvites(mapped.filter((inv: any) =>
+        inv.brand_id === brandId &&
+        inv.status === 'pending' &&
+        !inv.is_link_invite &&
+        Boolean(inv.target_email || inv.email) &&
+        (inv.target_email || inv.email).trim() !== '' &&
+        inv.target_name !== 'Penerima Tautan'
+      ));
+    } catch {}
+  }, [brandId, supabase]);
+
   React.useEffect(() => {
     setIsLoadingAuth(true);
     BrandService.getUserBrandRole(brandId, user?.id).then((role) => {
@@ -229,137 +360,6 @@ export default function PengaturanBrandDetailPage() {
       if (pils) setPillars(pils);
     });
 
-    const loadBrandMembers = async () => {
-      try {
-        let profilesMap = new Map<string, any>();
-        if (supabase) {
-          try {
-            const { data: profs } = await (supabase.from('profiles' as any) as any)
-              .select('id, email, full_name, avatar_url');
-            if (profs) {
-              profs.forEach((p: any) => {
-                if (p.email) profilesMap.set(p.email.toLowerCase().trim(), p);
-                if (p.id) profilesMap.set(p.id, p);
-              });
-            }
-          } catch (e) {}
-        }
-
-        let rawMembers: any[] = [];
-        const mems = await MemberService.getBrandMembers(brandId);
-        if (mems && mems.length > 0) {
-          rawMembers = mems.map((m) => ({
-            id: m.user_id,
-            name: m.profile?.full_name || 'Anggota Tim',
-            email: m.profile?.email || 'member@udaplanner.id',
-            avatar: m.profile?.avatar_url,
-            role: m.role as any,
-          }));
-        } else {
-          const storedLocal = localStorage.getItem('uda_brand_members_' + brandId);
-          if (storedLocal) {
-            rawMembers = JSON.parse(storedLocal);
-          }
-        }
-
-        // Pastikan pemilik asli brand selalu ada di list
-        const hasOwner = rawMembers.some((m) => m.role === 'owner');
-        if (!hasOwner && currentBrand?.owner_id) {
-          const ownerProf = profilesMap.get(currentBrand.owner_id);
-          if (ownerProf) {
-            rawMembers.unshift({
-              id: ownerProf.id,
-              name: ownerProf.full_name || 'Pemilik Brand',
-              email: ownerProf.email || '',
-              avatar: ownerProf.avatar_url,
-              role: 'owner',
-            });
-          }
-        }
-
-        const syncedMembers = rawMembers.map((m: any) => {
-          const cleanEm = (m.email || '').toLowerCase().trim();
-          const prof = profilesMap.get(m.id) || (cleanEm && profilesMap.get(cleanEm));
-          const syncedAvatar = getSyncedAvatar(
-            prof?.full_name || m.name,
-            cleanEm,
-            prof?.avatar_url || (isGenericStockPhoto(m.avatar) ? null : m.avatar),
-            prof?.id || m.id
-          );
-          return {
-            ...m,
-            name: prof?.full_name || m.name,
-            avatar: syncedAvatar,
-          };
-        });
-
-        setMembers(syncedMembers);
-      } catch {}
-    };
-
-    const loadBrandInvites = async () => {
-      try {
-        let profilesMap = new Map<string, any>();
-        if (supabase) {
-          try {
-            const { data: profs } = await (supabase.from('profiles' as any) as any)
-              .select('id, email, full_name, avatar_url');
-            if (profs) {
-              profs.forEach((p: any) => {
-                if (p.email) profilesMap.set(p.email.toLowerCase().trim(), p);
-              });
-            }
-          } catch (e) {}
-        }
-
-        let allList: any[] = [];
-        try {
-          const res = await fetch(`/api/invitations?brandId=${brandId}`);
-          if (res.ok) {
-            const resData = await res.json();
-            if (resData.success && Array.isArray(resData.invitations)) {
-              allList = resData.invitations;
-            }
-          }
-        } catch {}
-
-        const raw = localStorage.getItem('uda_brand_invitations');
-        if (raw) {
-          const list = JSON.parse(raw);
-          list.forEach((loc: any) => {
-            if (!allList.some((s) => s.id === loc.id || (s.brand_id === loc.brand_id && (s.target_email || s.email)?.toLowerCase() === (loc.target_email || loc.email)?.toLowerCase()))) {
-              allList.push(loc);
-            }
-          });
-        }
-
-        const mapped = allList.map((inv: any) => {
-          const cleanEm = (inv.target_email || inv.email || '').toLowerCase().trim();
-          const prof = profilesMap.get(cleanEm);
-          const syncedAvatar = getSyncedAvatar(
-            prof?.full_name || inv.target_name,
-            cleanEm,
-            prof?.avatar_url || (isGenericStockPhoto(inv.target_avatar) ? null : inv.target_avatar),
-            prof?.id
-          );
-          return {
-            ...inv,
-            target_name: prof?.full_name || inv.target_name || cleanEm.split('@')[0],
-            target_avatar: syncedAvatar,
-          };
-        });
-        localStorage.setItem('uda_brand_invitations', JSON.stringify(mapped));
-        setPendingInvites(mapped.filter((inv: any) =>
-          inv.brand_id === brandId &&
-          inv.status === 'pending' &&
-          !inv.is_link_invite &&
-          Boolean(inv.target_email || inv.email) &&
-          (inv.target_email || inv.email).trim() !== '' &&
-          inv.target_name !== 'Penerima Tautan'
-        ));
-      } catch {}
-    };
-
     loadBrandMembers();
     loadBrandInvites();
 
@@ -374,7 +374,185 @@ export default function PengaturanBrandDetailPage() {
       window.removeEventListener('uda_brand_member_added', loadBrandMembers);
       window.removeEventListener('uda_notification_added', loadBrandInvites);
     };
-  }, [brandId]);
+  }, [brandId, user?.id, loadBrandMembers, loadBrandInvites]);
+
+  // Efek Pembersihan & Downgrade ke Free jika Akses Ditolak (Pengguna Bukan Anggota Tim Lagi)
+  React.useEffect(() => {
+    if (isAccessDenied && user?.id) {
+      MemberService.leaveTeam(user.id, user.email, brandId, currentBrand?.name || brandName);
+      if (refreshUserData) {
+        refreshUserData();
+      }
+    }
+  }, [isAccessDenied, user?.id, user?.email, brandId, currentBrand?.name, brandName, refreshUserData]);
+
+  // Sinkronisasi Real-Time untuk Perubahan Role dan Penghapusan Anggota Tim dari Brand
+  React.useEffect(() => {
+    if (!brandId || !user?.id) return;
+
+    let isSubscribed = true;
+
+    const checkAndSyncRole = async () => {
+      if (!isSubscribed) return;
+      try {
+        const latestRole = await BrandService.getUserBrandRole(brandId, user.id);
+        if (!isSubscribed) return;
+
+        if (!latestRole) {
+          // Pengguna telah dihapus dari brand oleh owner secara real-time!
+          if (!isAccessDenied) {
+            setIsAccessDenied(true);
+            setUserRole(null);
+            playErrorSound();
+            showError('Akses Dicabut', 'Anda bukan bagian dari anggota tim lagi.');
+            await MemberService.leaveTeam(user.id, user.email, brandId, currentBrand?.name || brandName);
+            if (refreshUserData) await refreshUserData();
+          }
+        } else if (userRole && latestRole !== userRole) {
+          // Role pengguna diubah oleh owner secara real-time (misal editor -> reviewer/viewer)!
+          setUserRole(latestRole);
+          playSuccessSound();
+          const roleLabel =
+            latestRole === 'reviewer'
+              ? 'Reviewer (Menyetujui)'
+              : latestRole === 'editor'
+              ? 'Editor (Buat Konten)'
+              : latestRole === 'viewer'
+              ? 'Viewer (Lihat Saja)'
+              : 'Owner';
+          showToast(`🔔 Peran Anda di brand ini telah diubah menjadi ${roleLabel}`);
+          loadBrandMembers();
+        }
+      } catch (err) {}
+    };
+
+    // 1. Supabase Postgres Changes Channel
+    let memberChannel: any = null;
+    let roomChannel: any = null;
+    if (supabase) {
+      try {
+        memberChannel = supabase
+          .channel(`brand_members_sync_${brandId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'brand_members',
+              filter: `brand_id=eq.${brandId}`,
+            },
+            () => {
+              checkAndSyncRole();
+              loadBrandMembers();
+            }
+          )
+          .subscribe();
+
+        // 2. Supabase Broadcast Channel untuk sinkronisasi instan <100ms
+        roomChannel = supabase
+          .channel(`brand_room_${brandId}`)
+          .on('broadcast', { event: 'member_update' }, async (payload: any) => {
+            const data = payload?.payload;
+            if (!data) return;
+            const isMe =
+              data.userId === user.id ||
+              (user.email && data.userEmail?.toLowerCase() === user.email.toLowerCase());
+
+            if (data.type === 'member_removed' && isMe) {
+              setIsAccessDenied(true);
+              setUserRole(null);
+              playErrorSound();
+              showError('Akses Dicabut', 'Anda bukan bagian dari anggota tim lagi.');
+              await MemberService.leaveTeam(user.id, user.email, brandId, currentBrand?.name || brandName);
+              if (refreshUserData) await refreshUserData();
+            } else if (data.type === 'role_updated' && data.userId === user.id) {
+              if (data.newRole && data.newRole !== userRole) {
+                setUserRole(data.newRole);
+                playSuccessSound();
+                showToast(`🔔 Peran Anda telah diubah menjadi ${data.newRole.toUpperCase()} oleh pemilik brand.`);
+                loadBrandMembers();
+              }
+            } else {
+              loadBrandMembers();
+            }
+          })
+          .subscribe();
+      } catch {}
+    }
+
+    // 3. Polling interval setiap 3 detik ketika halaman sedang dilihat
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        checkAndSyncRole();
+      }
+    }, 3000);
+
+    // 4. Sinkronisasi seketika saat window focus / visibility change
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        checkAndSyncRole();
+        loadBrandMembers();
+      }
+    };
+    window.addEventListener('focus', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+
+    // 5. Custom events (antar tab browser yang sama)
+    const onRoleChangedEvent = (e: any) => {
+      if (e.detail?.brandId === brandId) {
+        if (e.detail.userId === user.id && e.detail.role) {
+          setUserRole(e.detail.role);
+          showToast(`🔔 Peran Anda telah diubah menjadi ${e.detail.role.toUpperCase()}`);
+        }
+        loadBrandMembers();
+      }
+    };
+    const onMemberRemovedEvent = async (e: any) => {
+      if (e.detail?.brandId === brandId) {
+        const isMe =
+          e.detail.userId === user.id ||
+          (user.email && e.detail.email?.toLowerCase() === user.email.toLowerCase());
+        if (isMe) {
+          setIsAccessDenied(true);
+          setUserRole(null);
+          playErrorSound();
+          showError('Akses Dicabut', 'Anda bukan bagian dari anggota tim lagi.');
+          await MemberService.leaveTeam(user.id, user.email, brandId, currentBrand?.name || brandName);
+          if (refreshUserData) await refreshUserData();
+        } else {
+          loadBrandMembers();
+        }
+      }
+    };
+
+    window.addEventListener('uda_member_role_changed', onRoleChangedEvent);
+    window.addEventListener('uda_member_removed', onMemberRemovedEvent);
+    window.addEventListener('storage', checkAndSyncRole);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(intervalId);
+      window.removeEventListener('focus', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
+      window.removeEventListener('uda_member_role_changed', onRoleChangedEvent);
+      window.removeEventListener('uda_member_removed', onMemberRemovedEvent);
+      window.removeEventListener('storage', checkAndSyncRole);
+      if (supabase && memberChannel) supabase.removeChannel(memberChannel);
+      if (supabase && roomChannel) supabase.removeChannel(roomChannel);
+    };
+  }, [
+    brandId,
+    user?.id,
+    user?.email,
+    userRole,
+    isAccessDenied,
+    currentBrand?.name,
+    brandName,
+    refreshUserData,
+    loadBrandMembers,
+    supabase,
+    showError,
+  ]);
 
 
 
@@ -937,15 +1115,23 @@ export default function PengaturanBrandDetailPage() {
         <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
           <Lock size={32} />
         </div>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
-          Akses Ditolak
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: '#fee2e2', color: '#b91c1c', borderRadius: 999, fontSize: '0.75rem', fontWeight: 800, marginBottom: 12 }}>
+          AKSES DICABUT
+        </div>
+        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+          Anda Bukan Bagian dari Anggota Tim Lagi
         </h2>
-        <p style={{ color: '#64748b', fontSize: '0.88rem', lineHeight: 1.6, marginBottom: 24 }}>
-          Anda tidak memiliki hak akses ke brand ini. Brand ini dimiliki oleh akun lain dan Anda tidak terdaftar sebagai anggota tim kolaborator.
+        <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: 24 }}>
+          Anda bukan bagian dari anggota tim lagi. Akses Anda ke brand ini telah dicabut oleh pemilik brand. Status langganan akun Anda kini telah dikembalikan menjadi paket <strong>Free (Gratis)</strong>.
         </p>
-        <button className="btn-uda btn-uda-primary" onClick={() => router.push('/app/brand')}>
-          Kembali ke Daftar Brand
-        </button>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button className="btn-uda btn-uda-primary" onClick={() => router.push('/app/brand')}>
+            Kembali ke Daftar Brand
+          </button>
+          <button className="btn-uda btn-uda-secondary" onClick={() => router.push('/app')}>
+            Ke Beranda
+          </button>
+        </div>
       </div>
     );
   }
@@ -1604,7 +1790,7 @@ export default function PengaturanBrandDetailPage() {
                               const updatedMembers = members.map((item) => (item.id === m.id ? { ...item, role: newRole } : item));
                               setMembers(updatedMembers);
                               localStorage.setItem('uda_brand_members_' + brand.id, JSON.stringify(updatedMembers));
-                              await MemberService.updateRole(brand.id, m.id, newRole);
+                              await MemberService.updateRole(brand.id, m.id, newRole, brand.name, m.email);
                               playSuccessSound();
                               showToast(`Peran ${m.name} diubah menjadi ${newRole.toUpperCase()}`);
                             }}
@@ -1644,7 +1830,7 @@ export default function PengaturanBrandDetailPage() {
                                 message: `Apakah Anda yakin ingin menghapus ${m.name} (${m.email}) dari brand "${brand.name}"? Akses mereka ke brand ini akan dicabut.`,
                                 confirmText: 'Ya, Hapus Anggota',
                                 onConfirm: async () => {
-                                  await MemberService.leaveTeam(m.id, m.email, brand.id);
+                                  await MemberService.leaveTeam(m.id, m.email, brand.id, brand.name);
                                   const updated = members.filter((item) => item.id !== m.id);
                                   setMembers(updated);
                                   localStorage.setItem('uda_brand_members_' + brand.id, JSON.stringify(updated));
@@ -1671,7 +1857,7 @@ export default function PengaturanBrandDetailPage() {
                                 message: `Apakah Anda yakin ingin keluar dari brand "${brand.name}"? Status akses kolaborator Anda pada brand ini akan berakhir dan paket akun Anda akan kembali menjadi Free.`,
                                 confirmText: 'Ya, Keluar dari Brand',
                                 onConfirm: async () => {
-                                  await MemberService.leaveTeam(user?.id || '', user?.email, brand.id);
+                                  await MemberService.leaveTeam(user?.id || '', user?.email, brand.id, brand.name);
                                   playSuccessSound();
                                   if (refreshUserData) await refreshUserData();
                                   showSuccess('Berhasil Keluar', `Anda telah berhasil keluar dari brand "${brand.name}". Status akun Anda kembali menjadi Free.`);

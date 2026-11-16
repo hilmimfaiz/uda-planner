@@ -285,7 +285,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { inviteId, token, brandId, action, userId, userEmail, userName, role } = body;
+    const { inviteId, token, brandId, action, userId, userEmail, userName, role, brandName } = body;
 
     const admin = createAdminClient();
 
@@ -351,6 +351,63 @@ export async function PUT(req: NextRequest) {
           : i
       );
       saveBackupInvites(updated);
+    } else if (action === 'update_role') {
+      const cleanTargetEmail = (userEmail || '').trim().toLowerCase();
+      if (admin && brandId && (userId || cleanTargetEmail) && role) {
+        try {
+          let resolvedTargetId = userId;
+          if (!resolvedTargetId && cleanTargetEmail) {
+            const { data: pUser } = await (admin.from('profiles' as any) as any)
+              .select('id')
+              .ilike('email', cleanTargetEmail)
+              .maybeSingle();
+            if (pUser?.id) resolvedTargetId = pUser.id;
+          }
+
+          if (resolvedTargetId) {
+            await (admin.from('brand_members' as any) as any)
+              .update({ role, updated_at: new Date().toISOString() })
+              .eq('brand_id', brandId)
+              .eq('user_id', resolvedTargetId);
+
+            // Tambahkan notifikasi real-time untuk anggota yang diubah rolenya
+            await (admin.from('notifications' as any) as any).insert({
+              user_id: resolvedTargetId,
+              type: 'role_updated',
+              message: `Role Anda di brand "${brandName || 'Brand'}" telah diubah menjadi ${role.toUpperCase()}.`,
+              link: `/app/brand/${brandId}`,
+              is_read: false,
+            } as any);
+          }
+
+          let invQ: any = (admin.from('invitations' as any) as any).update({ role }).eq('brand_id', brandId);
+          if (resolvedTargetId) {
+            invQ = invQ.or(`target_user_id.eq.${resolvedTargetId},invited_by.eq.${resolvedTargetId}`);
+          }
+          if (cleanTargetEmail) {
+            invQ = invQ.ilike('email', cleanTargetEmail);
+          }
+          await invQ;
+        } catch (dbErr) {
+          console.warn('API update_role error in db:', dbErr);
+        }
+      }
+
+      // Update backup server
+      const all = loadBackupInvites();
+      const updated = all.map((i) => {
+        const matchBrand = brandId ? i.brand_id === brandId : true;
+        const matchUser =
+          (userId && (i.target_user_id === userId || i.user_id === userId)) ||
+          (cleanTargetEmail && (i.target_email || i.email)?.toLowerCase() === cleanTargetEmail);
+        if (matchBrand && matchUser) {
+          return { ...i, role };
+        }
+        return i;
+      });
+      saveBackupInvites(updated);
+
+      return NextResponse.json({ success: true, role });
     } else if (action === 'reject' || action === 'delete' || action === 'dismiss') {
       const cleanTargetEmail = (userEmail || '').trim().toLowerCase();
       if (admin) {
@@ -455,6 +512,17 @@ export async function PUT(req: NextRequest) {
                 console.warn('Update user_metadata to free error:', authErr);
               }
             }
+
+            // Kirim notifikasi real-time bahwa anggota telah dihapus dari brand
+            try {
+              await (admin.from('notifications' as any) as any).insert({
+                user_id: resolvedUserId,
+                type: 'team_removed',
+                message: `Akses Anda ke brand "${brandName || 'Brand'}" telah dicabut oleh pemilik brand. Anda bukan bagian dari anggota tim lagi dan status paket Anda kembali menjadi Free.`,
+                link: '/app/brand',
+                is_read: false,
+              } as any);
+            } catch {}
           }
 
           // 5. Update status di tabel invitations Supabase menjadi 'left'

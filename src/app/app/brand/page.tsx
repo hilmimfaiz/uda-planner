@@ -58,80 +58,112 @@ export default function DaftarBrandPage() {
   const [brandRoles, setBrandRoles] = useState<Record<string, 'owner' | 'editor' | 'reviewer' | 'viewer'>>({});
   const [isInvitedTeamMember, setIsInvitedTeamMember] = useState<boolean>(false);
 
-  React.useEffect(() => {
-    let isMounted = true;
+  const loadBrandsData = React.useCallback(async () => {
+    const data = await BrandService.getBrands(user?.id);
+    const loadedBrands = data || [];
+    setBrands(loadedBrands);
 
-    BrandService.getBrands(user?.id).then(async (data) => {
-      if (!isMounted) return;
-      const loadedBrands = data || [];
-      setBrands(loadedBrands);
+    if (!user?.id) return;
 
-      if (!user?.id) return;
+    const rolesMap: Record<string, 'owner' | 'editor' | 'reviewer' | 'viewer'> = {};
+    let hasOwnedBrand = false;
+    let hasInvitedBrand = false;
 
-      const rolesMap: Record<string, 'owner' | 'editor' | 'reviewer' | 'viewer'> = {};
-      let hasOwnedBrand = false;
-      let hasInvitedBrand = false;
-
-      for (const b of loadedBrands) {
-        if (b.owner_id === user.id) {
-          rolesMap[b.id] = 'owner';
-          hasOwnedBrand = true;
+    for (const b of loadedBrands) {
+      if (b.owner_id === user.id) {
+        rolesMap[b.id] = 'owner';
+        hasOwnedBrand = true;
+      } else {
+        const role = await BrandService.getUserBrandRole(b.id, user.id);
+        const resolvedRole = role || 'editor';
+        rolesMap[b.id] = resolvedRole;
+        if (resolvedRole !== 'owner') {
+          hasInvitedBrand = true;
         } else {
-          const role = await BrandService.getUserBrandRole(b.id, user.id);
-          const resolvedRole = role || 'editor';
-          rolesMap[b.id] = resolvedRole;
-          if (resolvedRole !== 'owner') {
-            hasInvitedBrand = true;
-          } else {
-            hasOwnedBrand = true;
-          }
+          hasOwnedBrand = true;
         }
       }
+    }
 
-      // Periksa juga langsung tabel brand_members di database Supabase
-      if (supabase) {
-        try {
-          const { data: dbMembers } = await (supabase.from('brand_members' as any) as any)
-            .select('brand_id, role')
-            .eq('user_id', user.id);
+    // Periksa juga langsung tabel brand_members di database Supabase
+    if (supabase) {
+      try {
+        const { data: dbMembers } = await (supabase.from('brand_members' as any) as any)
+          .select('brand_id, role')
+          .eq('user_id', user.id);
 
-          if (dbMembers && dbMembers.length > 0) {
-            dbMembers.forEach((m: any) => {
-              if (m.brand_id) {
-                rolesMap[m.brand_id] = m.role as any;
-                if (m.role !== 'owner') hasInvitedBrand = true;
-                else hasOwnedBrand = true;
-              }
-            });
-          }
-        } catch (e) {}
-      }
-
-      // Periksa keanggotaan tim lokal
-      if (typeof window !== 'undefined') {
-        try {
-          const rawTeam = localStorage.getItem('uda_team_membership_' + user.id);
-          if (rawTeam) {
-            const teamObj = JSON.parse(rawTeam);
-            if (teamObj.role && teamObj.role !== 'owner') {
-              hasInvitedBrand = true;
+        if (dbMembers && dbMembers.length > 0) {
+          dbMembers.forEach((m: any) => {
+            if (m.brand_id) {
+              rolesMap[m.brand_id] = m.role as any;
+              if (m.role !== 'owner') hasInvitedBrand = true;
+              else hasOwnedBrand = true;
             }
-          }
-        } catch (e) {}
-      }
+          });
+        }
+      } catch (e) {}
+    }
 
-      if (isMounted) {
-        setBrandRoles(rolesMap);
-        // Pengguna undangan tim: terdaftar di brand orang lain dan tidak memiliki brand sendiri sebagai owner
-        const isInvited = !hasOwnedBrand && (hasInvitedBrand || loadedBrands.some((b) => b.owner_id !== user.id));
-        setIsInvitedTeamMember(isInvited);
-      }
-    });
+    // Periksa keanggotaan tim lokal
+    if (typeof window !== 'undefined') {
+      try {
+        const rawTeam = localStorage.getItem('uda_team_membership_' + user.id);
+        if (rawTeam) {
+          const teamObj = JSON.parse(rawTeam);
+          if (teamObj.role && teamObj.role !== 'owner') {
+            hasInvitedBrand = true;
+          }
+        }
+      } catch (e) {}
+    }
+
+    setBrandRoles(rolesMap);
+    const isInvited = !hasOwnedBrand && (hasInvitedBrand || loadedBrands.some((b) => b.owner_id !== user.id));
+    setIsInvitedTeamMember(isInvited);
+  }, [user?.id, supabase]);
+
+  React.useEffect(() => {
+    loadBrandsData();
+
+    // Supabase Real-Time Channel untuk perubahan anggota brand
+    let channel: any = null;
+    if (supabase && user?.id) {
+      try {
+        channel = supabase
+          .channel(`user_brand_members_${user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'brand_members',
+              filter: `user_id=eq.${user.id}`,
+            },
+            () => {
+              loadBrandsData();
+            }
+          )
+          .subscribe();
+      } catch {}
+    }
+
+    const onRoleChanged = () => loadBrandsData();
+    const onMemberRemoved = () => loadBrandsData();
+    const onStorage = () => loadBrandsData();
+
+    window.addEventListener('uda_member_role_changed', onRoleChanged);
+    window.addEventListener('uda_member_removed', onMemberRemoved);
+    window.addEventListener('uda_account_updated', onRoleChanged);
+    window.addEventListener('storage', onStorage);
 
     return () => {
-      isMounted = false;
+      window.removeEventListener('uda_member_role_changed', onRoleChanged);
+      window.removeEventListener('uda_member_removed', onMemberRemoved);
+      window.removeEventListener('uda_account_updated', onRoleChanged);
+      window.removeEventListener('storage', onStorage);
+      if (supabase && channel) supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [loadBrandsData, supabase, user?.id]);
 
   // New Brand Form State
   const [newName, setNewName] = useState('');

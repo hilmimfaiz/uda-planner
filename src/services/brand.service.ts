@@ -239,7 +239,63 @@ export class BrandService {
 
         const member = memberRes?.data;
         if (member && member.role) {
-          return member.role.toLowerCase() as 'editor' | 'reviewer' | 'viewer';
+          const validRole = member.role.toLowerCase() as 'editor' | 'reviewer' | 'viewer';
+          // Sinkronkan ke local storage agar peran terbaru langsung aktif seketika
+          if (typeof window !== 'undefined' && finalUserId) {
+            try {
+              localStorage.setItem('uda_system_role_' + finalUserId, validRole);
+              const rawTeam = localStorage.getItem('uda_team_membership_' + finalUserId);
+              if (rawTeam) {
+                const team = JSON.parse(rawTeam);
+                if (team.brand_id === brandId) {
+                  team.role = validRole;
+                  localStorage.setItem('uda_team_membership_' + finalUserId, JSON.stringify(team));
+                }
+              }
+            } catch {}
+          }
+          return validRole;
+        }
+
+        // PENTING: Jika brand ditemukan di Supabase dan user BUKAN owner, serta TIDAK DITEMUKAN di brand_members:
+        // Artinya akses user ini telah DICABUT atau user BUKAN lagi anggota tim!
+        if (brand && brand.owner_id !== finalUserId && (!member || !member.role)) {
+          // Bersihkan sisa cache lokal untuk brand ini agar tidak lolos ke pengecekan lokal berikutnya
+          if (typeof window !== 'undefined') {
+            try {
+              if (finalUserId) {
+                const rawTeam = localStorage.getItem('uda_team_membership_' + finalUserId);
+                if (rawTeam) {
+                  const team = JSON.parse(rawTeam);
+                  if (team.brand_id === brandId) {
+                    localStorage.removeItem('uda_team_membership_' + finalUserId);
+                  }
+                }
+                localStorage.removeItem('uda_system_role_' + finalUserId);
+              }
+              const rawInv = localStorage.getItem('uda_brand_invitations');
+              if (rawInv) {
+                const invList = JSON.parse(rawInv);
+                const updated = invList.map((inv: any) =>
+                  inv.brand_id === brandId &&
+                  ((userEmail && inv.target_email?.toLowerCase() === userEmail.toLowerCase()) ||
+                    (finalUserId && inv.target_user_id === finalUserId))
+                    ? { ...inv, status: 'left' }
+                    : inv
+                );
+                localStorage.setItem('uda_brand_invitations', JSON.stringify(updated));
+              }
+              const rawMembers = localStorage.getItem('uda_brand_members_' + brandId);
+              if (rawMembers) {
+                const mList = JSON.parse(rawMembers);
+                const filtered = mList.filter(
+                  (m: any) => !(m.id === finalUserId || (userEmail && m.email?.toLowerCase() === userEmail.toLowerCase()))
+                );
+                localStorage.setItem('uda_brand_members_' + brandId, JSON.stringify(filtered));
+              }
+            } catch {}
+          }
+          return null;
         }
       } catch (err) {
         console.warn('BrandService.getUserBrandRole db lookup notice:', err);
@@ -289,6 +345,18 @@ export class BrandService {
         const rawInvites = localStorage.getItem('uda_brand_invitations');
         if (rawInvites) {
           const invitesList = JSON.parse(rawInvites);
+          const hasLeft = invitesList.some((inv: any) => {
+            const isUser =
+              (userEmail && inv.target_email && inv.target_email.toLowerCase() === userEmail.toLowerCase()) ||
+              (userEmail && inv.email && inv.email.toLowerCase() === userEmail.toLowerCase()) ||
+              (finalUserId && inv.target_user_id === finalUserId);
+            return isUser && inv.brand_id === brandId && (inv.status === 'left' || inv.status === 'cancelled');
+          });
+
+          if (hasLeft) {
+            return null;
+          }
+
           const acceptedMatch = invitesList.find((inv: any) => {
             const isUser =
               (userEmail && inv.target_email && inv.target_email.toLowerCase() === userEmail.toLowerCase()) ||
@@ -302,7 +370,7 @@ export class BrandService {
               (targetBrandName && inv.brand_name && targetBrandName.toLowerCase() === inv.brand_name.toLowerCase()) ||
               (inv.brand_name && matchedBrand && matchedBrand.name.toLowerCase() === inv.brand_name.toLowerCase());
 
-            return isBrand && (inv.status === 'accepted' || inv.status === 'pending' || !inv.status);
+            return isBrand && inv.status === 'accepted';
           });
 
           if (acceptedMatch && acceptedMatch.role) {
@@ -440,21 +508,42 @@ export class BrandService {
       }
     }
 
+    const hasSupabaseMemberCheck = Boolean(supabase && isUuid(finalOwnerId));
     storedCustom.forEach((c) => {
       let isAccessible = c.owner_id === finalOwnerId;
       if (!isAccessible && typeof window !== 'undefined') {
-        try {
-          const rawM = localStorage.getItem('uda_brand_members_' + c.id);
-          if (rawM) {
-            const mList = JSON.parse(rawM);
-            if (mList.some((m: any) =>
-              (finalOwnerId && (m.id === finalOwnerId || m.user_id === finalOwnerId)) ||
-              (currentUserEmail && m.email?.toLowerCase() === currentUserEmail.toLowerCase())
-            )) {
-              isAccessible = true;
+        if (hasSupabaseMemberCheck && isUuid(c.id)) {
+          isAccessible = false;
+        } else {
+          try {
+            const rawInv = localStorage.getItem('uda_brand_invitations');
+            if (rawInv) {
+              const invList = JSON.parse(rawInv);
+              const isLeft = invList.some(
+                (inv: any) =>
+                  inv.brand_id === c.id &&
+                  (inv.status === 'left' || inv.status === 'cancelled') &&
+                  ((currentUserEmail && inv.target_email?.toLowerCase() === currentUserEmail.toLowerCase()) ||
+                    (finalOwnerId && inv.target_user_id === finalOwnerId))
+              );
+              if (isLeft) return;
             }
-          }
-        } catch {}
+
+            const rawM = localStorage.getItem('uda_brand_members_' + c.id);
+            if (rawM) {
+              const mList = JSON.parse(rawM);
+              if (
+                mList.some(
+                  (m: any) =>
+                    (finalOwnerId && (m.id === finalOwnerId || m.user_id === finalOwnerId)) ||
+                    (currentUserEmail && m.email?.toLowerCase() === currentUserEmail.toLowerCase())
+                )
+              ) {
+                isAccessible = true;
+              }
+            }
+          } catch {}
+        }
       }
 
       if (isAccessible && !brandMap.has(c.id)) {
@@ -474,6 +563,22 @@ export class BrandService {
           if (rawTeam) {
             const team = JSON.parse(rawTeam);
             if (team.brand_id && !brandMap.has(team.brand_id)) {
+              if (hasSupabaseMemberCheck && isUuid(team.brand_id)) {
+                continue;
+              }
+              const rawInv = localStorage.getItem('uda_brand_invitations');
+              if (rawInv) {
+                const invList = JSON.parse(rawInv);
+                const isLeft = invList.some(
+                  (inv: any) =>
+                    inv.brand_id === team.brand_id &&
+                    (inv.status === 'left' || inv.status === 'cancelled') &&
+                    ((currentUserEmail && inv.target_email?.toLowerCase() === currentUserEmail.toLowerCase()) ||
+                      (finalOwnerId && inv.target_user_id === finalOwnerId))
+                );
+                if (isLeft) continue;
+              }
+
               const dummyMatch = DUMMY_BRANDS.find((d) => d.id === team.brand_id || d.name.toLowerCase() === team.brand_name?.toLowerCase());
               if (dummyMatch) {
                 brandMap.set(dummyMatch.id, dummyMatch);
@@ -505,6 +610,18 @@ export class BrandService {
 
             if (isUser && (inv.status === 'accepted' || inv.status === 'pending' || !inv.status)) {
               if (inv.brand_id && !brandMap.has(inv.brand_id)) {
+                if (hasSupabaseMemberCheck && isUuid(inv.brand_id)) {
+                  return;
+                }
+                const isLeft = invList.some(
+                  (i: any) =>
+                    i.brand_id === inv.brand_id &&
+                    (i.status === 'left' || i.status === 'cancelled') &&
+                    ((currentUserEmail && i.target_email?.toLowerCase() === currentUserEmail.toLowerCase()) ||
+                      (finalOwnerId && i.target_user_id === finalOwnerId))
+                );
+                if (isLeft) return;
+
                 const dummyMatch = DUMMY_BRANDS.find((d) => d.id === inv.brand_id || d.name.toLowerCase() === inv.brand_name?.toLowerCase());
                 if (dummyMatch) {
                   brandMap.set(dummyMatch.id, dummyMatch);
