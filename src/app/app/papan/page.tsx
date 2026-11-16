@@ -216,7 +216,7 @@ export default function PapanKanbanPage() {
     if (userRole === "viewer") {
       playErrorSound();
       showToast(
-        "👁️ Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat dan tidak dapat melakukan aksi geser apapun di kanban.",
+        "Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat dan tidak dapat melakukan aksi geser apapun di kanban.",
       );
       return;
     }
@@ -495,7 +495,7 @@ export default function PapanKanbanPage() {
                 {currentFilteredRole === "owner" && "👑 Owner"}
                 {currentFilteredRole === "reviewer" && "🛡️ Reviewer"}
                 {currentFilteredRole === "editor" && "✏️ Editor"}
-                {currentFilteredRole === "viewer" && "👁️ Viewer (Read-Only)"}
+                {currentFilteredRole === "viewer" && "Viewer (Read-Only)"}
               </span>
             </div>
           )}
@@ -536,7 +536,6 @@ export default function PapanKanbanPage() {
             fontWeight: 600,
           }}
         >
-          <span style={{ fontSize: "1.1rem" }}>👁️</span>
           <span>
             <strong>Mode Akses Lihat Saja (Viewer):</strong> Anda dapat memantau
             alur status kanban brand ini dalam mode Read-Only. Pemindahan kartu
@@ -706,7 +705,7 @@ export default function PapanKanbanPage() {
                             e.preventDefault();
                             playErrorSound();
                             showToast(
-                              "👁️ Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat (Read-Only).",
+                              "Mode Viewer (Lihat Saja): Anda hanya memiliki akses melihat (Read-Only).",
                             );
                             return;
                           }
@@ -771,7 +770,7 @@ export default function PapanKanbanPage() {
                                   border: "1px solid #e2e8f0",
                                 }}
                               >
-                                👁️ Read-Only
+                                Read-Only
                               </span>
                             )}
                           </div>

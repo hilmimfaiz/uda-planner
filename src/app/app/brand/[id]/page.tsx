@@ -1632,7 +1632,7 @@ export default function PengaturanBrandDetailPage() {
               </button>
             ) : (
               <div style={{ marginTop: 10, padding: '8px 14px', background: '#f1f5f9', borderRadius: 8, color: '#64748b', fontSize: '0.82rem', fontWeight: 600 }}>
-                👁️ Mode Lihat Saja: Pengguna dengan peran Viewer tidak memiliki izin mengubah profil brand.
+                Mode Lihat Saja: Pengguna dengan peran Viewer tidak memiliki izin mengubah profil brand.
               </div>
             )}
           </div>

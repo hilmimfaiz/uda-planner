@@ -946,7 +946,6 @@ END:VCALENDAR`;
             fontWeight: 600,
           }}
         >
-          <span style={{ fontSize: '1.3rem' }}>👁️</span>
           <span>
             <strong>Mode Lihat Saja (Viewer):</strong> Anda terdaftar sebagai Viewer pada brand ini. Anda dapat meninjau detail dan pratinjau feed, namun tidak memiliki izin untuk mengedit atau menghapus konten.
           </span>
@@ -2487,7 +2486,7 @@ END:VCALENDAR`;
 
             {isReadOnly ? (
               <div style={{ padding: '12px 14px', background: '#f8fafc', borderRadius: 8, fontSize: '0.82rem', color: '#64748b', textAlign: 'center' }}>
-                👁️ Mode Viewer: Anda hanya memiliki izin membaca status postingan.
+                Mode Viewer: Anda hanya memiliki izin membaca status postingan.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
