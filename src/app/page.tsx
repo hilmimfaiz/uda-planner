@@ -281,6 +281,7 @@ export default function LandingPage() {
       <nav className="camply-top-nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div
+            className="camply-nav-logo-icon"
             style={{
               width: 38,
               height: 38,
@@ -299,7 +300,7 @@ export default function LandingPage() {
             U
           </div>
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ fontWeight: 800, fontSize: '1.15rem', color: '#0f172a', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
+            <span className="camply-nav-brand-text" style={{ fontWeight: 800, fontSize: '1.15rem', color: '#0f172a', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
               UdaPlanner
             </span>
             <span
@@ -323,7 +324,7 @@ export default function LandingPage() {
         </div>
 
         {/* Menu Tengah Desktop (Camply Reference Style) */}
-        <div className="desktop-menu" style={{ alignItems: 'center', gap: 12 }}>
+        <div className="desktop-menu" style={{ alignItems: 'center' }}>
           <a href="#fitur" onClick={(e) => scrollToSection(e, 'fitur')}>Fitur</a>
           <a href="#alur" onClick={(e) => scrollToSection(e, 'alur')}>Cara Kerja</a>
           <a href="#fitur-demo" onClick={(e) => scrollToSection(e, 'fitur-demo')}>Demo Interaktif</a>
@@ -331,7 +332,7 @@ export default function LandingPage() {
           <a href="#faq" onClick={(e) => scrollToSection(e, 'faq')}>FAQ</a>
         </div>
 
-        <div className="camply-nav-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <div className="camply-nav-actions" style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           <Link
             href="/masuk"
             className="btn-camply-dark"
@@ -865,9 +866,10 @@ export default function LandingPage() {
           </p>
 
           <div
+            className="camply-features-grid"
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 330px), 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
               gap: 24,
               textAlign: 'left',
             }}
@@ -963,7 +965,7 @@ export default function LandingPage() {
         </div>
 
         {/* 3 Step Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 24, textAlign: 'left', marginBottom: 70 }}>
+        <div className="camply-steps-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 24, textAlign: 'left', marginBottom: 70 }}>
           {steps.map((s, idx) => (
             <div
               key={idx}
@@ -1029,7 +1031,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 24, textAlign: 'left' }}>
+          <div className="camply-testimonials-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 24, textAlign: 'left' }}>
             {testimonials.map((t, idx) => (
               <div
                 key={idx}
@@ -1117,6 +1119,7 @@ export default function LandingPage() {
           </div>
 
           <div
+            className="camply-pricing-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 310px), 1fr))',

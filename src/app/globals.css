@@ -2414,9 +2414,11 @@ tr:last-child td {
 
 .desktop-menu {
   display: none;
+  align-items: center;
+  gap: 12px;
 }
 
-@media (min-width: 860px) {
+@media (min-width: 768px) {
   .desktop-menu {
     display: flex !important;
   }
@@ -2430,6 +2432,8 @@ tr:last-child td {
   font-size: 0.92rem;
   padding: 6px 12px;
   border-radius: 6px;
+  white-space: nowrap !important;
+  flex-shrink: 0;
   transition: all 0.15s ease;
 }
 
@@ -3005,6 +3009,209 @@ tr:last-child td {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* ========================================================
+   Landing Page: Tablet Optimizations (641px - 1080px)
+   Kecilkan navbar pill & sesuaikan layout section agar rapi dan tidak meluber
+   ======================================================== */
+@media (min-width: 641px) and (max-width: 1080px) {
+  /* 1. Header / Navbar Tablet */
+  .camply-top-nav {
+    top: 10px !important;
+    width: calc(100% - 24px) !important;
+    padding: 7px 14px !important;
+    gap: 8px !important;
+    box-shadow: 3px 3px 0px #0f172a !important;
+  }
+
+  /* Sembunyikan badge 'by UdaCoding' di tablet agar navbar tidak sesak */
+  .camply-brand-badge {
+    display: none !important;
+  }
+
+  .camply-nav-logo-icon {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 1.05rem !important;
+    border-radius: 9px !important;
+  }
+
+  .camply-nav-brand-text {
+    font-size: 1rem !important;
+  }
+
+  .desktop-menu {
+    gap: 3px !important;
+  }
+
+  .desktop-menu a {
+    font-size: 0.76rem !important;
+    padding: 4px 6px !important;
+    white-space: nowrap !important;
+  }
+
+  .camply-nav-actions {
+    gap: 6px !important;
+  }
+
+  .camply-nav-actions .btn-camply-dark,
+  .camply-nav-actions .btn-camply-outline {
+    padding: 6px 12px !important;
+    font-size: 0.78rem !important;
+    box-shadow: 2px 2px 0px #0f172a !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* Jika layar di antara 1081px dan 1180px */
+@media (min-width: 1081px) and (max-width: 1180px) {
+  .camply-top-nav {
+    padding: 8px 16px !important;
+    gap: 8px !important;
+  }
+  .desktop-menu {
+    gap: 6px !important;
+  }
+  .desktop-menu a {
+    font-size: 0.84rem !important;
+    padding: 5px 8px !important;
+    white-space: nowrap !important;
+  }
+  .camply-nav-actions .btn-camply-dark,
+  .camply-nav-actions .btn-camply-outline {
+    padding: 8px 16px !important;
+    font-size: 0.84rem !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* Tablet screen layout adjustments for sections (641px - 1024px) */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .camply-hero-header {
+    padding: 46px 20px 40px !important;
+  }
+
+  .camply-hero-grid {
+    gap: 36px !important;
+  }
+
+  .camply-demo-section {
+    padding: 48px 20px 60px !important;
+  }
+
+  .camply-simulasi-grid {
+    gap: 32px !important;
+  }
+
+  .camply-stats-bar {
+    padding: 32px 20px !important;
+  }
+
+  .camply-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 20px !important;
+  }
+
+  .camply-stat-item:nth-child(2)::after {
+    display: none !important;
+  }
+
+  #fitur {
+    padding: 60px 20px !important;
+  }
+
+  .camply-features-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 18px !important;
+  }
+
+  .camply-features-grid .uda-card {
+    padding: 22px 18px !important;
+  }
+
+  #alur {
+    padding: 60px 20px !important;
+  }
+
+  .camply-steps-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 14px !important;
+    margin-bottom: 50px !important;
+  }
+
+  .camply-steps-grid .uda-card {
+    padding: 20px 14px !important;
+  }
+
+  .camply-steps-grid .uda-card > div:first-child {
+    font-size: 2rem !important;
+    margin-bottom: 8px !important;
+  }
+
+  .camply-steps-grid .uda-card h3 {
+    font-size: 1.02rem !important;
+    margin-bottom: 6px !important;
+  }
+
+  .camply-steps-grid .uda-card p {
+    font-size: 0.82rem !important;
+    line-height: 1.5 !important;
+  }
+
+  .camply-testimonials-grid {
+    gap: 18px !important;
+  }
+
+  .camply-testimonials-grid .uda-card {
+    padding: 22px 18px !important;
+  }
+
+  #harga {
+    padding: 60px 20px !important;
+  }
+
+  .camply-pricing-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 14px !important;
+  }
+
+  .camply-pricing-grid .uda-card {
+    padding: 24px 14px !important;
+  }
+
+  .camply-pricing-grid .uda-card h3 {
+    font-size: 1.2rem !important;
+  }
+
+  .camply-pricing-grid .uda-card .btn-camply-dark,
+  .camply-pricing-grid .uda-card .btn-camply-outline {
+    font-size: 0.86rem !important;
+    height: 42px !important;
+  }
+
+  .faq-section {
+    padding: 60px 20px !important;
+  }
+
+  .camply-faq-grid {
+    gap: 28px !important;
+  }
+}
+
+/* Tablet portrait kecil (641px - 767px) */
+@media (min-width: 641px) and (max-width: 767px) {
+  .camply-steps-grid {
+    grid-template-columns: 1fr !important;
+    max-width: 460px !important;
+    margin: 0 auto 40px !important;
+  }
+
+  .camply-pricing-grid {
+    grid-template-columns: 1fr !important;
+    max-width: 440px !important;
+    margin: 0 auto !important;
   }
 }
 
