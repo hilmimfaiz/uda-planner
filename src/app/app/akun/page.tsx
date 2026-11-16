@@ -734,7 +734,7 @@ export default function AkunPenggunaPage() {
             </div>
           </div>
           <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: -8 }}>
-            💡 <strong>Nomor WhatsApp</strong> dapat digunakan oleh Brand Owner untuk mengundang Anda langsung melalui tautan WhatsApp.
+            <strong>Nomor WhatsApp</strong> dapat digunakan oleh Brand Owner untuk mengundang Anda langsung melalui tautan WhatsApp.
           </div>
 
           {/* Kolom Status Role Pengguna di Sistem (Hanya tampil jika bukan Paket Pro) */}
