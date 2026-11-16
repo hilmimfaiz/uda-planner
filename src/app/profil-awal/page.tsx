@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { createClient } from '@/lib/supabase/client';
@@ -41,6 +42,12 @@ export default function ProfilAwalPage() {
   const [selectedDurationIndex, setSelectedDurationIndex] = useState<Record<string, number>>({});
   const [isSelectingPlan, setIsSelectingPlan] = useState(false);
 
+  // Access Denied State (Tolak akses dengan nomor error 403 jika bukan pengguna baru)
+  const [accessDenied, setAccessDenied] = useState<{
+    denied: boolean;
+    reason: 'unauthenticated' | 'already_registered' | 'admin' | null;
+  }>({ denied: false, reason: null });
+
   const handleLogout = async () => {
     try {
       if (supabase) {
@@ -75,7 +82,7 @@ export default function ProfilAwalPage() {
     });
   }, []);
 
-  // Tangkap data auth langsung dari Supabase Session
+  // Tangkap data auth langsung dari Supabase Session & Validasi Hak Akses Khusus Pengguna Baru
   useEffect(() => {
     let isMounted = true;
 
@@ -89,81 +96,71 @@ export default function ProfilAwalPage() {
         const { data: { session } } = await supabase.auth.getSession();
         const currentUser = session?.user || user;
 
-        if (currentUser && isMounted) {
-          // Ambil mode Google Auth
-          let googleAuthMode: string | null = null;
-          try {
-            googleAuthMode = localStorage.getItem('uda_google_auth_mode');
-            if (!googleAuthMode && typeof document !== 'undefined') {
-              const match = document.cookie.match(/uda_google_auth_mode=([^;]+)/);
-              if (match) googleAuthMode = match[1];
-            }
-          } catch (e) {}
-
-          // Cek apakah pengguna sudah pernah menyelesaikan onboarding pengisian profil & pemilihan paket
-          const hasCompletedOnboarding =
-            currentUser.user_metadata?.has_completed_onboarding === true ||
-            (typeof window !== 'undefined' && localStorage.getItem('uda_profile_setup_done_' + currentUser.id) === 'true');
-
-          // JIKA PENGGUNA SUDAH MENYELESAIKAN PROFIL & PAKET:
-          // JANGAN TAMPILKAN FORM ONBOARDING, LANGSUNG ARAHKAN KE DASHBOARD!
-          if (hasCompletedOnboarding) {
-            try {
-              localStorage.removeItem('uda_google_auth_pending');
-              localStorage.removeItem('uda_needs_profile_setup');
-              localStorage.removeItem('uda_google_auth_mode');
-              if (typeof document !== 'undefined') {
-                document.cookie = 'uda_google_auth_mode=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-              }
-              localStorage.setItem('uda_profile_setup_done_' + currentUser.id, 'true');
-            } catch (e) {}
-
-            if (typeof window !== 'undefined') {
-              window.location.replace('/app');
-            } else {
-              router.replace('/app');
-            }
-            return;
+        // 1. JIKA BELUM LOGIN: TOLAK AKSES DENGAN NOMOR ERROR 403
+        if (!currentUser) {
+          if (isMounted) {
+            setAccessDenied({ denied: true, reason: 'unauthenticated' });
+            setIsReady(true);
           }
+          return;
+        }
 
-          // JIKA PENGGUNA MENCOBA LOGIN DENGAN GOOGLE (mode='masuk') TETAPI BELUM TERDAFTAR DI SISTEM:
-          if (googleAuthMode === 'masuk') {
-            const [profRes, accRes] = await Promise.all([
-              (supabase.from('profiles' as any) as any)
-                .select('id, full_name, created_at')
-                .eq('id', currentUser.id)
-                .maybeSingle(),
-              (supabase.from('accounts' as any) as any)
-                .select('id, plan_code')
-                .eq('user_id', currentUser.id)
-                .maybeSingle(),
-            ]);
+        // 2. JIKA AKUN ADMINISTRATOR: TOLAK AKSES DENGAN NOMOR ERROR 403
+        const userEmail = (currentUser.email || '').toLowerCase().trim();
+        const isEmailAdmin =
+          userEmail === 'admin@udaplanner.id' ||
+          userEmail === 'admin@udaplanner.com' ||
+          userEmail === 'admin@udacoding.id' ||
+          userEmail.startsWith('admin@');
 
-            const hasProfile = !!profRes.data && !!profRes.data.full_name;
-            const isAlreadyRegistered = hasCompletedOnboarding || (hasProfile && !!accRes.data);
-
-            if (!isAlreadyRegistered) {
-              const unregisteredEmail = currentUser.email || '';
-              try {
-                localStorage.removeItem('uda_google_auth_mode');
-                localStorage.removeItem('uda_google_auth_pending');
-                localStorage.removeItem('uda_needs_profile_setup');
-                if (typeof document !== 'undefined') {
-                  document.cookie = 'uda_google_auth_mode=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-                }
-                await fetch('/api/admin/users?id=' + currentUser.id, { method: 'DELETE' }).catch(() => {});
-                await supabase.auth.signOut();
-              } catch (e) {}
-
-              const redirectUrl = `/masuk?unregistered_google=true&email=${encodeURIComponent(unregisteredEmail)}`;
-              if (typeof window !== 'undefined') {
-                window.location.replace(redirectUrl);
-              } else {
-                router.replace(redirectUrl);
-              }
-              return;
-            }
+        if (isEmailAdmin) {
+          if (isMounted) {
+            setAccessDenied({ denied: true, reason: 'admin' });
+            setIsReady(true);
           }
+          return;
+        }
+
+        // 3. JIKA SUDAH MENYELESAIKAN ONBOARDING / BUKAN PENGGUNA BARU: TOLAK AKSES DENGAN ERROR 403
+        const hasCompletedOnboarding =
+          currentUser.user_metadata?.has_completed_onboarding === true ||
+          (typeof window !== 'undefined' && localStorage.getItem('uda_profile_setup_done_' + currentUser.id) === 'true');
+
+        // Query status profil, akun, dan brand pengguna di database Supabase
+        const [profRes, accRes, brandRes] = await Promise.all([
+          (supabase.from('profiles' as any) as any)
+            .select('id, full_name, created_at')
+            .eq('id', currentUser.id)
+            .maybeSingle(),
+          (supabase.from('accounts' as any) as any)
+            .select('id, plan_code')
+            .eq('user_id', currentUser.id)
+            .maybeSingle(),
+          (supabase.from('brands' as any) as any)
+            .select('id')
+            .eq('user_id', currentUser.id)
+            .limit(1),
+        ]);
+
+        const hasBrand = Array.isArray(brandRes.data) && brandRes.data.length > 0;
+        const hasEstablishedAccount =
+          !!accRes.data?.plan_code &&
+          !!profRes.data?.full_name &&
+          (typeof window !== 'undefined' ? localStorage.getItem('uda_needs_profile_setup') !== 'true' : true);
+
+        const isEstablishedUser = hasCompletedOnboarding || hasBrand || hasEstablishedAccount;
+
+        if (isEstablishedUser) {
+          if (isMounted) {
+            setAccessDenied({ denied: true, reason: 'already_registered' });
+            setIsReady(true);
+          }
+          return;
+        }
+
+        // 4. JIKA PENGGUNA BARU YANG SAH:
+        if (isMounted) {
+          setAccessDenied({ denied: false, reason: null });
 
           const googleName =
             currentUser.user_metadata?.full_name ||
@@ -173,7 +170,6 @@ export default function ProfilAwalPage() {
             '';
           setFullName((prev) => (prev ? prev : googleName));
 
-          // Hanya gunakan avatar_url jika bukan string kosong atau invalid
           const rawPhoto =
             profile?.avatar_url ||
             currentUser.user_metadata?.avatar_url ||
@@ -548,6 +544,133 @@ export default function ProfilAwalPage() {
         }}
       >
         <Loader2 size={36} className="animate-spin" style={{ color: '#16a34a' }} />
+      </div>
+    );
+  }
+
+  // ==========================================
+  // TAMPILAN ERROR 403: TOLAK AKSES JIKA BUKAN PENGGUNA BARU
+  // ==========================================
+  if (accessDenied.denied) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          backgroundColor: '#f8fafc',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20,
+          textAlign: 'center',
+        }}
+      >
+        <div
+          className="uda-card"
+          style={{
+            maxWidth: 480,
+            width: '100%',
+            padding: '44px 32px',
+            border: '2.5px solid #0f172a',
+            boxShadow: '5px 5px 0px #0f172a',
+            borderRadius: 18,
+            backgroundColor: '#ffffff',
+          }}
+        >
+          <div
+            style={{
+              fontSize: '5rem',
+              fontWeight: 900,
+              color: '#dc2626',
+              lineHeight: 1,
+              letterSpacing: '-0.04em',
+            }}
+          >
+            403
+          </div>
+
+          <div
+            style={{
+              display: 'inline-block',
+              padding: '4px 14px',
+              backgroundColor: '#fee2e2',
+              color: '#991b1b',
+              border: '1.5px solid #0f172a',
+              borderRadius: 999,
+              fontWeight: 800,
+              fontSize: '0.78rem',
+              margin: '16px 0 10px',
+              boxShadow: '1.5px 1.5px 0px #0f172a',
+            }}
+          >
+            Akses Ditolak • Khusus Pengguna Baru
+          </div>
+
+          <h1
+            style={{
+              fontSize: '1.45rem',
+              fontWeight: 900,
+              color: '#0f172a',
+              margin: '8px 0 10px',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            403 - Akses Ditolak
+          </h1>
+
+          <p
+            style={{
+              color: '#64748b',
+              fontSize: '0.9rem',
+              lineHeight: 1.6,
+              marginBottom: 28,
+            }}
+          >
+            {accessDenied.reason === 'unauthenticated'
+              ? 'Halaman ini hanya dapat diakses oleh pengguna baru saat proses pendaftaran awal. Anda belum masuk ke sistem UdaPlanner.'
+              : accessDenied.reason === 'admin'
+              ? 'Halaman pengaturan profil awal ini khusus untuk pengguna baru. Akun Administrator tidak memerlukan tahapan ini.'
+              : 'Halaman ini hanya dapat diakses oleh pengguna baru saat pendaftaran awal. Akun Anda telah aktif dan terdaftar di sistem UdaPlanner.'}
+          </p>
+
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {accessDenied.reason === 'unauthenticated' ? (
+              <>
+                <Link
+                  href="/daftar"
+                  className="btn-camply-dark"
+                  style={{ textDecoration: 'none', padding: '10px 22px', fontSize: '0.88rem' }}
+                >
+                  Daftar Akun Baru
+                </Link>
+                <Link
+                  href="/masuk"
+                  className="btn-camply-outline"
+                  style={{ textDecoration: 'none', padding: '10px 20px', fontSize: '0.88rem' }}
+                >
+                  Masuk ke Akun
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href={accessDenied.reason === 'admin' ? '/admin' : '/app'}
+                  className="btn-camply-dark"
+                  style={{ textDecoration: 'none', padding: '10px 22px', fontSize: '0.88rem' }}
+                >
+                  {accessDenied.reason === 'admin' ? 'Beralih ke Panel Admin' : 'Kembali ke Dashboard Aplikasi'}
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="btn-camply-outline"
+                  style={{ padding: '10px 20px', fontSize: '0.88rem', cursor: 'pointer' }}
+                >
+                  Keluar / Ganti Akun
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     );
   }

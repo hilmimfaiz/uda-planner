@@ -59,8 +59,8 @@ export async function middleware(request: NextRequest) {
       (c) => c.name.includes('-auth-token') || c.name === 'uda_auth_token'
     );
 
-    // Jika menuju area aplikasi tapi sama sekali tidak ada cookie auth, redirect instan
-    if (isProtectedArea && !hasAuthCookie) {
+    // Jika menuju area aplikasi pengguna (/app) tapi sama sekali tidak ada cookie auth, redirect instan ke /masuk
+    if (pathname.startsWith('/app') && !hasAuthCookie) {
       const url = request.nextUrl.clone();
       url.pathname = '/masuk';
       url.searchParams.set('redirect', pathname);
@@ -78,7 +78,7 @@ export async function middleware(request: NextRequest) {
       .catch(() => ({ data: { session: null } }));
     const user = session?.user ?? null;
 
-    if (!user && isProtectedArea) {
+    if (!user && pathname.startsWith('/app')) {
       // Jika cookie auth ada, jangan langsung redirect ke /masuk di middleware agar client-side auth guard yang memverifikasi
       if (hasAuthCookie) {
         return supabaseResponse;

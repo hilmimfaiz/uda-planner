@@ -172,13 +172,6 @@ export default function AdminLayout({
     });
   };
 
-  // Guard: cek login
-  useEffect(() => {
-    if (!isLoading && !user) {
-      router.push(`/masuk?redirect=${encodeURIComponent(pathname)}`);
-    }
-  }, [isLoading, user, pathname, router]);
-
   const adminNav = [
     { name: "Ringkasan", href: "/admin", icon: LayoutDashboard },
     {
@@ -224,8 +217,103 @@ export default function AdminLayout({
     );
   }
 
+  // 1. KONDISI BELUM LOGIN: TOLAK AKSES DENGAN NOMOR ERROR 403
   if (!user) {
-    return null;
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#f8fafc",
+          padding: 24,
+          textAlign: "center",
+        }}
+      >
+        <div
+          className="uda-card"
+          style={{
+            maxWidth: 480,
+            width: "100%",
+            padding: "44px 32px",
+            border: "2.5px solid #0f172a",
+            boxShadow: "5px 5px 0px #0f172a",
+            borderRadius: 18,
+            backgroundColor: "#ffffff",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "5rem",
+              fontWeight: 900,
+              color: "#dc2626",
+              lineHeight: 1,
+              letterSpacing: "-0.04em",
+            }}
+          >
+            403
+          </div>
+
+          <div
+            style={{
+              display: "inline-block",
+              padding: "4px 14px",
+              backgroundColor: "#fee2e2",
+              color: "#991b1b",
+              border: "1.5px solid #0f172a",
+              borderRadius: 999,
+              fontWeight: 800,
+              fontSize: "0.78rem",
+              margin: "16px 0 10px",
+              boxShadow: "1.5px 1.5px 0px #0f172a",
+            }}
+          >
+            Akses Ditolak • Belum Login
+          </div>
+
+          <h1
+            style={{
+              fontSize: "1.45rem",
+              fontWeight: 900,
+              color: "#0f172a",
+              margin: "8px 0 10px",
+              letterSpacing: "-0.02em",
+            }}
+          >
+            403 - Akses Ditolak
+          </h1>
+
+          <p
+            style={{
+              color: "#64748b",
+              fontSize: "0.9rem",
+              lineHeight: 1.6,
+              marginBottom: 28,
+            }}
+          >
+            Halaman Panel Administrator ini hanya dapat diakses oleh Administrator Sistem yang telah masuk. Anda belum melakukan login ke dalam sistem.
+          </p>
+
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <Link
+              href={`/masuk?redirect=${encodeURIComponent(pathname)}`}
+              className="btn-camply-dark"
+              style={{ textDecoration: "none", padding: "10px 22px", fontSize: "0.88rem" }}
+            >
+              Masuk sebagai Admin
+            </Link>
+            <Link
+              href="/"
+              className="btn-camply-outline"
+              style={{ textDecoration: "none", padding: "10px 20px", fontSize: "0.88rem" }}
+            >
+              Kembali ke Beranda
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const userEmail = (user?.email || '').toLowerCase().trim();
@@ -237,7 +325,7 @@ export default function AdminLayout({
     userEmail.startsWith('admin@') ||
     account?.role === 'admin';
 
-  // Jika bukan admin, tolak akses dan tampilkan tombol kembali ke aplikasi pengguna
+  // 2. KONDISI TERLOGIN USER BIASA: TOLAK AKSES DENGAN NOMOR ERROR 403
   if (!effectiveIsAdmin) {
     return (
       <div
@@ -248,62 +336,108 @@ export default function AdminLayout({
           justifyContent: "center",
           background: "#f8fafc",
           padding: 24,
+          textAlign: "center",
         }}
       >
         <div
           className="uda-card"
-          style={{ maxWidth: 480, textAlign: "center", padding: 36 }}
+          style={{
+            maxWidth: 480,
+            width: "100%",
+            padding: "44px 32px",
+            border: "2.5px solid #0f172a",
+            boxShadow: "5px 5px 0px #0f172a",
+            borderRadius: 18,
+            backgroundColor: "#ffffff",
+          }}
         >
           <div
             style={{
-              width: 56,
-              height: 56,
-              borderRadius: "50%",
-              background: "#fef2f2",
+              fontSize: "5rem",
+              fontWeight: 900,
               color: "#dc2626",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 16px",
+              lineHeight: 1,
+              letterSpacing: "-0.04em",
             }}
           >
-            <AlertTriangle size={28} />
+            403
           </div>
-          <h2
+
+          <div
             style={{
-              fontSize: "1.3rem",
+              display: "inline-block",
+              padding: "4px 14px",
+              backgroundColor: "#fee2e2",
+              color: "#991b1b",
+              border: "1.5px solid #0f172a",
+              borderRadius: 999,
               fontWeight: 800,
-              color: "#0f172a",
-              marginBottom: 8,
+              fontSize: "0.78rem",
+              margin: "16px 0 10px",
+              boxShadow: "1.5px 1.5px 0px #0f172a",
             }}
           >
-            Akses Khusus Administrator
-          </h2>
+            Akses Ditolak • Khusus Administrator
+          </div>
+
+          <h1
+            style={{
+              fontSize: "1.45rem",
+              fontWeight: 900,
+              color: "#0f172a",
+              margin: "8px 0 10px",
+              letterSpacing: "-0.02em",
+            }}
+          >
+            403 - Akses Ditolak
+          </h1>
+
           <p
             style={{
               color: "#64748b",
-              fontSize: "0.88rem",
-              lineHeight: 1.5,
-              marginBottom: 24,
+              fontSize: "0.9rem",
+              lineHeight: 1.6,
+              marginBottom: 28,
             }}
           >
-            Akun Anda (<strong>{user?.email || "Akun Anda"}</strong>) terdaftar
-            sebagai Pengguna Standar. Halaman ini hanya dapat diakses oleh
-            Administrator Sistem UdaPlanner.
+            Akun Anda (<strong>{user?.email || "Akun Pengguna"}</strong>) terdaftar sebagai Pengguna Standar. Halaman ini memiliki proteksi khusus dan hanya dapat diakses oleh Administrator Sistem UdaPlanner.
           </p>
-          <button
-            className="btn-uda btn-uda-primary"
-            onClick={() => router.push("/app")}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              margin: "0 auto",
-            }}
-          >
-            <ArrowLeft size={16} />
-            <span>Kembali ke Halaman Aplikasi</span>
-          </button>
+
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <button
+              className="btn-camply-dark"
+              onClick={() => router.push("/app")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "10px 22px",
+                fontSize: "0.88rem",
+                cursor: "pointer",
+              }}
+            >
+              <ArrowLeft size={16} />
+              <span>Kembali ke Halaman Aplikasi</span>
+            </button>
+            <button
+              className="btn-camply-outline"
+              onClick={async () => {
+                await signOut();
+                window.location.href = "/masuk?logout=true";
+              }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "10px 20px",
+                fontSize: "0.88rem",
+                cursor: "pointer",
+              }}
+            >
+              <LogOut size={16} />
+              <span>Ganti Akun</span>
+            </button>
+          </div>
         </div>
       </div>
     );
