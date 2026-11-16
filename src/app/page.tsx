@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { PlanService, DynamicPlan } from '@/services/plan.service';
 import { AdminService } from '@/services/admin.service';
+import { createClient } from '@/lib/supabase/client';
 import LandingPhoneMockup from '@/components/landing-phone-mockup';
 
 export default function LandingPage() {
@@ -45,16 +46,61 @@ export default function LandingPage() {
   const [inquiryError, setInquiryError] = useState<string | null>(null);
 
   useEffect(() => {
-    PlanService.getActivePlans().then((data) => {
-      if (data && data.length > 0) {
-        setPlans(data);
-        const initialDurIdx: Record<string, number> = {};
-        data.forEach((p) => {
-          initialDurIdx[p.code] = 0;
-        });
-        setSelectedDurationIndex(initialDurIdx);
+    const refreshPlans = () => {
+      PlanService.getActivePlans().then((data) => {
+        if (data && data.length > 0) {
+          setPlans(data);
+          setSelectedDurationIndex((prev) => {
+            const next = { ...prev };
+            data.forEach((p) => {
+              if (next[p.code] === undefined) next[p.code] = 0;
+            });
+            return next;
+          });
+        }
+      });
+    };
+
+    refreshPlans();
+
+    const supabase = createClient();
+    let plansChannel: any = null;
+    if (supabase) {
+      plansChannel = supabase
+        .channel('landing_plans_room')
+        .on('broadcast', { event: 'plan_updated' }, () => {
+          refreshPlans();
+        })
+        .subscribe();
+    }
+
+    const handlePlansUpdated = (e?: any) => {
+      if (e?.detail && Array.isArray(e.detail)) {
+        const active = e.detail
+          .filter((p: any) => p.isActive)
+          .map((p: any) => ({
+            ...p,
+            durations: (p.durations || []).filter((d: any) => d.isActive).sort((a: any, b: any) => a.sortOrder - b.sortOrder),
+          }))
+          .sort((a: any, b: any) => a.sortOrder - b.sortOrder);
+        setPlans(active);
+      } else {
+        refreshPlans();
       }
-    });
+    };
+
+    window.addEventListener('uda_plans_updated', handlePlansUpdated);
+    window.addEventListener('storage', refreshPlans);
+
+    return () => {
+      window.removeEventListener('uda_plans_updated', handlePlansUpdated);
+      window.removeEventListener('storage', refreshPlans);
+      if (plansChannel && supabase) {
+        try {
+          supabase.removeChannel(plansChannel);
+        } catch {}
+      }
+    };
   }, []);
 
   // Animasi reveal saat scroll down / gulir ke bawah

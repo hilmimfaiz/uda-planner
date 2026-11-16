@@ -44,6 +44,7 @@ import {
   formatFullDateTime,
 } from '@/lib/notification-manager';
 import { PostService } from '@/services/post.service';
+import { PlanService } from '@/services/plan.service';
 import { createClient } from '@/lib/supabase/client';
 import { MemberService } from '@/services/member.service';
 
@@ -198,6 +199,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       });
     };
   }, [user?.id, user?.email]);
+
+  // Sinkronisasi Real-Time Global untuk Paket & Variasi Durasi Dinamis
+  useEffect(() => {
+    const supabase = createClient();
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel('global_plans_room')
+      .on('broadcast', { event: 'plan_updated' }, async () => {
+        try {
+          const latest = await PlanService.getAllPlans();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('uda_plans_updated', { detail: latest }));
+            window.dispatchEvent(new Event('storage'));
+          }
+        } catch (e) {
+          console.warn('Realtime global plan_updated sync err:', e);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    };
+  }, []);
 
   // Scheduler Background Pengingat Jadwal Tayang Otomatis
   useEffect(() => {

@@ -602,6 +602,28 @@ export default function LanggananPage() {
           setSelectedBankId((prev) => (bList.some((b) => b.id === prev) ? prev : bList[0].id));
         }
       });
+      PlanService.getActivePlans().then((pList) => {
+        if (pList && pList.length > 0) {
+          setPlans(pList);
+        }
+      });
+    };
+
+    const handlePlansUpdated = (e?: any) => {
+      if (e?.detail && Array.isArray(e.detail)) {
+        const active = e.detail
+          .filter((p: any) => p.isActive)
+          .map((p: any) => ({
+            ...p,
+            durations: (p.durations || []).filter((d: any) => d.isActive).sort((a: any, b: any) => a.sortOrder - b.sortOrder),
+          }))
+          .sort((a: any, b: any) => a.sortOrder - b.sortOrder);
+        setPlans(active);
+      } else {
+        PlanService.getActivePlans().then((pList) => {
+          if (pList && pList.length > 0) setPlans(pList);
+        });
+      }
     };
 
     const handleSettingsUpdate = (e?: any) => {
@@ -614,10 +636,25 @@ export default function LanggananPage() {
       }
     };
 
+    // Sinkronisasi Real-Time Paket & Variasi Durasi dari Admin
+    let plansChannel: any = null;
+    if (supabase) {
+      plansChannel = supabase
+        .channel('plans_room')
+        .on('broadcast', { event: 'plan_updated' }, async () => {
+          const freshPlans = await PlanService.getActivePlans();
+          if (freshPlans && freshPlans.length > 0) {
+            setPlans(freshPlans);
+          }
+        })
+        .subscribe();
+    }
+
     window.addEventListener('storage', handleSync);
     window.addEventListener('uda_account_updated', handleSync);
     window.addEventListener('uda_bank_accounts_updated', handleSync);
     window.addEventListener('uda_settings_updated', handleSettingsUpdate);
+    window.addEventListener('uda_plans_updated', handlePlansUpdated);
     window.addEventListener('focus', handleSync);
 
     // Polling setiap 8 detik saat ada pembayaran pending (mencegah bandwidth berlebih & lag)
@@ -632,7 +669,13 @@ export default function LanggananPage() {
       window.removeEventListener('uda_account_updated', handleSync);
       window.removeEventListener('uda_bank_accounts_updated', handleSync);
       window.removeEventListener('uda_settings_updated', handleSettingsUpdate);
+      window.removeEventListener('uda_plans_updated', handlePlansUpdated);
       window.removeEventListener('focus', handleSync);
+      if (plansChannel && supabase) {
+        try {
+          supabase.removeChannel(plansChannel);
+        } catch {}
+      }
       clearInterval(interval);
     };
   }, [user?.id, user?.email]);
@@ -647,7 +690,8 @@ export default function LanggananPage() {
   // Kalkulasi paket dan nominal yang dipilih
   const currentPlan = plans.find((p) => p.code === selectedPlanCode) || plans[0];
   const activeDurations = currentPlan ? (currentPlan.durations || []).filter((d) => d.isActive) : [];
-  const curDurIdx = currentPlan ? selectedDurationIndex[currentPlan.code] || 0 : 0;
+  const rawDurIdx = currentPlan ? selectedDurationIndex[currentPlan.code] || 0 : 0;
+  const curDurIdx = Math.min(rawDurIdx, Math.max(0, activeDurations.length - 1));
   const currentDuration: PlanDurationItem | undefined = activeDurations[curDurIdx] || activeDurations[0];
 
   const basePrice = currentDuration ? currentDuration.price : (currentPlan?.price || 0);

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client';
 import { DUMMY_PLANS } from '@/lib/dummy-data';
+import { sendRealtimeBroadcast } from '@/lib/realtime';
 
 export interface PlanDurationItem {
   id: string;
@@ -158,7 +159,7 @@ const getStorage = (): DynamicPlan[] => {
   }
 };
 
-const setStorage = (data: DynamicPlan[]) => {
+const setStorage = (data: DynamicPlan[], notify = true) => {
   if (typeof window === 'undefined') return;
   try {
     const cleaned = data.map((p) => ({
@@ -166,6 +167,10 @@ const setStorage = (data: DynamicPlan[]) => {
       durations: cleanDurations(p.durations),
     }));
     localStorage.setItem(STORAGE_PLANS_KEY, JSON.stringify(cleaned));
+    if (notify) {
+      window.dispatchEvent(new CustomEvent('uda_plans_updated', { detail: cleaned }));
+      window.dispatchEvent(new Event('storage'));
+    }
   } catch {}
 };
 
@@ -204,7 +209,7 @@ export class PlanService {
   static async getAllPlans(): Promise<DynamicPlan[]> {
     if (typeof window !== 'undefined') {
       try {
-        const res = await fetch('/api/admin/plans');
+        const res = await fetch(`/api/admin/plans?t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
           const json = await res.json();
           if (json.success && Array.isArray(json.data) && json.data.length > 0) {
@@ -359,6 +364,11 @@ export class PlanService {
     const current = getStorage();
     const updated = [...current, newPlan];
     setStorage(updated);
+    sendRealtimeBroadcast('plans_room', 'plan_updated', {
+      type: 'plan_created',
+      planCode: plan.code,
+      timestamp: Date.now(),
+    }).catch(() => {});
     return newPlan;
   }
 
@@ -411,6 +421,11 @@ export class PlanService {
     const current = getStorage();
     const updated = current.map((p) => (p.code === code ? { ...p, ...updates } : p));
     setStorage(updated);
+    sendRealtimeBroadcast('plans_room', 'plan_updated', {
+      type: 'plan_updated',
+      planCode: code,
+      timestamp: Date.now(),
+    }).catch(() => {});
     return true;
   }
 
@@ -439,6 +454,11 @@ export class PlanService {
               return p;
             });
             setStorage(updated);
+            sendRealtimeBroadcast('plans_room', 'plan_updated', {
+              type: 'duration_added',
+              planCode,
+              timestamp: Date.now(),
+            }).catch(() => {});
             return json.data;
           }
         }
@@ -489,6 +509,11 @@ export class PlanService {
       return p;
     });
     setStorage(updated);
+    sendRealtimeBroadcast('plans_room', 'plan_updated', {
+      type: 'duration_added',
+      planCode,
+      timestamp: Date.now(),
+    }).catch(() => {});
     return newVariant;
   }
 
@@ -538,6 +563,12 @@ export class PlanService {
       return p;
     });
     setStorage(updated);
+    sendRealtimeBroadcast('plans_room', 'plan_updated', {
+      type: 'duration_updated',
+      planCode,
+      durationId,
+      timestamp: Date.now(),
+    }).catch(() => {});
     return true;
   }
 
@@ -576,6 +607,12 @@ export class PlanService {
       return p;
     });
     setStorage(updated);
+    sendRealtimeBroadcast('plans_room', 'plan_updated', {
+      type: 'duration_deleted',
+      planCode,
+      durationId,
+      timestamp: Date.now(),
+    }).catch(() => {});
     return true;
   }
 }

@@ -80,7 +80,10 @@ export async function GET() {
           };
         });
 
-        return NextResponse.json({ success: true, data: dbPlans });
+        return NextResponse.json(
+          { success: true, data: dbPlans },
+          { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' } }
+        );
       }
     }
 
@@ -119,7 +122,10 @@ export async function GET() {
       ],
     }));
 
-    return NextResponse.json({ success: true, data: fallbackPlans });
+    return NextResponse.json(
+      { success: true, data: fallbackPlans },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' } }
+    );
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
