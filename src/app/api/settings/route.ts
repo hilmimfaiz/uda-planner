@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 let cachedSettings = {
   bankName: 'BCA (Bank Central Asia)',
   accountNumber: '8839210928',
@@ -8,7 +10,7 @@ let cachedSettings = {
   adminWhatsapp: '6281234567890',
 };
 
-export async function GET() {
+export async function GET(_req?: NextRequest) {
   try {
     const adminClient = createAdminClient();
     if (adminClient) {
