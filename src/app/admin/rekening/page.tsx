@@ -36,6 +36,8 @@ export default function AdminRekeningPage() {
   const [isActive, setIsActive] = useState(true);
   const [sortOrder, setSortOrder] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -132,6 +134,8 @@ export default function AdminRekeningPage() {
   };
 
   const handleToggleActive = async (acc: BankAccountItem) => {
+    if (togglingId || deletingId) return;
+    setTogglingId(acc.id);
     const nextActive = !acc.isActive;
     // Optimistic update
     setBankAccounts((prev) =>
@@ -149,22 +153,28 @@ export default function AdminRekeningPage() {
         prev.map((b) => (b.id === acc.id ? { ...b, isActive: acc.isActive } : b))
       );
       showError('Gagal Mengubah Status', err?.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setTogglingId(null);
     }
   };
 
   const handleDelete = (acc: BankAccountItem) => {
+    if (deletingId || togglingId) return;
     confirmAction({
       title: 'Hapus Rekening Bank?',
       message: `Apakah Anda yakin ingin menghapus rekening "${acc.bankName} - ${acc.accountNumber}"? Transaksi pembayaran lama yang telah selesai tidak akan terpengaruh.`,
       danger: true,
       confirmText: 'Ya, Hapus',
       onConfirm: async () => {
+        setDeletingId(acc.id);
         try {
           await BankService.deleteBankAccount(acc.id);
           await loadData();
           showSuccess('Rekening Dihapus', `Rekening ${acc.bankName} berhasil dihapus.`);
         } catch (err: any) {
           showError('Gagal Menghapus Rekening', err?.message || 'Terjadi kesalahan sistem.');
+        } finally {
+          setDeletingId(null);
         }
       },
     });
@@ -314,17 +324,43 @@ export default function AdminRekeningPage() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
                 <button
                   onClick={() => handleToggleActive(acc)}
+                  disabled={togglingId === acc.id || deletingId === acc.id}
                   className="btn-uda btn-uda-secondary btn-uda-sm"
-                  style={{ fontSize: '0.78rem', fontWeight: 700 }}
+                  style={{
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    minWidth: 100,
+                    justifyContent: 'center',
+                    opacity: togglingId === acc.id || deletingId === acc.id ? 0.7 : 1,
+                    cursor: togglingId === acc.id || deletingId === acc.id ? 'not-allowed' : 'pointer',
+                  }}
                 >
-                  {acc.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                  {togglingId === acc.id ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Memproses...</span>
+                    </>
+                  ) : (
+                    acc.isActive ? 'Nonaktifkan' : 'Aktifkan'
+                  )}
                 </button>
 
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button
                     onClick={() => openEditModal(acc)}
+                    disabled={togglingId === acc.id || deletingId === acc.id}
                     className="btn-uda btn-uda-secondary btn-uda-sm"
-                    style={{ fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: 4 }}
+                    style={{
+                      fontSize: '0.78rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      opacity: togglingId === acc.id || deletingId === acc.id ? 0.7 : 1,
+                      cursor: togglingId === acc.id || deletingId === acc.id ? 'not-allowed' : 'pointer',
+                    }}
                     title="Edit Rekening"
                   >
                     <Edit2 size={13} />
@@ -333,16 +369,27 @@ export default function AdminRekeningPage() {
 
                   <button
                     onClick={() => handleDelete(acc)}
+                    disabled={togglingId === acc.id || deletingId === acc.id}
                     className="btn-uda btn-uda-sm"
                     style={{
                       fontSize: '0.78rem',
                       backgroundColor: '#fef2f2',
                       color: '#dc2626',
                       border: '1px solid #fecaca',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: 34,
+                      opacity: deletingId === acc.id ? 0.75 : 1,
+                      cursor: deletingId === acc.id || togglingId === acc.id ? 'not-allowed' : 'pointer',
                     }}
                     title="Hapus Rekening"
                   >
-                    <Trash2 size={13} />
+                    {deletingId === acc.id ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={13} />
+                    )}
                   </button>
                 </div>
               </div>
@@ -404,10 +451,11 @@ export default function AdminRekeningPage() {
                 <input
                   type="text"
                   required
+                  disabled={isSaving}
                   placeholder="Contoh: BCA (Bank Central Asia)"
                   value={bankName}
                   onChange={(e) => setBankName(e.target.value)}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none' }}
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none', opacity: isSaving ? 0.7 : 1, backgroundColor: isSaving ? '#f8fafc' : '#ffffff' }}
                 />
               </div>
 
@@ -418,10 +466,11 @@ export default function AdminRekeningPage() {
                 <input
                   type="text"
                   required
+                  disabled={isSaving}
                   placeholder="Contoh: 8839210928"
                   value={accountNumber}
                   onChange={(e) => setAccountNumber(e.target.value)}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none' }}
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none', opacity: isSaving ? 0.7 : 1, backgroundColor: isSaving ? '#f8fafc' : '#ffffff' }}
                 />
               </div>
 
@@ -432,10 +481,11 @@ export default function AdminRekeningPage() {
                 <input
                   type="text"
                   required
+                  disabled={isSaving}
                   placeholder="Contoh: PT. Koding Teknologi Asia"
                   value={accountName}
                   onChange={(e) => setAccountName(e.target.value)}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none' }}
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none', opacity: isSaving ? 0.7 : 1, backgroundColor: isSaving ? '#f8fafc' : '#ffffff' }}
                 />
               </div>
 
@@ -445,10 +495,11 @@ export default function AdminRekeningPage() {
                 </label>
                 <input
                   type="url"
+                  disabled={isSaving}
                   placeholder="https://.../bank-logo.svg"
                   value={logoUrl}
                   onChange={(e) => setLogoUrl(e.target.value)}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none' }}
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none', opacity: isSaving ? 0.7 : 1, backgroundColor: isSaving ? '#f8fafc' : '#ffffff' }}
                 />
               </div>
 
@@ -460,9 +511,10 @@ export default function AdminRekeningPage() {
                   <input
                     type="number"
                     min="1"
+                    disabled={isSaving}
                     value={sortOrder}
                     onChange={(e) => setSortOrder(parseInt(e.target.value) || 1)}
-                    style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none' }}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none', opacity: isSaving ? 0.7 : 1, backgroundColor: isSaving ? '#f8fafc' : '#ffffff' }}
                   />
                 </div>
 
@@ -471,15 +523,41 @@ export default function AdminRekeningPage() {
                     Status Rekening
                   </label>
                   <select
+                    disabled={isSaving}
                     value={isActive ? 'true' : 'false'}
                     onChange={(e) => setIsActive(e.target.value === 'true')}
-                    style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none', backgroundColor: '#ffffff' }}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.88rem', outline: 'none', opacity: isSaving ? 0.7 : 1, backgroundColor: isSaving ? '#f8fafc' : '#ffffff' }}
                   >
                     <option value="true">Aktif (Tampil di Pembayaran)</option>
                     <option value="false">Nonaktif (Disembunyikan)</option>
                   </select>
                 </div>
               </div>
+
+              {isSaving && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    fontSize: '0.82rem',
+                    color: '#16a34a',
+                    fontWeight: 700,
+                    padding: '8px 12px',
+                    backgroundColor: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: 8,
+                  }}
+                >
+                  <Loader2 size={15} className="animate-spin" />
+                  <span>
+                    {editingAccount
+                      ? 'Sedang memproses perubahan data rekening...'
+                      : 'Sedang memproses penambahan rekening bank baru...'}
+                  </span>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
                 <button
@@ -501,12 +579,23 @@ export default function AdminRekeningPage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 6,
-                    flex: '1 1 160px',
+                    gap: 8,
+                    flex: '1 1 180px',
+                    opacity: isSaving ? 0.8 : 1,
+                    cursor: isSaving ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  <span>{editingAccount ? 'Simpan' : 'Tambah Rekening'}</span>
+                  {isSaving ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>{editingAccount ? 'Menyimpan Perubahan...' : 'Menambahkan Rekening...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      {editingAccount ? <Save size={16} /> : <Plus size={16} />}
+                      <span>{editingAccount ? 'Simpan Perubahan' : 'Tambah Rekening'}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
