@@ -355,10 +355,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (accRes.data) {
-        // Jika di DB tercatat 'team' namun plan_until kosong dan tidak ada pembayaran 'team',
-        // itu adalah efek bug brand_members owner lama -> abaikan dan anggap 'free'
+        // Jika di DB tercatat 'team' namun plan_until kosong DAN sudah expired/tidak ada pembayaran,
+        // itu adalah efek bug brand_members owner lama -> abaikan dan anggap 'free'.
+        // PENTING: Jika plan_until ada dan belum berakhir, JANGAN downgrade meski latestApprovedPlan berbeda.
         const rawDbPlan = (accRes.data.plan_code || 'free').toLowerCase();
-        const isStaleOwnerTeamBug = rawDbPlan === 'team' && !accRes.data.plan_until && latestApprovedPlan !== 'team';
+        const dbPlanUntil = accRes.data.plan_until;
+        const dbPlanUntilExpired = dbPlanUntil ? new Date(dbPlanUntil).getTime() < Date.now() : true;
+        const isStaleOwnerTeamBug =
+          rawDbPlan === 'team' &&
+          dbPlanUntilExpired &&        // plan_until kosong ATAU sudah expired
+          latestApprovedPlan !== 'team'; // dan tidak ada approved payment 'team'
         const cleanDbPlan = isStaleOwnerTeamBug ? 'free' : rawDbPlan;
 
         // Prioritas resolusi paket:
@@ -432,9 +438,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        // Jika status terdeteksi 'team' namun bukan dari pembayaran disetujui 'team' (misal dulunya anggota tim):
-        // Pastikan keanggotaan timnya di brand_members memang masih aktif. Jika sudah keluar -> kembalikan ke 'free'!
-        if (resolvedPlan === 'team' && latestApprovedPlan !== 'team') {
+        // Jika status terdeteksi 'team' namun bukan dari pembayaran disetujui 'team':
+        // - Jika plan berasal langsung dari DB (cleanDbPlan === 'team') dan plan_until masih valid -> PERTAHANKAN, skip validasi brand_members (owner team yang bayar manual)
+        // - Jika dari cachedLocal/member invite -> Pastikan keanggotaan timnya di brand_members masih aktif, jika keluar -> free
+        const isTeamFromDbWithValidUntil = cleanDbPlan === 'team' && dbPlanUntil && !dbPlanUntilExpired;
+        if (resolvedPlan === 'team' && latestApprovedPlan !== 'team' && !isTeamFromDbWithValidUntil) {
           let hasActiveTeam = false;
           let checkedSupabase = false;
           if (supabase && currentUser.id) {
@@ -572,7 +580,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        // Validasi fallback: jika 'team' tapi bukan pembayaran disetujui, pastikan keanggotaan aktif
+        // Validasi fallback: jika 'team' tapi bukan dari approved payment dan tidak ada plan_until valid di DB,
+        // pastikan keanggotaan tim masih aktif
         if (fallbackPlan === 'team' && latestApprovedPlan !== 'team') {
           let hasActiveTeam = false;
           let checkedSupabase = false;

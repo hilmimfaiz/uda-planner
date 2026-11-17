@@ -324,9 +324,23 @@ export default function PengaturanBrandDetailPage() {
     BrandService.getUserBrandRole(brandId, user?.id).then((role) => {
       setUserRole(role);
       if (!role) {
-        setIsAccessDenied(true);
+        // Lakukan retry sekali sebelum menetapkan isAccessDenied,
+        // untuk menghindari race condition saat data DB belum siap (skenario network lambat)
+        setTimeout(() => {
+          BrandService.getUserBrandRole(brandId, user?.id).then((retryRole) => {
+            setUserRole(retryRole);
+            if (!retryRole) {
+              setIsAccessDenied(true);
+            }
+            setIsLoadingAuth(false);
+          }).catch(() => {
+            setIsAccessDenied(true);
+            setIsLoadingAuth(false);
+          });
+        }, 1500);
+      } else {
+        setIsLoadingAuth(false);
       }
-      setIsLoadingAuth(false);
     });
 
     BrandService.getBrands(user?.id).then((allBrands) => {
@@ -408,6 +422,15 @@ export default function PengaturanBrandDetailPage() {
       }
     }
   }, [isAccessDenied, user?.id, user?.email, brandId, currentBrand?.name, brandName, refreshUserData]);
+
+  // Safeguard tab pengaturan: jika role bukan Owner dan tab aktif adalah 'pengaturan',
+  // pindahkan ke tab 'profil'. Ditempatkan di useEffect agar TIDAK memicu setState saat render
+  // (yang bisa menyebabkan re-render berbahaya dan race condition isAccessDenied).
+  React.useEffect(() => {
+    if (userRole && userRole !== 'owner' && activeTab === 'pengaturan') {
+      setActiveTab('profil');
+    }
+  }, [userRole, activeTab]);
 
   // Sinkronisasi Real-Time untuk Perubahan Role dan Penghapusan Anggota Tim dari Brand
   React.useEffect(() => {
@@ -1216,12 +1239,6 @@ export default function PengaturanBrandDetailPage() {
 
   const isBrandOwner = userRole === 'owner';
   const isBrandLocked = (account?.plan_code || 'free') === 'free' && isBrandOwner && brandOrderIndex > 0;
-
-  // Safeguard: jika role bukan Owner tapi activeTab masih 'pengaturan' (misal dari state tersimpan),
-  // otomatis pindahkan ke tab 'profil' agar konten pengaturan tidak pernah terlihat oleh non-Owner
-  if (!isBrandOwner && activeTab === 'pengaturan') {
-    setActiveTab('profil');
-  }
 
   if (isBrandLocked) {
     return (

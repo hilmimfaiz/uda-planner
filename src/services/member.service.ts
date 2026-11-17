@@ -342,15 +342,39 @@ export class MemberService {
         await query;
       } catch (e) {}
 
+      // Hanya downgrade ke 'free' jika pengguna BUKAN owner brand yang masih punya langganan aktif.
+      // Periksa apakah masih ada brand yang dimiliki user ini ATAU apakah plan_until di DB masih aktif.
+      // Jika user adalah owner dengan plan berbayar sendiri (plan_until belum expired), jangan downgrade!
       try {
-        await (supabase.from('accounts' as any) as any)
-          .update({
-            plan_code: 'free',
-            plan_until: null,
-            role: 'user',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', userId);
+        const { data: currentAcc } = await (supabase.from('accounts' as any) as any)
+          .select('plan_code, plan_until')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        const hasActivePaidPlan =
+          currentAcc &&
+          currentAcc.plan_code &&
+          currentAcc.plan_code !== 'free' &&
+          currentAcc.plan_until &&
+          new Date(currentAcc.plan_until).getTime() > Date.now();
+
+        // Cek apakah user masih jadi owner di brand lain (maka tidak perlu downgrade)
+        const { data: ownedBrands } = await (supabase.from('brands' as any) as any)
+          .select('id')
+          .eq('owner_id', userId)
+          .limit(1);
+        const isStillBrandOwner = ownedBrands && ownedBrands.length > 0;
+
+        if (!hasActivePaidPlan && !isStillBrandOwner) {
+          await (supabase.from('accounts' as any) as any)
+            .update({
+              plan_code: 'free',
+              plan_until: null,
+              role: 'user',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('user_id', userId);
+        }
       } catch (e) {}
     }
 
@@ -420,14 +444,22 @@ export class MemberService {
           localStorage.setItem('uda_brand_invitations', JSON.stringify(updated));
         }
 
-        // Reset paket di uda_auth_account ke 'free'
+        // Reset paket di uda_auth_account ke 'free' HANYA jika plan yang tersimpan bukan langganan berbayar aktif owner
         const rawAcc = localStorage.getItem('uda_auth_account');
         if (rawAcc) {
           const acc = JSON.parse(rawAcc);
           delete acc.team_member_brand_id;
           delete acc.team_member_brand_name;
-          acc.plan_code = 'free';
-          acc.plan_until = null;
+          // Jangan downgrade jika user adalah pemilik langganan yang masih aktif (plan_until belum expired)
+          const hasActivePaidPlanLocal =
+            acc.plan_code &&
+            acc.plan_code !== 'free' &&
+            acc.plan_until &&
+            new Date(acc.plan_until).getTime() > Date.now();
+          if (!hasActivePaidPlanLocal) {
+            acc.plan_code = 'free';
+            acc.plan_until = null;
+          }
           localStorage.setItem('uda_auth_account', JSON.stringify(acc));
         }
       } catch (e) {}
@@ -445,16 +477,37 @@ export class MemberService {
           },
         })
       );
-      window.dispatchEvent(
-        new CustomEvent('uda_account_updated', {
-          detail: {
-            userId,
-            email: userEmail,
-            planCode: 'free',
-            planUntil: null,
-          },
-        })
-      );
+
+      // Dispatch perubahan plan HANYA jika memang perlu downgrade ke free (cek localStorage terkini)
+      try {
+        const rawAccFinal = localStorage.getItem('uda_auth_account');
+        const accFinal = rawAccFinal ? JSON.parse(rawAccFinal) : null;
+        const finalPlanCode = accFinal?.plan_code || 'free';
+        const finalPlanUntil = accFinal?.plan_until || null;
+        window.dispatchEvent(
+          new CustomEvent('uda_account_updated', {
+            detail: {
+              userId,
+              email: userEmail,
+              planCode: finalPlanCode,
+              planUntil: finalPlanUntil,
+            },
+          })
+        );
+      } catch {
+        // Fallback jika localStorage tidak bisa dibaca
+        window.dispatchEvent(
+          new CustomEvent('uda_account_updated', {
+            detail: {
+              userId,
+              email: userEmail,
+              planCode: 'free',
+              planUntil: null,
+            },
+          })
+        );
+      }
+
       window.dispatchEvent(new CustomEvent('uda_brand_switched', { detail: { brandId: null } }));
       window.dispatchEvent(new Event('storage'));
     }
