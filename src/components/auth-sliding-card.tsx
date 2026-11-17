@@ -460,8 +460,6 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
                   height: 38,
                   borderRadius: 10,
                   objectFit: 'contain',
-                  border: '2px solid #0f172a',
-                  boxShadow: '2px 2px 0px #0f172a',
                 }}
               />
               <span style={{ fontWeight: 900, fontSize: '1.25rem', color: '#0f172a', letterSpacing: '-0.02em' }}>
@@ -779,8 +777,6 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
                   height: 38,
                   borderRadius: 10,
                   objectFit: 'contain',
-                  border: '2px solid #0f172a',
-                  boxShadow: '2px 2px 0px #0f172a',
                 }}
               />
               <span style={{ fontWeight: 900, fontSize: '1.25rem', color: '#0f172a', letterSpacing: '-0.02em' }}>

@@ -335,7 +335,6 @@ export default function LandingPage() {
               height: 38,
               borderRadius: 12,
               objectFit: 'contain',
-              boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)',
               flexShrink: 0,
             }}
           />
@@ -1512,8 +1511,6 @@ export default function LandingPage() {
                   height: 38,
                   borderRadius: 10,
                   objectFit: 'contain',
-                  border: '2px solid #0f172a',
-                  boxShadow: '2.5px 2.5px 0px #0f172a',
                 }}
               />
               <div>
