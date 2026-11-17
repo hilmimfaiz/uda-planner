@@ -592,10 +592,6 @@ export default function DaftarBrandPage() {
                     <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{b.platforms.join(', ')}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Postingan Bulan Ini:</span>
-                    <span style={{ fontWeight: 700, color: '#16a34a' }}>{b.post_count_this_month} konten</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Alur Review:</span>
                     <span style={{ fontWeight: 600, color: b.require_approval ? '#b45309' : '#64748b' }}>
                       {b.require_approval ? 'Wajib Review' : 'Bebas Posting'}
