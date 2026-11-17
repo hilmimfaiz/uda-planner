@@ -86,13 +86,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const effectiveOwnerId = body.ownerId || body.userId || body.accountId || 'acc-001';
-
-    // Validate quota
-    const quotaCheck = await QuotaService.canCreateBrand(effectiveOwnerId);
-    if (!quotaCheck.allowed) {
-      return NextResponse.json({ success: false, error: quotaCheck.message }, { status: 403 });
-    }
+    const effectiveOwnerId = body.ownerId || body.userId || body.accountId || '';
 
     const cleanHandle = (body.handle || body.slug || body.name || '')
       .toLowerCase()
@@ -100,48 +94,59 @@ export async function POST(req: NextRequest) {
       .replace(/[^a-z0-9_.]+/g, '') || 'brand';
 
     const admin = createAdminClient();
-    if (admin && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveOwnerId)) {
-      const insertPayload: any = {
-        owner_id: effectiveOwnerId,
-        name: body.name,
-        handle: cleanHandle,
-        platforms: body.platforms || ['instagram'],
-        color: body.color || '#16A34A',
-        avatar_url: body.avatarUrl || body.avatar_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
-        require_approval: body.requireApproval ?? body.require_approval ?? false,
-        is_archived: false,
-      };
+    if (admin) {
+      let ownerUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveOwnerId) ? effectiveOwnerId : null;
 
-      const { data: newDbBrand, error: insertErr } = await (admin.from('brands' as any) as any)
-        .insert(insertPayload)
-        .select()
-        .single();
+      if (!ownerUuid) {
+        const { data: usersData } = await admin.auth.admin.listUsers({ perPage: 1 });
+        if (usersData?.users && usersData.users.length > 0) {
+          ownerUuid = usersData.users[0].id;
+        }
+      }
 
-      if (!insertErr && newDbBrand) {
-        // Otomatis daftarkan owner di brand_members
-        try {
-          await (admin.from('brand_members' as any) as any).upsert({
-            brand_id: newDbBrand.id,
-            user_id: effectiveOwnerId,
-            role: 'owner',
-          }, { onConflict: 'brand_id,user_id' });
-        } catch {}
+      if (ownerUuid) {
+        const insertPayload: any = {
+          owner_id: ownerUuid,
+          name: body.name,
+          handle: cleanHandle,
+          platforms: body.platforms || ['instagram'],
+          color: body.color || '#16A34A',
+          avatar_url: body.avatarUrl || body.avatar_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
+          require_approval: body.requireApproval ?? body.require_approval ?? false,
+          is_archived: false,
+        };
 
-        return NextResponse.json({
-          success: true,
-          data: {
-            id: newDbBrand.id,
-            owner_id: newDbBrand.owner_id,
-            name: newDbBrand.name,
-            handle: newDbBrand.handle,
-            platforms: newDbBrand.platforms,
-            color: newDbBrand.color,
-            avatar_url: newDbBrand.avatar_url,
-            require_approval: newDbBrand.require_approval,
-            is_archived: newDbBrand.is_archived,
-            post_count_this_month: 0,
-          },
-        }, { status: 201 });
+        const { data: newDbBrand, error: insertErr } = await (admin.from('brands' as any) as any)
+          .insert(insertPayload)
+          .select()
+          .single();
+
+        if (!insertErr && newDbBrand) {
+          // Otomatis daftarkan owner di brand_members
+          try {
+            await (admin.from('brand_members' as any) as any).upsert({
+              brand_id: newDbBrand.id,
+              user_id: ownerUuid,
+              role: 'owner',
+            }, { onConflict: 'brand_id,user_id' });
+          } catch {}
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              id: newDbBrand.id,
+              owner_id: newDbBrand.owner_id,
+              name: newDbBrand.name,
+              handle: newDbBrand.handle,
+              platforms: newDbBrand.platforms,
+              color: newDbBrand.color,
+              avatar_url: newDbBrand.avatar_url,
+              require_approval: newDbBrand.require_approval,
+              is_archived: newDbBrand.is_archived,
+              post_count_this_month: 0,
+            },
+          }, { status: 201 });
+        }
       }
     }
 

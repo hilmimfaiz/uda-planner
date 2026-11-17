@@ -8,7 +8,7 @@ export const isUuid = (val?: string | null): boolean => {
 
 const STORAGE_KEY = 'uda_custom_brands';
 
-const getStoredCustomBrands = (): DummyBrand[] => {
+export const getStoredCustomBrands = (): DummyBrand[] => {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -502,7 +502,16 @@ export class BrandService {
   }
 
   static async getBrands(ownerId?: string): Promise<DummyBrand[]> {
-    const supabase = createClient();
+    let supabase: any = null;
+    if (typeof window === 'undefined') {
+      try {
+        const { createAdminClient } = await import('@/lib/supabase/server');
+        supabase = createAdminClient();
+      } catch {}
+    }
+    if (!supabase) {
+      supabase = createClient();
+    }
     const storedCustom = getStoredCustomBrands();
 
     let finalOwnerId = ownerId;
@@ -533,7 +542,34 @@ export class BrandService {
 
     const brandMap = new Map<string, DummyBrand>();
 
-    if (supabase && isUuid(finalOwnerId)) {
+    // Di browser client, ambil data brand melalui API server /api/brands yang menggunakan Admin Client
+    // untuk melewati kendala RLS pada anon client
+    if (typeof window !== 'undefined' && finalOwnerId && isUuid(finalOwnerId)) {
+      try {
+        const apiRes = await fetch(`/api/brands?ownerId=${finalOwnerId}`);
+        const apiJson = await apiRes.json();
+        if (apiJson.success && Array.isArray(apiJson.data)) {
+          apiJson.data.forEach((b: any) => {
+            brandMap.set(b.id, {
+              id: b.id,
+              owner_id: b.owner_id || finalOwnerId,
+              name: b.name,
+              handle: b.handle || b.slug || b.name.toLowerCase().replace(/[^a-z0-9_.]+/g, ''),
+              platforms: b.platforms || ['instagram'],
+              color: b.color || '#16A34A',
+              avatar_url: b.avatar_url || b.logo_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
+              require_approval: b.require_approval ?? false,
+              is_archived: b.is_archived ?? false,
+              post_count_this_month: 0,
+            });
+          });
+        }
+      } catch (apiErr) {
+        console.warn('BrandService.getBrands API fallback notice:', apiErr);
+      }
+    }
+
+    if (supabase && isUuid(finalOwnerId) && brandMap.size === 0) {
       try {
         // Jalankan query owned brands dan brand_members secara PARALEL
         const [ownedRes, memberRes] = await Promise.all([

@@ -127,6 +127,207 @@ export async function extractVideoThumbnail(videoFile: File | Blob): Promise<str
  * Mengekstrak thumbnail poster frame dan mengompresi payload video ke ukuran rendah (100KB-1MB),
  * serta mendukung tracking progres pembacaan byte real-time (KB/MB).
  */
+/**
+ * Konversi DataURL (base64) ke Blob objek
+ */
+export function dataURLtoBlob(dataurl: string): Blob {
+  const arr = dataurl.split(',');
+  const mime = arr[0].match(/:(.*?);/)![1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
+/**
+ * Upload thumbnail poster ke Supabase Storage via server endpoint /api/upload
+ */
+export async function uploadThumbnailToStorage(dataUrl: string, folder: string = 'thumbnails'): Promise<string> {
+  if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
+  try {
+    const blob = dataURLtoBlob(dataUrl);
+    const fd = new FormData();
+    fd.append('file', blob, `thumb_${Date.now()}.jpg`);
+    fd.append('folder', folder);
+
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: fd,
+    });
+    const json = await res.json();
+    if (json.success && json.data?.publicUrl) {
+      return json.data.publicUrl;
+    }
+  } catch (err) {
+    console.warn('Gagal upload thumbnail video ke storage:', err);
+  }
+  return dataUrl;
+}
+
+/**
+ * Upload video file ke server API /api/upload menggunakan FormData dengan tracking progress XHR
+ */
+export function uploadVideoViaFormData(
+  file: File,
+  folder: string = 'videos',
+  onProgress?: (loaded: number, total: number, percent: number) => void
+): Promise<{ videoUrl: string; thumbnailUrl: string; duration: number }> {
+  return new Promise((resolve, reject) => {
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/upload');
+
+      if (xhr.upload && onProgress) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.min(99, Math.max(5, Math.round((e.loaded / e.total) * 100)));
+            onProgress(e.loaded, e.total, pct);
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const res = JSON.parse(xhr.responseText);
+            if (res.success && res.data?.publicUrl) {
+              if (onProgress) onProgress(file.size, file.size, 100);
+              resolve({
+                videoUrl: res.data.publicUrl,
+                thumbnailUrl: res.data.publicUrl,
+                duration: 15,
+              });
+              return;
+            }
+          } catch {}
+        }
+        reject(new Error(`Upload FormData gagal dengan status ${xhr.status}`));
+      };
+
+      xhr.onerror = () => reject(new Error('XHR error saat upload video ke /api/upload'));
+      xhr.ontimeout = () => reject(new Error('XHR timeout saat upload video ke /api/upload'));
+
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('folder', folder);
+      xhr.send(fd);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
+ * Upload file video ke Supabase Storage secara langsung melalui Signed Upload URL
+ * atau server upload /api/upload dengan tracking progres unggahan byte demi byte secara real-time.
+ */
+export async function uploadVideoToStorage(
+  file: File,
+  folder: string = 'videos',
+  onProgress?: (loaded: number, total: number, percent: number) => void
+): Promise<{ videoUrl: string; thumbnailUrl: string; duration: number }> {
+  if (onProgress) {
+    onProgress(0, file.size, 0);
+  }
+
+  // 1. Ekstrak thumbnail poster frame dan upload ke Supabase Storage agar cover berupa URL publik
+  let thumbnailUrl = '';
+  try {
+    const rawThumb = await extractVideoThumbnail(file);
+    if (rawThumb) {
+      thumbnailUrl = await uploadThumbnailToStorage(rawThumb, 'thumbnails');
+    }
+  } catch {}
+  if (onProgress) {
+    onProgress(Math.round(file.size * 0.05), file.size, 5);
+  }
+
+  // 2. Minta signed upload URL dari server API /api/upload/sign
+  let signedUrl = '';
+  let publicUrl = '';
+  try {
+    const signRes = await fetch('/api/upload/sign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileType: file.type || 'video/mp4',
+        folder,
+      }),
+    });
+
+    const signJson = await signRes.json();
+    if (signJson.success && signJson.data?.signedUrl) {
+      signedUrl = signJson.data.signedUrl;
+      publicUrl = signJson.data.publicUrl;
+    }
+  } catch (err) {
+    console.warn('Gagal meminta signed upload URL, fallback ke server upload:', err);
+  }
+
+  // 3. Jika signed URL berhasil didapatkan, upload langsung ke Supabase Storage via XMLHttpRequest
+  if (signedUrl && publicUrl) {
+    try {
+      const res = await new Promise<{ videoUrl: string; thumbnailUrl: string; duration: number }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', signedUrl);
+        xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
+
+        if (xhr.upload && onProgress) {
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const pct = Math.min(99, Math.max(5, Math.round((e.loaded / e.total) * 100)));
+              onProgress(e.loaded, e.total, pct);
+            }
+          };
+        }
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            if (onProgress) onProgress(file.size, file.size, 100);
+            resolve({
+              videoUrl: publicUrl,
+              thumbnailUrl: thumbnailUrl || publicUrl,
+              duration: 15,
+            });
+          } else {
+            reject(new Error(`Storage PUT status ${xhr.status}`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Storage PUT XHR network error'));
+        xhr.ontimeout = () => reject(new Error('Storage PUT XHR timeout'));
+
+        xhr.send(file);
+      });
+      return res;
+    } catch (xhrErr) {
+      console.warn('Direct signed upload PUT failed, fallback to /api/upload FormData:', xhrErr);
+    }
+  }
+
+  // 4. Fallback ke /api/upload via FormData (Server-side Storage Upload)
+  try {
+    const formRes = await uploadVideoViaFormData(file, folder, onProgress);
+    return {
+      ...formRes,
+      thumbnailUrl: thumbnailUrl || formRes.videoUrl,
+    };
+  } catch (formErr) {
+    console.warn('FormData upload failed, fallback to compressVideoFast:', formErr);
+  }
+
+  // 5. Fallback darurat jika seluruh jalur jaringan gagal
+  const localRes = await compressVideoFast(file, onProgress);
+  return {
+    ...localRes,
+    thumbnailUrl: thumbnailUrl || localRes.thumbnailUrl,
+  };
+}
+
 export async function compressVideoFast(
   file: File,
   onProgress?: (loaded: number, total: number, percent: number) => void

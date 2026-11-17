@@ -26,7 +26,7 @@ import {
   LayoutGrid,
   Play,
 } from 'lucide-react';
-import { compressImageToBase64, compressVideoFast, isMediaVideo, toPlayableVideoUrl } from '@/lib/image-upload';
+import { compressImageToBase64, compressVideoFast, uploadVideoToStorage, isMediaVideo, toPlayableVideoUrl } from '@/lib/image-upload';
 import { DUMMY_BRANDS, DUMMY_SNIPPETS, DummyPost, DummyBrand, DummySnippet } from '@/lib/dummy-data';
 import { PLATFORMS, CONTENT_TYPES, POST_STATUSES } from '@/lib/platforms';
 import { PostService } from '@/services/post.service';
@@ -128,6 +128,7 @@ export default function PostEditorDetailPage() {
   const isReviewer = userRole === 'reviewer';
   const isViewer = userRole === 'viewer';
   const canEditContent = isOwner || isEditor;
+  const canEditNotes = isOwner || isEditor || isReviewer;
   const canDelete = isOwner;
   const canReview = isOwner || isReviewer;
   const isReadOnly = !canEditContent;
@@ -323,7 +324,7 @@ export default function PostEditorDetailPage() {
         setDirectBlobUrl(nativeBlobUrl);
 
         // Kompresi cepat & ekstraksi thumbnail poster instan dengan progress update
-        const { videoUrl, thumbnailUrl } = await compressVideoFast(file, (loaded, total, percent) => {
+        const { videoUrl, thumbnailUrl } = await uploadVideoToStorage(file, 'videos', (loaded, total, percent) => {
           targetLoaded = Math.max(targetLoaded, loaded);
           targetPercent = Math.max(targetPercent, percent);
         });
@@ -666,6 +667,41 @@ export default function PostEditorDetailPage() {
   };
 
   const handleSavePost = async () => {
+    if (isReviewer) {
+      if (isNew) {
+        showError('Akses Ditolak', 'Peran Reviewer hanya dapat mereview postingan yang sudah ada.');
+        return;
+      }
+      setIsSaving(true);
+      setSavingProgress(35);
+      try {
+        const updated = await PostService.updatePost(
+          post.id,
+          {
+            notes: post.notes,
+            status: post.status,
+            posted_at: post.posted_at,
+          },
+          user?.id
+        );
+        setSavingProgress(100);
+        await new Promise((r) => setTimeout(r, 200));
+        if (updated) {
+          setPost(updated);
+        }
+        showSuccess(
+          'Catatan Berhasil Disimpan!',
+          'Catatan internal/revisi berhasil disimpan dan dapat dilihat oleh Owner, Editor, dan Viewer.'
+        );
+      } catch (err: any) {
+        showError('Gagal Menyimpan Catatan', err.message || 'Terjadi kesalahan sistem.');
+      } finally {
+        setIsSaving(false);
+        setSavingProgress(0);
+      }
+      return;
+    }
+
     if (brands.length === 0) {
       showError(
         'Belum Memiliki Brand',
@@ -733,7 +769,7 @@ export default function PostEditorDetailPage() {
           }
         );
       } else {
-        const updated = await PostService.updatePost(post.id, finalPayload);
+        const updated = await PostService.updatePost(post.id, finalPayload, user?.id);
         clearInterval(saveProgressTimer);
         setSavingProgress(100);
         await new Promise((r) => setTimeout(r, 280));
@@ -1108,7 +1144,7 @@ END:VCALENDAR`;
             </button>
           )}
 
-          {canEditContent && (
+          {(canEditContent || isReviewer) && (
             <button
               className="btn-uda btn-uda-primary btn-uda-sm post-editor-btn-submit"
               onClick={handleSavePost}
@@ -1169,7 +1205,7 @@ END:VCALENDAR`;
                   </span>
                 </>
               ) : (
-                <span>{isNew ? 'Buat Postingan' : 'Simpan Perubahan'}</span>
+                <span>{isNew ? 'Buat Postingan' : isReviewer ? 'Simpan Catatan' : 'Simpan Perubahan'}</span>
               )}
             </button>
           )}
@@ -2059,15 +2095,15 @@ END:VCALENDAR`;
             <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Catatan Internal / Revisi</label>
             <textarea
               value={post.notes || ''}
-              readOnly={isReadOnly}
+              readOnly={!canEditNotes}
               onChange={(e) => setPost({ ...post, notes: e.target.value })}
-              placeholder="Catatan untuk tim atau penanggung jawab..."
+              placeholder={isReviewer ? 'Masukkan catatan revisi atau instruksi untuk Owner/Editor...' : 'Catatan untuk tim atau penanggung jawab...'}
               style={{
                 flex: 1,
                 width: '100%',
                 minHeight: 140,
                 padding: '12px 14px',
-                border: '1px solid #e2e8f0',
+                border: `1px solid ${isReviewer ? '#818cf8' : '#e2e8f0'}`,
                 borderRadius: 8,
                 fontSize: '0.88rem',
                 outline: 'none',
@@ -2075,8 +2111,8 @@ END:VCALENDAR`;
                 resize: 'vertical',
                 fontFamily: 'inherit',
                 boxSizing: 'border-box',
-                backgroundColor: isReadOnly ? '#f8fafc' : '#ffffff',
-                cursor: isReadOnly ? 'not-allowed' : 'text',
+                backgroundColor: !canEditNotes ? '#f8fafc' : '#ffffff',
+                cursor: !canEditNotes ? 'not-allowed' : 'text',
               }}
             />
           </div>
@@ -2595,6 +2631,72 @@ END:VCALENDAR`;
               <div style={{ padding: '12px 14px', background: '#f8fafc', borderRadius: 8, fontSize: '0.82rem', color: '#64748b', textAlign: 'center' }}>
                 Mode Viewer: Anda hanya memiliki izin membaca status postingan.
               </div>
+            ) : isReviewer ? (
+              /* ===== REVIEWER: Hanya Setujui, Minta Revisi, dan Tandai Sudah Posting ===== */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Tombol Setujui → ubah status ke "siap" dan simpan catatan */}
+                <button
+                  className="btn-uda btn-uda-primary btn-uda-sm"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  disabled={isNew}
+                  title={isNew ? 'Postingan harus ada sebelum disetujui' : 'Setujui postingan — ubah status menjadi Siap Posting'}
+                  onClick={async () => {
+                    if (isNew) return;
+                    setPost((prev) => ({ ...prev, status: 'siap' }));
+                    const updated = await PostService.updatePost(post.id, { status: 'siap', notes: post.notes }, user?.id);
+                    if (updated) setPost(updated);
+                    addAppNotification({
+                      type: 'approved',
+                      message: `Postingan "${post.title || 'Untitled'}" telah disetujui Reviewer dan siap tayang!`,
+                      link: `/app/postingan/${post.id}`,
+                    });
+                    showToast('✅ Postingan disetujui — status diubah ke Siap Posting!');
+                  }}
+                >
+                  Setujui (Siap Posting)
+                </button>
+
+                {/* Tombol Minta Revisi → buka modal catatan */}
+                <button
+                  className="btn-uda btn-uda-danger btn-uda-sm"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  disabled={isNew}
+                  title={isNew ? 'Postingan harus ada sebelum meminta revisi' : 'Kembalikan ke Draft dengan catatan revisi'}
+                  onClick={() => {
+                    if (isNew) return;
+                    setRevisionNote(post.notes || '');
+                    setShowRevisionModal(true);
+                  }}
+                >
+                  Minta Revisi
+                </button>
+
+                {/* Tombol Tandai Sudah Posting */}
+                <button
+                  className="btn-uda btn-uda-primary"
+                  style={{ width: '100%', marginTop: 4, justifyContent: 'center', opacity: isNew ? 0.55 : 1, cursor: isNew ? 'not-allowed' : 'pointer' }}
+                  disabled={isNew}
+                  title={isNew ? 'Postingan harus dibuat terlebih dahulu' : 'Tandai postingan sudah tayang'}
+                  onClick={async () => {
+                    if (isNew) { showToast('⚠️ Silakan buat dan simpan postingan terlebih dahulu.'); return; }
+                    const nowIso = new Date().toISOString();
+                    setPost((prev) => ({ ...prev, status: 'terposting', posted_at: nowIso }));
+                    const updated = await PostService.updatePost(post.id, { status: 'terposting', posted_at: nowIso, notes: post.notes }, user?.id);
+                    if (updated) setPost(updated);
+                    addAppNotification({ type: 'approved', message: `Postingan "${post.title || 'Untitled'}" telah ditandai Sudah Tayang!`, link: `/app/postingan/${post.id}` });
+                    showToast('🎉 Selamat! Postingan telah ditandai Sudah Tayang.');
+                  }}
+                >
+                  <CheckCircle2 size={16} />
+                  <span>Tandai Sudah Posting</span>
+                </button>
+
+                {isNew && (
+                  <p style={{ fontSize: '0.78rem', color: '#64748b', textAlign: 'center', margin: '4px 0 0 0', lineHeight: 1.4 }}>
+                    Tombol ini akan aktif setelah postingan berhasil dibuat &amp; disimpan.
+                  </p>
+                )}
+              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {brand.require_approval && (
@@ -2758,7 +2860,7 @@ END:VCALENDAR`;
       </div>
 
       {/* Tombol Simpan/Buat Cepat untuk Mobile */}
-      {!isReadOnly && (
+      {(!isReadOnly || isReviewer) && (
         <div className="post-editor-mobile-bottom-submit">
           <button
             className="btn-uda btn-uda-primary"

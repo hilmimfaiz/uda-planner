@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/client';
 import { DUMMY_POSTS, DummyPost } from '@/lib/dummy-data';
-import { BrandService, isUuid } from './brand.service';
+import { BrandService, isUuid, getStoredCustomBrands } from './brand.service';
 import { saveMediaToCache, getMediaFromCache } from '@/lib/media-cache';
 
 const STORAGE_KEY = 'uda_custom_posts';
@@ -440,7 +440,21 @@ export class PostService {
     }
     let foundPost: DummyPost | null = null;
 
-    if (supabase && isUuid(id)) {
+    if (typeof window !== 'undefined' && isUuid(id)) {
+      try {
+        const apiRes = await fetch(`/api/posts?id=${id}`);
+        const apiJson = await apiRes.json();
+        if (apiJson.success && apiJson.data) {
+          foundPost = normalizePostMedia(apiJson.data);
+          const currentStored = getStoredPosts();
+          saveStoredPosts([foundPost, ...currentStored.filter((p) => p.id !== id)]);
+        }
+      } catch (apiErr) {
+        console.warn('PostService.getPostById API fetch notice:', apiErr);
+      }
+    }
+
+    if (!foundPost && supabase && isUuid(id)) {
       try {
         const { data, error } = await supabase.from('posts' as any).select('*').eq('id', id).maybeSingle();
         if (!error && data) {
@@ -553,14 +567,16 @@ export class PostService {
 
     // Coba simpan melalui API server /api/posts yang menggunakan Service Role Admin
     // agar seluruh anggota tim dapat melihat postingan secara tersinkronisasi
-    if (typeof window !== 'undefined' && effectiveUserId) {
+    if (typeof window !== 'undefined') {
       try {
+        const targetBrandName = (typeof window !== 'undefined' && getStoredCustomBrands().find((b) => b.id === payload.brand_id)?.name) || '';
         const apiRes = await fetch('/api/posts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...payload,
             brand_id: payload.brand_id,
+            brand_name: targetBrandName,
             user_id: effectiveUserId,
             content_type: payload.content_type || 'feed',
             media_url: primaryMediaUrl,
@@ -578,13 +594,17 @@ export class PostService {
           window.dispatchEvent(new CustomEvent('uda_post_updated', { detail: created }));
           window.dispatchEvent(new Event('storage'));
           return created;
-        } else if (apiRes.status === 403) {
-          throw new Error(apiJson.error || 'Akses Ditolak: Anda tidak memiliki izin untuk membuat postingan pada brand ini.');
         } else {
           console.warn('API /api/posts notice:', apiJson?.error);
+          if (apiJson?.error) {
+            throw new Error(apiJson.error);
+          }
         }
-      } catch (apiErr) {
-        console.warn('PostService.createPost API notice, fallback to direct db:', apiErr);
+      } catch (apiErr: any) {
+        console.warn('PostService.createPost API notice:', apiErr);
+        if (apiErr?.message && !apiErr.message.includes('fetch')) {
+          throw apiErr;
+        }
       }
     }
 
@@ -702,33 +722,33 @@ export class PostService {
     if (role === 'viewer') {
       throw new Error('Akses Ditolak: Peran Viewer hanya memiliki hak baca dan tidak dapat mengubah isi postingan.');
     }
+    let effectiveUpdates = { ...updates };
     if (role === 'reviewer') {
-      const allowedKeys = ['status', 'notes', 'id', 'userId', 'brand_id'];
-      const attemptedKeys = Object.keys(updates);
-      const invalidKeys = attemptedKeys.filter((k) => !allowedKeys.includes(k));
-      if (invalidKeys.length > 0) {
-        throw new Error('Akses Ditolak: Peran Reviewer tidak dapat mengubah isi konten (judul, caption, media). Anda hanya dapat menyetujui jadwal atau memberikan catatan revisi.');
-      }
+      const sanitizedUpdates: Partial<DummyPost> = {};
+      if (updates.status !== undefined) sanitizedUpdates.status = updates.status;
+      if (updates.notes !== undefined) sanitizedUpdates.notes = updates.notes;
+      if (updates.posted_at !== undefined) sanitizedUpdates.posted_at = updates.posted_at;
+      effectiveUpdates = sanitizedUpdates;
     }
 
-    if (updates.brand_id && basePost?.brand_id && updates.brand_id !== basePost.brand_id) {
-      const newRole = await BrandService.getUserBrandRole(updates.brand_id, userId);
+    if (effectiveUpdates.brand_id && basePost?.brand_id && effectiveUpdates.brand_id !== basePost.brand_id) {
+      const newRole = await BrandService.getUserBrandRole(effectiveUpdates.brand_id, userId);
       if (!newRole || newRole === 'viewer') {
         throw new Error('Akses Ditolak: Anda tidak memiliki hak akses untuk memindahkan postingan ke brand tersebut.');
       }
     }
 
     const resolvedMediaUrls =
-      updates.media_urls !== undefined
-        ? updates.media_urls.filter(Boolean)
-        : updates.media_url !== undefined
-        ? updates.media_url
-          ? [updates.media_url]
+      effectiveUpdates.media_urls !== undefined
+        ? effectiveUpdates.media_urls.filter(Boolean)
+        : effectiveUpdates.media_url !== undefined
+        ? effectiveUpdates.media_url
+          ? [effectiveUpdates.media_url]
           : []
         : basePost?.media_urls || (basePost?.media_url ? [basePost.media_url] : []);
 
-    const primaryMediaUrl = resolvedMediaUrls[0] || (updates.media_url !== undefined ? updates.media_url : basePost?.media_url) || '';
-    const primaryCoverUrl = updates.cover_url !== undefined ? updates.cover_url : (basePost?.cover_url || '');
+    const primaryMediaUrl = resolvedMediaUrls[0] || (effectiveUpdates.media_url !== undefined ? effectiveUpdates.media_url : basePost?.media_url) || '';
+    const primaryCoverUrl = effectiveUpdates.cover_url !== undefined ? effectiveUpdates.cover_url : (basePost?.cover_url || '');
 
     if (primaryMediaUrl && primaryMediaUrl.startsWith('data:') && typeof window !== 'undefined') {
       saveMediaToCache('post_media_' + id, primaryMediaUrl);
@@ -738,27 +758,27 @@ export class PostService {
     if (supabase && isUuid(id)) {
       try {
         const dbUpdates: any = {};
-        if (updates.title !== undefined) dbUpdates.title = updates.title;
-        if (updates.caption !== undefined) dbUpdates.caption = updates.caption;
-        if (updates.hashtags !== undefined) {
-          dbUpdates.hashtags = Array.isArray(updates.hashtags) ? updates.hashtags.join(' ') : updates.hashtags;
+        if (effectiveUpdates.title !== undefined) dbUpdates.title = effectiveUpdates.title;
+        if (effectiveUpdates.caption !== undefined) dbUpdates.caption = effectiveUpdates.caption;
+        if (effectiveUpdates.hashtags !== undefined) {
+          dbUpdates.hashtags = Array.isArray(effectiveUpdates.hashtags) ? effectiveUpdates.hashtags.join(' ') : effectiveUpdates.hashtags;
         }
-        if (updates.platforms !== undefined) dbUpdates.platforms = updates.platforms;
-        if (updates.content_type !== undefined) dbUpdates.content_type = updates.content_type;
-        if (updates.status !== undefined) dbUpdates.status = updates.status;
-        if (updates.scheduled_at !== undefined) dbUpdates.scheduled_at = updates.scheduled_at;
-        if (updates.brand_id !== undefined && isUuid(updates.brand_id)) {
-          dbUpdates.brand_id = updates.brand_id;
+        if (effectiveUpdates.platforms !== undefined) dbUpdates.platforms = effectiveUpdates.platforms;
+        if (effectiveUpdates.content_type !== undefined) dbUpdates.content_type = effectiveUpdates.content_type;
+        if (effectiveUpdates.status !== undefined) dbUpdates.status = effectiveUpdates.status;
+        if (effectiveUpdates.scheduled_at !== undefined) dbUpdates.scheduled_at = effectiveUpdates.scheduled_at;
+        if (effectiveUpdates.brand_id !== undefined && isUuid(effectiveUpdates.brand_id)) {
+          dbUpdates.brand_id = effectiveUpdates.brand_id;
         }
-        if (updates.pillar_id !== undefined) {
-          dbUpdates.pillar_id = isUuid(updates.pillar_id || '') ? updates.pillar_id : null;
+        if (effectiveUpdates.pillar_id !== undefined) {
+          dbUpdates.pillar_id = isUuid(effectiveUpdates.pillar_id || '') ? effectiveUpdates.pillar_id : null;
         }
-        if (updates.notes !== undefined || updates.media_url !== undefined || updates.media_urls !== undefined || updates.cover_url !== undefined) {
-          const notesText = updates.notes !== undefined ? updates.notes : (basePost?.notes || '');
+        if (effectiveUpdates.notes !== undefined || effectiveUpdates.media_url !== undefined || effectiveUpdates.media_urls !== undefined || effectiveUpdates.cover_url !== undefined) {
+          const notesText = effectiveUpdates.notes !== undefined ? effectiveUpdates.notes : (basePost?.notes || '');
           dbUpdates.notes = this.embedMediaInNotes(notesText, primaryMediaUrl, resolvedMediaUrls, primaryCoverUrl);
         }
-        if (updates.posted_at !== undefined) dbUpdates.posted_at = updates.posted_at;
-        if (updates.posted_url !== undefined) dbUpdates.posted_url = updates.posted_url;
+        if (effectiveUpdates.posted_at !== undefined) dbUpdates.posted_at = effectiveUpdates.posted_at;
+        if (effectiveUpdates.posted_url !== undefined) dbUpdates.posted_url = effectiveUpdates.posted_url;
         dbUpdates.updated_at = new Date().toISOString();
 
         const { error } = await (supabase.from('posts' as any) as any)
@@ -774,30 +794,32 @@ export class PostService {
 
       if (typeof window !== 'undefined') {
         try {
-          fetch('/api/posts', {
+          await fetch('/api/posts', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, ...updates, media_url: primaryMediaUrl, media_urls: resolvedMediaUrls, cover_url: primaryCoverUrl }),
-          }).catch((err) => console.warn('PATCH /api/posts sync notice:', err));
-        } catch {}
+            body: JSON.stringify({ id, userId, ...effectiveUpdates, media_url: primaryMediaUrl, media_urls: resolvedMediaUrls, cover_url: primaryCoverUrl }),
+          });
+        } catch (patchErr) {
+          console.warn('PATCH /api/posts sync notice:', patchErr);
+        }
       }
     }
 
     const resolvedBase = basePost || {
       id,
-      brand_id: updates.brand_id || 'brand-1',
-      title: updates.title || 'Untitled Post',
-      caption: updates.caption || '',
-      hashtags: updates.hashtags || '',
-      platforms: updates.platforms || ['instagram'],
-      content_type: updates.content_type || 'feed',
-      status: updates.status || 'draft',
-      scheduled_at: updates.scheduled_at || null,
-      pillar_id: updates.pillar_id || null,
-      assignee_id: updates.assignee_id || null,
-      notes: updates.notes || null,
-      posted_at: updates.posted_at || null,
-      posted_url: updates.posted_url || null,
+      brand_id: effectiveUpdates.brand_id || 'brand-1',
+      title: effectiveUpdates.title || 'Untitled Post',
+      caption: effectiveUpdates.caption || '',
+      hashtags: effectiveUpdates.hashtags || '',
+      platforms: effectiveUpdates.platforms || ['instagram'],
+      content_type: effectiveUpdates.content_type || 'feed',
+      status: effectiveUpdates.status || 'draft',
+      scheduled_at: effectiveUpdates.scheduled_at || null,
+      pillar_id: effectiveUpdates.pillar_id || null,
+      assignee_id: effectiveUpdates.assignee_id || null,
+      notes: effectiveUpdates.notes || null,
+      posted_at: effectiveUpdates.posted_at || null,
+      posted_url: effectiveUpdates.posted_url || null,
       media_url: primaryMediaUrl,
       media_urls: resolvedMediaUrls,
       cover_url: primaryCoverUrl,
@@ -807,7 +829,7 @@ export class PostService {
 
     const mergedPost: DummyPost = normalizePostMedia({
       ...resolvedBase,
-      ...updates,
+      ...effectiveUpdates,
       media_url: primaryMediaUrl,
       media_urls: resolvedMediaUrls,
       cover_url: primaryCoverUrl,

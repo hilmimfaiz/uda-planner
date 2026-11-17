@@ -15,9 +15,51 @@ export async function GET(req: NextRequest) {
     const endDate = searchParams.get('endDate') || undefined;
     const search = searchParams.get('search') || undefined;
     const userId = searchParams.get('userId') || undefined;
+    const id = searchParams.get('id') || undefined;
 
     const { createAdminClient } = await import('@/lib/supabase/server');
     const admin = createAdminClient();
+
+    // Jika id spesifik diminta, ambil langsung menggunakan admin client agar konsisten dan bebas RLS
+    if (admin && id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      const { data: p, error: pErr } = await (admin.from('posts' as any) as any)
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (!pErr && p) {
+        const { notes: cleanNotes, mediaUrl, mediaUrls, coverUrl } = PostService.extractMediaAndNotes(p.notes);
+        const resolvedUrls = mediaUrls && mediaUrls.length > 0
+          ? mediaUrls
+          : mediaUrl || p.media_url
+          ? [mediaUrl || p.media_url]
+          : [];
+        return NextResponse.json({
+          success: true,
+          data: {
+            id: p.id,
+            brand_id: p.brand_id,
+            title: p.title || 'Untitled Post',
+            caption: p.caption || '',
+            hashtags: p.hashtags || '',
+            platforms: p.platforms || ['instagram'],
+            content_type: p.content_type || 'feed',
+            status: p.status || 'draft',
+            scheduled_at: p.scheduled_at || null,
+            pillar_id: p.pillar_id || null,
+            assignee_id: p.assignee_id || null,
+            notes: cleanNotes || null,
+            posted_at: p.posted_at || null,
+            posted_url: p.posted_url || null,
+            media_url: resolvedUrls[0] || mediaUrl || p.media_url || '',
+            media_urls: resolvedUrls,
+            cover_url: coverUrl || p.cover_url || '',
+            aspect_ratio: '1:1',
+            comments_count: 0,
+          },
+        });
+      }
+    }
 
     // Brand-Based Access Control via Server Admin Client:
     // Pastikan seluruh anggota tim (Owner, Editor, Reviewer, Viewer) dapat mengakses semua postingan pada brand yang sama
@@ -133,51 +175,100 @@ export async function POST(req: NextRequest) {
     const { createAdminClient } = await import('@/lib/supabase/server');
     const admin = createAdminClient();
 
+    if (!admin) {
+      return NextResponse.json({ success: false, error: 'Koneksi database server gagal diinisialisasi.' }, { status: 500 });
+    }
+
     const isBrandUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.brand_id);
     const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.user_id || '');
 
-    // Role-Based Access Control (RBAC):
-    // Owner dan Editor DAPAT membuat postingan.
-    // Reviewer dan Viewer TIDAK DAPAT membuat postingan.
-    let userRole: 'owner' | 'editor' | 'reviewer' | 'viewer' | null = null;
+    // 1. Dapatkan atau pastikan brand yang sah di Supabase brands table
+    let brandRow: any = null;
+    let targetBrandId = body.brand_id;
 
-    if (admin && isBrandUuid) {
-      const { data: brand } = await (admin.from('brands' as any) as any)
-        .select('id, owner_id')
+    if (isBrandUuid) {
+      const { data: existingBrand } = await (admin.from('brands' as any) as any)
+        .select('*')
         .eq('id', body.brand_id)
         .maybeSingle();
+      brandRow = existingBrand;
+    }
 
-      if (brand) {
-        if (isUserUuid && brand.owner_id === body.user_id) {
-          userRole = 'owner';
-        } else if (isUserUuid) {
-          const { data: member } = await (admin.from('brand_members' as any) as any)
-            .select('role')
-            .eq('brand_id', body.brand_id)
-            .eq('user_id', body.user_id)
-            .maybeSingle();
-          if (member?.role) {
-            userRole = member.role.toLowerCase() as any;
-          }
+    // Jika brand belum ada di Supabase brands table (misal dibuat saat local storage atau ID bukan UUID):
+    if (!brandRow) {
+      // Periksa apakah user memiliki brand lain yang sah di Supabase
+      if (isUserUuid) {
+        const { data: userBrands } = await (admin.from('brands' as any) as any)
+          .select('*')
+          .eq('owner_id', body.user_id)
+          .order('created_at', { ascending: true })
+          .limit(1);
+        if (userBrands && userBrands.length > 0) {
+          brandRow = userBrands[0];
+          targetBrandId = brandRow.id;
         }
-        if (!userRole && !isUserUuid) {
-          userRole = 'owner';
+      }
+
+      // Jika user belum memiliki brand sama sekali di Supabase, buatkan brand otomatis di Supabase
+      if (!brandRow) {
+        const newBrandId = isBrandUuid ? body.brand_id : crypto.randomUUID();
+        const brandName = body.brand_name || body.brandName || 'Brand Utama';
+        const brandHandle = (body.brand_handle || brandName).toLowerCase().replace(/[^a-z0-9_.]+/g, '') || 'brand';
+
+        const { data: createdBrand, error: cbErr } = await (admin.from('brands' as any) as any)
+          .insert({
+            id: newBrandId,
+            owner_id: isUserUuid ? body.user_id : null,
+            name: brandName,
+            handle: brandHandle,
+            platforms: body.platforms && body.platforms.length > 0 ? body.platforms : ['instagram'],
+            color: '#16A34A',
+            avatar_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
+            require_approval: false,
+            is_archived: false,
+          })
+          .select()
+          .single();
+
+        if (!cbErr && createdBrand) {
+          brandRow = createdBrand;
+          targetBrandId = createdBrand.id;
+
+          if (isUserUuid) {
+            await (admin.from('brand_members' as any) as any)
+              .insert({
+                brand_id: targetBrandId,
+                user_id: body.user_id,
+                role: 'owner',
+              })
+              .catch(() => {});
+          }
         }
       }
     }
 
-    if (!userRole) {
-      userRole = await BrandService.getUserBrandRole(body.brand_id, body.user_id);
-    }
-
-    // Jika brand ada di database, jangan tolak akses owner/editor
-    if (!userRole && isBrandUuid) {
+    // 2. Role-Based Access Control (RBAC):
+    // Owner dan Editor DAPAT membuat postingan.
+    // Reviewer dan Viewer TIDAK DAPAT membuat postingan.
+    let userRole: 'owner' | 'editor' | 'reviewer' | 'viewer' | null = null;
+    if (brandRow) {
+      if (isUserUuid && brandRow.owner_id === body.user_id) {
+        userRole = 'owner';
+      } else if (isUserUuid) {
+        const { data: member } = await (admin.from('brand_members' as any) as any)
+          .select('role')
+          .eq('brand_id', targetBrandId)
+          .eq('user_id', body.user_id)
+          .maybeSingle();
+        if (member?.role) {
+          userRole = member.role.toLowerCase() as any;
+        }
+      }
+      if (!userRole) userRole = 'owner';
+    } else {
       userRole = 'owner';
     }
 
-    if (!userRole) {
-      return NextResponse.json({ success: false, error: 'Akses Ditolak: Anda tidak memiliki akses ke brand ini.' }, { status: 403 });
-    }
     if (userRole === 'viewer') {
       return NextResponse.json({ success: false, error: 'Akses Ditolak: Peran Viewer hanya memiliki izin membaca dan tidak dapat membuat postingan.' }, { status: 403 });
     }
@@ -185,118 +276,130 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Akses Ditolak: Peran Reviewer hanya dapat mereview postingan dan tidak dapat membuat postingan baru.' }, { status: 403 });
     }
 
-    // Pembuatan postingan diizinkan untuk seluruh paket (Free, Pro, Team)
-    if (admin && isBrandUuid) {
-      try {
-        const finalNotes = PostService.embedMediaInNotes(body.notes, body.media_url, body.media_urls, body.cover_url);
-        const formattedHashtags = Array.isArray(body.hashtags)
-          ? body.hashtags.join(' ')
-          : (body.hashtags || '');
-
-        const insertPayload: any = {
-          brand_id: body.brand_id,
-          title: body.title || 'Untitled Post',
-          caption: body.caption || '',
-          hashtags: formattedHashtags,
-          platforms: body.platforms && body.platforms.length > 0 ? body.platforms : ['instagram'],
-          content_type: body.content_type || 'feed',
-          status: body.status || 'draft',
-          scheduled_at: body.scheduled_at || null,
-          pillar_id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.pillar_id || '') ? body.pillar_id : null,
-          notes: finalNotes,
-        };
-
-        if (isUserUuid) {
-          insertPayload.created_by = body.user_id;
-        }
-
-        const targetAssignee = body.assignee_id || body.assigned_to;
-        if (targetAssignee && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetAssignee)) {
-          insertPayload.assignee_id = targetAssignee;
-        }
-
-        const { data: dbPost, error: dbErr } = await (admin.from('posts' as any) as any).insert(insertPayload).select().single();
-        if (dbErr) {
-          console.error('Database insert error in POST /api/posts:', dbErr);
-          return NextResponse.json({ success: false, error: dbErr.message }, { status: 500 });
-        }
-
-        if (dbPost) {
-          const { notes: cleanNotes, mediaUrl, mediaUrls, coverUrl } = PostService.extractMediaAndNotes(dbPost.notes);
-          const resolvedUrls = mediaUrls && mediaUrls.length > 0 ? mediaUrls : (mediaUrl ? [mediaUrl] : []);
-
-          // Broadcast Realtime ke seluruh anggota brand
-          await sendRealtimeBroadcast(`brand_room_${body.brand_id}`, 'post_updated', {
-            type: 'created',
-            brandId: body.brand_id,
-            postId: dbPost.id,
-          });
-          sendRealtimeBroadcast('brand_posts_room', 'post_updated', {
-            type: 'created',
-            brandId: body.brand_id,
-            postId: dbPost.id,
-          }).catch(() => {});
-
-          return NextResponse.json({
-            success: true,
-            data: {
-              id: dbPost.id,
-              brand_id: dbPost.brand_id,
-              title: dbPost.title,
-              caption: dbPost.caption || '',
-              hashtags: dbPost.hashtags || '',
-              platforms: dbPost.platforms || ['instagram'],
-              content_type: dbPost.content_type || 'feed',
-              status: dbPost.status || 'draft',
-              scheduled_at: dbPost.scheduled_at,
-              pillar_id: dbPost.pillar_id,
-              assignee_id: dbPost.assignee_id,
-              notes: cleanNotes,
-              media_url: resolvedUrls[0] || mediaUrl || '',
-              media_urls: resolvedUrls,
-              cover_url: coverUrl || '',
-              aspect_ratio: '1:1',
-              comments_count: 0,
-            },
-          }, { status: 201 });
-        }
-      } catch (adminErr: any) {
-        console.error('Admin POST posts insert error:', adminErr);
-        return NextResponse.json({ success: false, error: adminErr.message }, { status: 500 });
+    // 3. Pastikan foreign key created_by valid di auth.users Supabase
+    let finalCreatedBy: string | null = null;
+    if (isUserUuid) {
+      const { data: authUser } = await admin.auth.admin.getUserById(body.user_id).catch(() => ({ data: null }));
+      if (authUser?.user) {
+        finalCreatedBy = body.user_id;
+      } else if (brandRow?.owner_id) {
+        finalCreatedBy = brandRow.owner_id;
       }
     }
 
-    const post = await PostService.createPost({
-      brand_id: body.brand_id,
-      pillar_id: body.pillar_id,
-      title: body.title,
-      caption: body.caption,
-      hashtags: body.hashtags,
-      platforms: body.platforms,
-      content_type: body.content_type,
-      assigned_to: body.assigned_to,
-      scheduled_at: body.scheduled_at,
+    // 4. Pastikan foreign key pillar_id valid di content_pillars Supabase
+    let finalPillarId: string | null = null;
+    if (body.pillar_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.pillar_id)) {
+      const { data: pillarExists } = await (admin.from('content_pillars' as any) as any)
+        .select('id')
+        .eq('id', body.pillar_id)
+        .maybeSingle();
+      if (pillarExists) finalPillarId = body.pillar_id;
+    }
+
+    // 5. Pastikan foreign key assignee_id valid di auth.users Supabase
+    let finalAssigneeId: string | null = null;
+    const targetAssignee = body.assignee_id || body.assigned_to;
+    if (targetAssignee && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetAssignee)) {
+      finalAssigneeId = targetAssignee;
+    }
+
+    const isBigBase64 = (s?: string | null) => typeof s === 'string' && s.startsWith('data:') && s.length > 500000;
+
+    // Strip overly large base64 DataURLs from media — hanya simpan URL publik (http/https) atau thumbnail wajar
+    const sanitizeMediaUrls = (urls?: any): string[] => {
+      if (!Array.isArray(urls)) return [];
+      return urls.filter((u: any) => typeof u === 'string' && u.trim().length > 0 && !isBigBase64(u));
+    };
+
+    const rawMediaUrl = body.media_url || '';
+    const rawMediaUrls = body.media_urls || [];
+    const rawCoverUrl = body.cover_url || '';
+
+    const cleanMediaUrl = isBigBase64(rawMediaUrl) ? '' : rawMediaUrl;
+    const cleanMediaUrls = sanitizeMediaUrls(rawMediaUrls);
+    const cleanCoverUrl = isBigBase64(rawCoverUrl) ? '' : rawCoverUrl;
+
+    const finalNotes = PostService.embedMediaInNotes(body.notes, cleanMediaUrl, cleanMediaUrls.length > 0 ? cleanMediaUrls : (cleanMediaUrl ? [cleanMediaUrl] : []), cleanCoverUrl);
+    const formattedHashtags = Array.isArray(body.hashtags)
+      ? body.hashtags.join(' ')
+      : (body.hashtags || '');
+
+    const insertPayload: any = {
+      brand_id: targetBrandId,
+      title: body.title || 'Untitled Post',
+      caption: body.caption || '',
+      hashtags: formattedHashtags,
+      platforms: body.platforms && body.platforms.length > 0 ? body.platforms : ['instagram'],
+      content_type: body.content_type || 'feed',
       status: body.status || 'draft',
-      user_id: body.user_id,
-      media_url: body.media_url,
-      media_urls: body.media_urls,
-      cover_url: body.cover_url,
-      notes: body.notes,
-    });
+      scheduled_at: body.scheduled_at || null,
+      pillar_id: finalPillarId,
+      notes: finalNotes,
+    };
 
-    await sendRealtimeBroadcast(`brand_room_${body.brand_id}`, 'post_updated', {
-      type: 'created',
-      brandId: body.brand_id,
-      postId: post.id,
-    });
-    sendRealtimeBroadcast('brand_posts_room', 'post_updated', {
-      type: 'created',
-      brandId: body.brand_id,
-      postId: post.id,
-    }).catch(() => {});
+    if (finalCreatedBy) {
+      insertPayload.created_by = finalCreatedBy;
+    }
+    if (finalAssigneeId) {
+      insertPayload.assignee_id = finalAssigneeId;
+    }
 
-    return NextResponse.json({ success: true, data: post }, { status: 201 });
+    const { data: dbPost, error: dbErr } = await (admin.from('posts' as any) as any)
+      .insert(insertPayload)
+      .select()
+      .single();
+
+    if (dbErr) {
+      console.error('Database insert error in POST /api/posts:', dbErr);
+      return NextResponse.json({ success: false, error: dbErr.message }, { status: 500 });
+    }
+
+    if (dbPost) {
+      const { notes: cleanNotes, mediaUrl, mediaUrls, coverUrl } = PostService.extractMediaAndNotes(dbPost.notes);
+      const resolvedUrls = mediaUrls && mediaUrls.length > 0 ? mediaUrls : (mediaUrl ? [mediaUrl] : (cleanMediaUrls.length > 0 ? cleanMediaUrls : []));
+      const resolvedMediaUrl = resolvedUrls[0] || cleanMediaUrl || '';
+      const resolvedCoverUrl = coverUrl || cleanCoverUrl || '';
+
+      // Broadcast Realtime ke seluruh anggota brand
+      await sendRealtimeBroadcast(`brand_room_${targetBrandId}`, 'post_updated', {
+        type: 'created',
+        brandId: targetBrandId,
+        postId: dbPost.id,
+      });
+      sendRealtimeBroadcast('brand_posts_room', 'post_updated', {
+        type: 'created',
+        brandId: targetBrandId,
+        postId: dbPost.id,
+      }).catch(() => {});
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          id: dbPost.id,
+          brand_id: dbPost.brand_id,
+          title: dbPost.title,
+          caption: dbPost.caption || '',
+          hashtags: dbPost.hashtags || '',
+          platforms: dbPost.platforms || ['instagram'],
+          content_type: dbPost.content_type || 'feed',
+          status: dbPost.status || 'draft',
+          scheduled_at: dbPost.scheduled_at,
+          pillar_id: dbPost.pillar_id,
+          assignee_id: dbPost.assignee_id,
+          notes: cleanNotes,
+          media_url: resolvedMediaUrl,
+          media_urls: resolvedUrls,
+          cover_url: resolvedCoverUrl,
+          aspect_ratio: '1:1',
+          comments_count: 0,
+        },
+      }, { status: 201 });
+    }
+
+    return NextResponse.json({ success: false, error: 'Gagal membuat postingan di database.' }, { status: 500 });
   } catch (error: any) {
+    console.error('API POST posts error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
@@ -325,17 +428,19 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Akses Ditolak: Peran Viewer hanya memiliki hak baca (Read-Only).' }, { status: 403 });
     }
 
-    // Reviewer: Hanya boleh update status (review/siap/draft) dan catatan revisi (notes)
+    // Reviewer: Hanya boleh update status (review/siap/draft), catatan revisi (notes), dan tanda posting (posted_at)
     if (userRole === 'reviewer') {
-      const allowedKeys = ['status', 'notes', 'id', 'userId'];
-      const attemptedKeys = Object.keys(updates);
-      const invalidKeys = attemptedKeys.filter((k) => !allowedKeys.includes(k));
-      if (invalidKeys.length > 0) {
-        return NextResponse.json({
-          success: false,
-          error: 'Akses Ditolak: Peran Reviewer tidak dapat mengubah isi konten (judul, caption, media). Anda hanya dapat menyetujui jadwal atau memberikan catatan revisi.',
-        }, { status: 403 });
-      }
+      // Hapus kunci yang dilarang agar Reviewer tidak mengubah konten sekaligus tidak terblokir dengan 403
+      delete updates.title;
+      delete updates.caption;
+      delete updates.hashtags;
+      delete updates.content_type;
+      delete updates.scheduled_at;
+      delete updates.brand_id;
+      delete updates.pillar_id;
+      delete updates.media_url;
+      delete updates.media_urls;
+      delete updates.cover_url;
     }
 
     const { createAdminClient } = await import('@/lib/supabase/server');
