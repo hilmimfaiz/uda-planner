@@ -326,25 +326,19 @@ export default function LandingPage() {
       {/* Top Navbar */}
       <nav className="camply-top-nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div
+          <img
             className="camply-nav-logo-icon"
+            src="/icon.png"
+            alt="UdaPlanner"
             style={{
               width: 38,
               height: 38,
               borderRadius: 12,
-              background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
-              color: '#ffffff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 900,
-              fontSize: '1.25rem',
+              objectFit: 'contain',
               boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)',
               flexShrink: 0,
             }}
-          >
-            U
-          </div>
+          />
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <span className="camply-nav-brand-text" style={{ fontWeight: 800, fontSize: '1.15rem', color: '#0f172a', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
               UdaPlanner
@@ -1510,24 +1504,18 @@ export default function LandingPage() {
           {/* Kolom 1: Brand Logo & Tagline */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-              <div
+              <img
+                src="/icon.png"
+                alt="UdaPlanner"
                 style={{
                   width: 38,
                   height: 38,
                   borderRadius: 10,
-                  backgroundColor: '#ffffff',
-                  color: '#064e3b',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 900,
-                  fontSize: '1.25rem',
+                  objectFit: 'contain',
                   border: '2px solid #0f172a',
                   boxShadow: '2.5px 2.5px 0px #0f172a',
                 }}
-              >
-                U
-              </div>
+              />
               <div>
                 <span style={{ fontWeight: 800, fontSize: '1.25rem', color: '#ffffff', letterSpacing: '-0.02em' }}>
                   UdaPlanner

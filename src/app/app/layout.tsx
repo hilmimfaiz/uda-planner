@@ -908,7 +908,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <aside className={`app-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-brand-header">
           <div className="sidebar-brand-info">
-            <div className="logo-symbol" title="UdaPlanner">U</div>
+            <img src="/icon.png" alt="UdaPlanner" className="logo-symbol" title="UdaPlanner" style={{ width: 36, height: 36, borderRadius: 10, objectFit: 'contain' }} />
             <div className="sidebar-brand-text">
               <div className="logo-text-title">UdaPlanner</div>
               <div className="logo-text-sub">Perencana Konten Sosmed</div>

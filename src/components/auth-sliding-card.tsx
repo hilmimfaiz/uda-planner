@@ -452,24 +452,18 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
                 marginBottom: 8,
               }}
             >
-              <div
+              <img
+                src="/icon.png"
+                alt="UdaPlanner"
                 style={{
                   width: 38,
                   height: 38,
                   borderRadius: 10,
-                  background: '#16a34a',
-                  color: '#ffffff',
+                  objectFit: 'contain',
                   border: '2px solid #0f172a',
                   boxShadow: '2px 2px 0px #0f172a',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 900,
-                  fontSize: '1.2rem',
                 }}
-              >
-                U
-              </div>
+              />
               <span style={{ fontWeight: 900, fontSize: '1.25rem', color: '#0f172a', letterSpacing: '-0.02em' }}>
                 UdaPlanner
               </span>
@@ -777,24 +771,18 @@ export function AuthSlidingCard({ initialMode = 'login' }: AuthSlidingCardProps)
                 marginBottom: 8,
               }}
             >
-              <div
+              <img
+                src="/icon.png"
+                alt="UdaPlanner"
                 style={{
                   width: 38,
                   height: 38,
                   borderRadius: 10,
-                  background: '#16a34a',
-                  color: '#ffffff',
+                  objectFit: 'contain',
                   border: '2px solid #0f172a',
                   boxShadow: '2px 2px 0px #0f172a',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 900,
-                  fontSize: '1.2rem',
                 }}
-              >
-                U
-              </div>
+              />
               <span style={{ fontWeight: 900, fontSize: '1.25rem', color: '#0f172a', letterSpacing: '-0.02em' }}>
                 UdaPlanner
               </span>
