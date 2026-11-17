@@ -56,6 +56,8 @@ export default function AdminDashboardPage() {
   const [allPayments, setAllPayments] = useState<any[]>([]);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // Flag: apakah data payments sudah selesai dimuat dari sumber manapun (bukan hanya awal cache)
+  const [isPaymentsLoaded, setIsPaymentsLoaded] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [approvingPayment, setApprovingPayment] = useState<any | null>(null);
   const [statsData, setStatsData] = useState<{
@@ -78,27 +80,34 @@ export default function AdminDashboardPage() {
         if (statsJson.success && statsJson.data) {
           setStatsData(statsJson.data);
           if (Array.isArray(statsJson.data.allPayments)) {
+            // Set allPayments dari stats API sebagai data awal (akan digantikan oleh AdminService.getPayments di bawah)
             setAllPayments(statsJson.data.allPayments);
             setPendingPayments(statsJson.data.pendingPayments || []);
+            setIsPaymentsLoaded(true);
           }
         }
       }
 
-      // 2. Sinkronkan juga daftar user & payment detail
+      // 2. Sinkronkan juga daftar user & payment detail — ini sumber utama (Single Source of Truth)
       const [paymentsData, usersData] = await Promise.all([
         AdminService.getPayments(),
         AdminService.getAdminUsers(),
       ]);
       if (paymentsData) {
         const cleanPayments = paymentsData.filter((p) => !AdminService.isDummyPayment(p));
+        // allPayments SELALU mencerminkan data nyata dari database — sinkron dengan riwayat transaksi
         setAllPayments(cleanPayments);
         setPendingPayments(cleanPayments.filter((p) => p.status === 'pending'));
       }
+      // Tandai payments sudah selesai dimuat dari sumber utama (database)
+      setIsPaymentsLoaded(true);
       if (usersData) {
         setAdminUsers(usersData);
       }
     } catch (err) {
       console.warn('fetchDashboardStats error:', err);
+      // Jika fetch gagal total, tetap tandai loaded agar UI tidak terjebak di skeleton
+      setIsPaymentsLoaded(true);
     } finally {
       setIsLoading(false);
     }
@@ -131,6 +140,8 @@ export default function AdminDashboardPage() {
     if (cachedPays.length > 0) {
       setAllPayments(cachedPays);
       setPendingPayments(cachedPays.filter((p) => p.status === 'pending'));
+      // Cache sudah ada → tandai loaded agar total pemasukan langsung muncul
+      setIsPaymentsLoaded(true);
     }
     if (cachedUsers.length > 0) {
       setAdminUsers(cachedUsers);
@@ -273,16 +284,30 @@ export default function AdminDashboardPage() {
   const freeUsersCount = statsData ? statsData.freeUsersCount : adminUsers.filter((u) => u.plan === 'free').length;
   const pendingCount = statsData ? statsData.pendingPaymentsCount : pendingPayments.length;
   const unverifiedCount = statsData ? statsData.unverifiedEmailCount : Math.max(0, adminUsers.filter((u) => !u.isEmailVerified).length);
-  const totalApprovedRevenue = statsData ? statsData.totalApprovedRevenue : allPayments
-    .filter((p) => p.status === 'approved')
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
-  const approvedTransactionsCount = statsData ? statsData.approvedTransactionsCount : allPayments.filter((p) => p.status === 'approved').length;
 
-  const formattedRevenue = new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    maximumFractionDigits: 0,
-  }).format(totalApprovedRevenue || 0);
+  // Total pemasukan & jumlah transaksi dihitung LANGSUNG dari allPayments state (bukan dari statsData cache)
+  // Ini memastikan kartu "Total Pemasukan Diverifikasi" selalu 100% sinkron dengan daftar riwayat transaksi:
+  // - Jika riwayat kosong → allPayments kosong → total = 0, tampilkan "Belum ada transaksi"
+  // - Jika ada transaksi approved → jumlahkan amount-nya secara real-time
+  // - Setelah approve/reject di dashboard → allPayments di-update optimistic → kartu langsung update
+  const approvedPayments = allPayments.filter((p) => p.status === 'approved');
+  const totalApprovedRevenue = approvedPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const approvedTransactionsCount = approvedPayments.length;
+
+  // Tampilkan "–" saat data payments belum selesai dimuat (mencegah flicker Rp 0 yang menyesatkan)
+  const revenueDisplay = !isPaymentsLoaded
+    ? '–'
+    : new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        maximumFractionDigits: 0,
+      }).format(totalApprovedRevenue);
+
+  const revenueSubtext = !isPaymentsLoaded
+    ? 'Memuat data...'
+    : approvedTransactionsCount === 0
+    ? 'Belum ada transaksi disetujui'
+    : `Dari ${approvedTransactionsCount} transaksi berhasil`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -384,14 +409,22 @@ export default function AdminDashboardPage() {
           className="uda-card admin-metrics-card"
           onClick={() => router.push('/admin/pembayaran')}
           style={{ padding: 18, cursor: 'pointer', transition: 'all 0.15s ease' }}
-          title="Total Pembayaran Berhasil Disetujui"
+          title="Total Pembayaran Berhasil Disetujui — sinkron dengan riwayat transaksi"
         >
           <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>TOTAL PEMASUKAN DIVERIFIKASI</div>
-          <div className="admin-metrics-number" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
-            {formattedRevenue}
+          <div
+            className="admin-metrics-number"
+            style={{
+              fontSize: '1.4rem',
+              fontWeight: 800,
+              color: !isPaymentsLoaded || approvedTransactionsCount === 0 ? '#94a3b8' : '#0f172a',
+              marginTop: 4,
+            }}
+          >
+            {revenueDisplay}
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, marginTop: 4 }}>
-            {`Dari ${approvedTransactionsCount} transaksi berhasil`}
+            {revenueSubtext}
           </div>
         </div>
       </div>
