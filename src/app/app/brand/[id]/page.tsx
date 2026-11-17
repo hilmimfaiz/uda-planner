@@ -1217,6 +1217,12 @@ export default function PengaturanBrandDetailPage() {
   const isBrandOwner = userRole === 'owner';
   const isBrandLocked = (account?.plan_code || 'free') === 'free' && isBrandOwner && brandOrderIndex > 0;
 
+  // Safeguard: jika role bukan Owner tapi activeTab masih 'pengaturan' (misal dari state tersimpan),
+  // otomatis pindahkan ke tab 'profil' agar konten pengaturan tidak pernah terlihat oleh non-Owner
+  if (!isBrandOwner && activeTab === 'pengaturan') {
+    setActiveTab('profil');
+  }
+
   if (isBrandLocked) {
     return (
       <div className="uda-card" style={{ maxWidth: 560, margin: '60px auto', padding: '40px 32px', textAlign: 'center', border: '2px solid #ef4444' }}>
@@ -1323,11 +1329,13 @@ export default function PengaturanBrandDetailPage() {
       </div>
 
       {/* Tabs Pengaturan Brand (Scroll horizontal halus di HP & Tablet) */}
+      {/* Tab "Pengaturan & Review" hanya ditampilkan untuk Owner brand */}
       <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #e2e8f0', paddingBottom: 10, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
         {[
           { id: 'profil', label: 'Profil Brand' },
           { id: 'anggota', label: 'Anggota & Undangan' },
-          { id: 'pengaturan', label: 'Pengaturan & Review' },
+          // Tab Pengaturan & Review hanya untuk Owner
+          ...(isBrandOwner ? [{ id: 'pengaturan', label: 'Pengaturan & Review' }] : []),
         ].map((tab) => (
           <button
             key={tab.id}
@@ -2030,8 +2038,8 @@ export default function PengaturanBrandDetailPage() {
         </div>
       )}
 
-      {/* TAB 3: PENGATURAN & REVIEW */}
-      {activeTab === 'pengaturan' && (
+      {/* TAB 3: PENGATURAN & REVIEW — hanya Owner yang boleh mengakses */}
+      {activeTab === 'pengaturan' && isBrandOwner && (
         <div className="uda-card" style={{ maxWidth: 580, display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: 8 }}>Alur Persetujuan (Wajib Review)</h3>
